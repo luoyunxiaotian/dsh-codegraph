@@ -56,46 +56,61 @@ function useHostTheme(): boolean {
 }
 
 /**
- * 动态监听 Hero 工作区行容器 (heroWorkspaceRow)，用于通过 Portal 无侵入插入胶囊按钮
- * 绝对不触碰或覆盖 DSH 核心 single slot (如 agentPreset)，彻底避免模式选择下拉框 (PTC/极简) 冲突
+ * 智能 DOM 锚定 Hook:
+ * 解决 React 18 父组件在会话就绪/状态变迁时重新 reconcile 子元素导致外来 DOM 节点被剔除的问题。
+ * 当宿主组件 re-render 并冲掉我们的胶囊按钮时，自动检测并秒级无缝重新附着，保证绝对常驻不消失！
  */
-function useHeroWorkspaceRow(): HTMLElement | null {
-  const [rowEl, setRowEl] = React.useState<HTMLElement | null>(() => {
-    if (typeof document !== 'undefined') {
-      return document.querySelector('[class*="heroWorkspaceRow"]');
-    }
-    return null;
+function useHeroPortalTarget(): { container: HTMLElement | null; renderKey: number } {
+  const [state, setState] = React.useState<{ container: HTMLElement | null; renderKey: number }>({
+    container: null,
+    renderKey: 0,
   });
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
 
-    const update = () => {
-      const el = document.querySelector('[class*="heroWorkspaceRow"]') as HTMLElement | null;
-      setRowEl((prev) => (prev !== el ? el : prev));
+    let timer: any = null;
+
+    const inspect = () => {
+      const row = document.querySelector('[class*="heroWorkspaceRow"]') as HTMLElement | null;
+      if (!row) {
+        setState((prev) => (prev.container !== null ? { container: null, renderKey: prev.renderKey + 1 } : prev));
+        return;
+      }
+      const existingBtn = row.querySelector('[data-codegraph-hero-btn]');
+      if (!existingBtn) {
+        // 如果宿主重新渲染移除了按钮，立即自增 key 重新触发 Portal 渲染
+        setState((prev) => ({ container: row, renderKey: prev.renderKey + 1 }));
+      }
     };
 
-    update();
+    inspect();
 
     const observer = new MutationObserver(() => {
-      update();
+      clearTimeout(timer);
+      timer = setTimeout(inspect, 20);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    const interval = setInterval(inspect, 250);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      observer.disconnect();
+    };
   }, []);
 
-  return rowEl;
+  return state;
 }
 
 /**
  * 工作区路径解析助手函数: 4层兜底保证获取用户当前选中的项目目录
  */
 function resolveWorkspacePath(props: any): string {
-  // 1. 如果组件显式传参，优先采用
   if (props?.activeWorkspace) return props.activeWorkspace;
 
-  // 2. 尝试从 props.useSessions 读取当前会话绑定的 cwd
+  // 1. 尝试从 props.useSessions 读取当前会话绑定的 cwd
   if (typeof props?.useSessions === 'function' && props?.sessionId) {
     try {
       const sessionCwd = props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd);
@@ -103,7 +118,7 @@ function resolveWorkspacePath(props: any): string {
     } catch {}
   }
 
-  // 3. 尝试从 props.useWorkspaces 获取工作区列表
+  // 2. 尝试从 props.useWorkspaces 获取工作区列表
   let wsList: any[] = [];
   if (typeof props?.useWorkspaces === 'function') {
     try {
@@ -117,7 +132,7 @@ function resolveWorkspacePath(props: any): string {
     } catch {}
   }
 
-  // 4. 从 DOM 辅助提取（当用户在工作区选择器刚切换时）
+  // 3. 从 DOM 辅助提取（当用户在工作区选择器刚切换时）
   if (typeof document !== 'undefined') {
     try {
       const chip =
@@ -135,7 +150,7 @@ function resolveWorkspacePath(props: any): string {
     } catch {}
   }
 
-  // 5. 兜底采用第一个工作区路径
+  // 4. 兜底采用第一个工作区路径
   if (Array.isArray(wsList) && wsList.length > 0 && wsList[0]?.path) {
     return wsList[0].path;
   }
@@ -627,7 +642,7 @@ function CodeGraphViewPanel(props: any) {
 }
 
 /**
- * 新对话 Hero 工作区行旁边的胶囊按钮组件
+ * 新对话 Hero 工作区行旁边的胶囊按钮组件 (标记 data-codegraph-hero-btn，供 DOM 锚定追踪)
  */
 function HeroCapsuleButton({
   activeWorkspace,
@@ -649,7 +664,6 @@ function HeroCapsuleButton({
       return;
     }
 
-    // 静默向后台发送工作区路径并准备图谱 (0 Token)
     try {
       await fetch('http://127.0.0.1:3333/api/workspace', {
         method: 'POST',
@@ -667,6 +681,7 @@ function HeroCapsuleButton({
     'button',
     {
       type: 'button',
+      'data-codegraph-hero-btn': 'true',
       onClick: handleClick,
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),
@@ -717,7 +732,7 @@ function InputCodeGraphUnifiedSlot(props: any) {
   const [isHovered, setIsHovered] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
   const isDark = useHostTheme();
-  const heroRowEl = useHeroWorkspaceRow();
+  const portalTarget = useHeroPortalTarget();
 
   const activeWorkspace = React.useMemo(() => {
     return resolveWorkspacePath(props);
@@ -770,19 +785,144 @@ function InputCodeGraphUnifiedSlot(props: any) {
       h('span', null, '图谱')
     ),
 
-    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅注入 heroWorkspaceRow，排在模式选择右侧)
-    heroRowEl
+    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅常驻 heroWorkspaceRow，自动恢复防 React 冲刷)
+    portalTarget.container
       ? ReactDOM.createPortal(
           h(HeroCapsuleButton, {
+            key: portalTarget.renderKey,
             activeWorkspace,
             isDark,
             onOpen: () => setIsOpen(true),
           }),
-          heroRowEl
+          portalTarget.container
         )
       : null,
 
     // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
+    isOpen && typeof document !== 'undefined'
+      ? ReactDOM.createPortal(
+          h(CodeGraphViewPanel, {
+            ...props,
+            isOverlay: true,
+            onClose: () => setIsOpen(false),
+            activeWorkspace,
+          }),
+          document.querySelector('[data-conversation-content]') || document.body
+        )
+      : null
+  );
+}
+
+/**
+ * 注入 conversation.input.dock 作为 Hero 状态下的第二道常驻防线
+ * 如果用户界面有特殊布局导致 heroWorkspaceRow 未挂载，此处直接渲染常驻行
+ */
+function HeroInputDockCodeGraphButton(props: any) {
+  const isDark = useHostTheme();
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [isHovered, setIsHovered] = React.useState(false);
+
+  // 只在空白新会话 (Hero 模式) 下生效
+  const isHeroSession = props?.session?.blank === true || props?.session === void 0;
+  const activeWorkspace = React.useMemo(() => {
+    return resolveWorkspacePath(props);
+  }, [props?.session, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+
+  // 如果已经挂载在 heroWorkspaceRow，则 Dock 区域不需要重复渲染
+  const [hasHeroRowBtn, setHasHeroRowBtn] = React.useState(false);
+  React.useEffect(() => {
+    const check = () => {
+      const exists = document.querySelector('[data-codegraph-hero-btn]');
+      setHasHeroRowBtn(!!exists);
+    };
+    check();
+    const timer = setInterval(check, 300);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!isHeroSession || hasHeroRowBtn) {
+    return null;
+  }
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeWorkspace) {
+      alert('💡 提示：请先选择项目工作区文件夹');
+      return;
+    }
+    try {
+      await fetch('http://127.0.0.1:3333/api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace }),
+      });
+    } catch {}
+    setIsOpen(true);
+  };
+
+  return h(
+    React.Fragment,
+    null,
+    h(
+      'div',
+      {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '0 20px',
+          marginTop: '-2px',
+          marginBottom: '4px',
+        },
+      },
+      h(
+        'button',
+        {
+          type: 'button',
+          onClick: handleClick,
+          onMouseEnter: () => setIsHovered(true),
+          onMouseLeave: () => setIsHovered(false),
+          title: '生成当前工作区代码图谱 (0 Token)',
+          style: {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            height: '28px',
+            padding: '0 12px',
+            borderRadius: '14px',
+            fontSize: '12px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            background: isHovered
+              ? (isDark ? 'rgba(65, 118, 230, 0.22)' : 'rgba(65, 118, 230, 0.12)')
+              : (isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'),
+            color: isHovered ? '#4176e6' : (isDark ? '#e1e4ea' : '#333333'),
+            border: isHovered
+              ? '0.5px solid rgba(65, 118, 230, 0.5)'
+              : (isDark ? '0.5px solid rgba(255, 255, 255, 0.12)' : '0.5px solid rgba(0, 0, 0, 0.1)'),
+            transition: 'all 0.15s ease',
+            outline: 'none',
+          },
+        },
+        h('span', { style: { fontSize: '13px' } }, '🧭'),
+        h('span', null, '生成代码图谱'),
+        h(
+          'span',
+          {
+            style: {
+              fontSize: '10px',
+              padding: '1px 5px',
+              borderRadius: '4px',
+              background: isDark ? 'rgba(65, 118, 230, 0.2)' : 'rgba(65, 118, 230, 0.1)',
+              color: '#4176e6',
+              marginLeft: '4px',
+            },
+          },
+          '0 Token'
+        )
+      )
+    ),
     isOpen && typeof document !== 'undefined'
       ? ReactDOM.createPortal(
           h(CodeGraphViewPanel, {
@@ -815,8 +955,7 @@ export function apply(ctx: any): void {
       )
     );
 
-    // 2. 注入输入框底栏工具栏 (conversation.input.right 是 list 类型安全插槽，支持多插件并存)
-    //    该组件内部负责渲染底栏图标，并在 Hero 状态下通过 Portal 投射胶囊按钮到 heroWorkspaceRow
+    // 2. 注入输入框底栏工具栏 (conversation.input.right)
     ctx.slots.inject('conversation.input.right', () =>
       ctx.slots.register(
         {
@@ -825,6 +964,17 @@ export function apply(ctx: any): void {
           order: 5,
         },
         InputCodeGraphUnifiedSlot
+      )
+    );
+
+    // 3. 注入输入区顶部停靠栏 (conversation.input.dock: list 类型官方槽位，作为 Hero 模式双保险)
+    ctx.slots.inject('conversation.input.dock', () =>
+      ctx.slots.register(
+        {
+          name: 'conversation.input.dock',
+          id: 'codegraph-hero-dock',
+        },
+        HeroInputDockCodeGraphButton
       )
     );
   }

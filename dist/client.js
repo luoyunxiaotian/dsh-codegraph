@@ -74,27 +74,39 @@ function useHostTheme() {
   }, []);
   return isDark;
 }
-function useHeroWorkspaceRow() {
-  const [rowEl, setRowEl] = import_react.default.useState(() => {
-    if (typeof document !== "undefined") {
-      return document.querySelector('[class*="heroWorkspaceRow"]');
-    }
-    return null;
+function useHeroPortalTarget() {
+  const [state, setState] = import_react.default.useState({
+    container: null,
+    renderKey: 0
   });
   import_react.default.useEffect(() => {
     if (typeof document === "undefined") return;
-    const update = () => {
-      const el = document.querySelector('[class*="heroWorkspaceRow"]');
-      setRowEl((prev) => prev !== el ? el : prev);
+    let timer = null;
+    const inspect = () => {
+      const row = document.querySelector('[class*="heroWorkspaceRow"]');
+      if (!row) {
+        setState((prev) => prev.container !== null ? { container: null, renderKey: prev.renderKey + 1 } : prev);
+        return;
+      }
+      const existingBtn = row.querySelector("[data-codegraph-hero-btn]");
+      if (!existingBtn) {
+        setState((prev) => ({ container: row, renderKey: prev.renderKey + 1 }));
+      }
     };
-    update();
+    inspect();
     const observer = new MutationObserver(() => {
-      update();
+      clearTimeout(timer);
+      timer = setTimeout(inspect, 20);
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    const interval = setInterval(inspect, 250);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      observer.disconnect();
+    };
   }, []);
-  return rowEl;
+  return state;
 }
 function resolveWorkspacePath(props) {
   if (props?.activeWorkspace) return props.activeWorkspace;
@@ -610,6 +622,7 @@ function HeroCapsuleButton({
     "button",
     {
       type: "button",
+      "data-codegraph-hero-btn": "true",
       onClick: handleClick,
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),
@@ -644,7 +657,7 @@ function InputCodeGraphUnifiedSlot(props) {
   const [isHovered, setIsHovered] = import_react.default.useState(false);
   const [isOpen, setIsOpen] = import_react.default.useState(false);
   const isDark = useHostTheme();
-  const heroRowEl = useHeroWorkspaceRow();
+  const portalTarget = useHeroPortalTarget();
   const activeWorkspace = import_react.default.useMemo(() => {
     return resolveWorkspacePath(props);
   }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
@@ -689,16 +702,124 @@ function InputCodeGraphUnifiedSlot(props) {
       h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u{1F9ED}"),
       h("span", null, "\u56FE\u8C31")
     ),
-    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅注入 heroWorkspaceRow，排在模式选择右侧)
-    heroRowEl ? import_react_dom.default.createPortal(
+    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅常驻 heroWorkspaceRow，自动恢复防 React 冲刷)
+    portalTarget.container ? import_react_dom.default.createPortal(
       h(HeroCapsuleButton, {
+        key: portalTarget.renderKey,
         activeWorkspace,
         isDark,
         onOpen: () => setIsOpen(true)
       }),
-      heroRowEl
+      portalTarget.container
     ) : null,
     // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
+    isOpen && typeof document !== "undefined" ? import_react_dom.default.createPortal(
+      h(CodeGraphViewPanel, {
+        ...props,
+        isOverlay: true,
+        onClose: () => setIsOpen(false),
+        activeWorkspace
+      }),
+      document.querySelector("[data-conversation-content]") || document.body
+    ) : null
+  );
+}
+function HeroInputDockCodeGraphButton(props) {
+  const isDark = useHostTheme();
+  const [isOpen, setIsOpen] = import_react.default.useState(false);
+  const [isHovered, setIsHovered] = import_react.default.useState(false);
+  const isHeroSession = props?.session?.blank === true || props?.session === void 0;
+  const activeWorkspace = import_react.default.useMemo(() => {
+    return resolveWorkspacePath(props);
+  }, [props?.session, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+  const [hasHeroRowBtn, setHasHeroRowBtn] = import_react.default.useState(false);
+  import_react.default.useEffect(() => {
+    const check = () => {
+      const exists = document.querySelector("[data-codegraph-hero-btn]");
+      setHasHeroRowBtn(!!exists);
+    };
+    check();
+    const timer = setInterval(check, 300);
+    return () => clearInterval(timer);
+  }, []);
+  if (!isHeroSession || hasHeroRowBtn) {
+    return null;
+  }
+  const handleClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeWorkspace) {
+      alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u9009\u62E9\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939");
+      return;
+    }
+    try {
+      await fetch("http://127.0.0.1:3333/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace })
+      });
+    } catch {
+    }
+    setIsOpen(true);
+  };
+  return h(
+    import_react.default.Fragment,
+    null,
+    h(
+      "div",
+      {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "0 20px",
+          marginTop: "-2px",
+          marginBottom: "4px"
+        }
+      },
+      h(
+        "button",
+        {
+          type: "button",
+          onClick: handleClick,
+          onMouseEnter: () => setIsHovered(true),
+          onMouseLeave: () => setIsHovered(false),
+          title: "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token)",
+          style: {
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "5px",
+            height: "28px",
+            padding: "0 12px",
+            borderRadius: "14px",
+            fontSize: "12px",
+            fontWeight: 500,
+            cursor: "pointer",
+            background: isHovered ? isDark ? "rgba(65, 118, 230, 0.22)" : "rgba(65, 118, 230, 0.12)" : isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)",
+            color: isHovered ? "#4176e6" : isDark ? "#e1e4ea" : "#333333",
+            border: isHovered ? "0.5px solid rgba(65, 118, 230, 0.5)" : isDark ? "0.5px solid rgba(255, 255, 255, 0.12)" : "0.5px solid rgba(0, 0, 0, 0.1)",
+            transition: "all 0.15s ease",
+            outline: "none"
+          }
+        },
+        h("span", { style: { fontSize: "13px" } }, "\u{1F9ED}"),
+        h("span", null, "\u751F\u6210\u4EE3\u7801\u56FE\u8C31"),
+        h(
+          "span",
+          {
+            style: {
+              fontSize: "10px",
+              padding: "1px 5px",
+              borderRadius: "4px",
+              background: isDark ? "rgba(65, 118, 230, 0.2)" : "rgba(65, 118, 230, 0.1)",
+              color: "#4176e6",
+              marginLeft: "4px"
+            }
+          },
+          "0 Token"
+        )
+      )
+    ),
     isOpen && typeof document !== "undefined" ? import_react_dom.default.createPortal(
       h(CodeGraphViewPanel, {
         ...props,
@@ -733,6 +854,16 @@ function apply(ctx) {
           order: 5
         },
         InputCodeGraphUnifiedSlot
+      )
+    );
+    ctx.slots.inject(
+      "conversation.input.dock",
+      () => ctx.slots.register(
+        {
+          name: "conversation.input.dock",
+          id: "codegraph-hero-dock"
+        },
+        HeroInputDockCodeGraphButton
       )
     );
   }
