@@ -168,7 +168,7 @@ export const App: React.FC = () => {
   // 尚未初始化时展示待命就绪卡片
   if (!isInitialized || !graphData) {
     return (
-      <div className="relative w-screen h-screen">
+      <div className="relative w-full h-full overflow-hidden">
         <SetupView
           workspaceRoot={workspaceRoot}
           onStartScan={handleFullScan}
@@ -184,7 +184,7 @@ export const App: React.FC = () => {
   const selectedModule = graphData.architectureView.modules.find((m) => m.id === selectedModuleId);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-dsh-base overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-dsh-base overflow-hidden">
       {/* 顶部导航控制台 */}
       <TopBar
         projectName={graphData.meta.projectName}

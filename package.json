@@ -26,10 +26,7 @@
     "client": {
       "platform": "web",
       "inject": [
-        "slots",
-        "uiWorkspace",
-        "workspaces",
-        "sessions"
+        "slots"
       ]
     }
   },

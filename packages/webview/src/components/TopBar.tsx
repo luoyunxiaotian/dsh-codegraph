@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Sun,
   Moon,
+  ExternalLink,
 } from 'lucide-react';
 import { ArchetypeType } from '../../../core/src/types/index.js';
 import { useTheme } from '../context/ThemeContext.js';
@@ -201,6 +202,14 @@ export const TopBar: React.FC<TopBarProps> = ({
           ) : (
             <Moon className="w-3.5 h-3.5 text-dsh-blue" />
           )}
+        </button>
+
+        <button
+          onClick={() => window.open(window.location.href, '_blank')}
+          className="p-1.5 rounded-md text-dsh-tertiary hover:text-dsh-primary hover:bg-dsh-layer2 transition-colors"
+          title="在独立浏览器视窗中全屏打开"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
         </button>
       </div>
     </header>

@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace'];
+export const inject = ['slots'];
 
 const h = React.createElement;
 
@@ -378,28 +378,29 @@ function CodeGraphViewPanel(props: any) {
           : {}),
       },
     },
-    // 操作工具栏 (高度 36px)
-    h(
-      'div',
-      {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 12px',
-          height: '36px',
-          background: themeStyles.bgPanel,
-          borderBottom: `0.5px solid ${themeStyles.borderSubtle}`,
-          fontSize: '12px',
-          flexShrink: 0,
-          userSelect: 'none',
-        },
-      },
-      h(
-        'div',
-        { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-        props?.isOverlay
-          ? h(
+    // 仅在浮层模式下展示极简顶部返回栏 (在正常会话 Tab 模式下由 Webview 顶部控制台完整接管，零冗余)
+    props?.isOverlay
+      ? h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 12px',
+              height: '32px',
+              background: themeStyles.bgPanel,
+              borderBottom: `0.5px solid ${themeStyles.borderSubtle}`,
+              fontSize: '12px',
+              flexShrink: 0,
+              userSelect: 'none',
+              zIndex: 10,
+            },
+          },
+          h(
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+            h(
               'button',
               {
                 type: 'button',
@@ -412,152 +413,59 @@ function CodeGraphViewPanel(props: any) {
                   background: isDark ? 'rgba(65, 118, 230, 0.15)' : 'rgba(65, 118, 230, 0.1)',
                   border: '0.5px solid rgba(65, 118, 230, 0.4)',
                   color: '#4176e6',
-                  borderRadius: '14px',
-                  padding: '2px 10px',
+                  borderRadius: '12px',
+                  padding: '2px 8px',
                   fontSize: '11px',
                   fontWeight: 600,
                   cursor: 'pointer',
-                  marginRight: '6px',
-                  transition: 'all 0.15s ease',
                   outline: 'none',
                 },
               },
               h('span', { style: { fontSize: '12px', lineHeight: 1 } }, '←'),
               h('span', null, '返回新对话')
+            ),
+            h(
+              'div',
+              {
+                title: `当前工作区:\n${activeWorkspace || '未检测到工作区'}`,
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '1px 7px',
+                  borderRadius: '10px',
+                  background: themeStyles.bgLayer1,
+                  border: `0.5px solid ${themeStyles.borderSubtle}`,
+                  fontSize: '11px',
+                  color: themeStyles.textSecondary,
+                  fontFamily: 'monospace',
+                },
+              },
+              h('span', null, '📁'),
+              h('span', null, workspaceShortName)
             )
-          : null,
-        h(
-          'span',
-          {
-            style: {
-              width: '18px',
-              height: '18px',
-              borderRadius: '4px',
-              background: 'rgba(65, 118, 230, 0.15)',
-              border: '0.5px solid rgba(65, 118, 230, 0.3)',
-              color: '#4176e6',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '10px',
-              fontWeight: 700,
+          ),
+          h(
+            'button',
+            {
+              onClick: handleOpenBrowser,
+              title: '在独立浏览器窗口中全屏打开',
+              style: {
+                background: '#4176e6',
+                color: '#ffffff',
+                border: 'none',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: 500,
+                lineHeight: '16px',
+              },
             },
-          },
-          'CG'
-        ),
-        h(
-          'span',
-          { style: { fontWeight: 600, color: themeStyles.textPrimary, fontSize: '12px', letterSpacing: '-0.2px' } },
-          'CodeGraph'
-        ),
-        h(
-          'div',
-          {
-            title: `当前工作区:\n${activeWorkspace || '未检测到工作区'}`,
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '1px 7px',
-              borderRadius: '12px',
-              background: themeStyles.bgLayer1,
-              border: `0.5px solid ${themeStyles.borderSubtle}`,
-              fontSize: '11px',
-              color: themeStyles.textSecondary,
-              fontFamily: 'monospace',
-            },
-          },
-          h('span', null, '📁'),
-          h('span', null, workspaceShortName)
-        ),
-        h(
-          'div',
-          {
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '11px',
-              color: status === 'online' ? '#22c55e' : status === 'offline' ? '#f59e0b' : themeStyles.textTertiary,
-              marginLeft: '2px',
-            },
-          },
-          h('span', {
-            style: {
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: status === 'online' ? '#22c55e' : status === 'offline' ? '#f59e0b' : themeStyles.textTertiary,
-              display: 'inline-block',
-            },
-          }),
-          h('span', null, statusText)
+            '↗ 独立视窗'
+          )
         )
-      ),
-      h(
-        'div',
-        { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
-        h(
-          'button',
-          {
-            onClick: handleTriggerScan,
-            disabled: isScanning,
-            title: '全量重新扫描当前项目 AST 并更新图谱',
-            style: {
-              background: 'transparent',
-              color: isScanning ? themeStyles.textTertiary : '#4176e6',
-              border: '0.5px solid rgba(65, 118, 230, 0.35)',
-              padding: '2px 8px',
-              borderRadius: '4px',
-              cursor: isScanning ? 'not-allowed' : 'pointer',
-              fontSize: '11px',
-              lineHeight: '18px',
-              transition: 'all 0.15s',
-            },
-          },
-          isScanning ? '⟳ 扫描中...' : '↻ 重新扫描'
-        ),
-        h(
-          'button',
-          {
-            onClick: handleRefresh,
-            title: '重新加载图谱视窗',
-            style: {
-              background: 'transparent',
-              color: themeStyles.textSecondary,
-              border: `0.5px solid ${themeStyles.borderMedium}`,
-              padding: '2px 8px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '11px',
-              lineHeight: '18px',
-              transition: 'all 0.15s',
-            },
-          },
-          '刷新'
-        ),
-        h(
-          'button',
-          {
-            onClick: handleOpenBrowser,
-            title: '在独立浏览器窗口中全屏打开',
-            style: {
-              background: '#4176e6',
-              color: '#ffffff',
-              border: 'none',
-              padding: '2px 10px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 500,
-              lineHeight: '18px',
-              transition: 'background 0.15s',
-            },
-          },
-          '↗ 独立视窗'
-        )
-      )
-    ),
+      : null,
     // 离线提示横幅
     status === 'offline'
       ? h(
@@ -700,7 +608,7 @@ async function createAndOpenCodeGraphSession(activeWorkspace: string): Promise<b
     let targetWorkspaceId: string | undefined;
     if (workspacesService?.list) {
       try {
-        const items = workspacesService.list.getSnapshot()?.items || [];
+        const items = workspacesService.list.getSnapshot?.()?.items || [];
         const matched = items.find((w: any) => {
           if (!w?.path) return false;
           const wNorm = norm(w.path);
@@ -710,8 +618,8 @@ async function createAndOpenCodeGraphSession(activeWorkspace: string): Promise<b
         if (matched?.workspaceId) {
           targetWorkspaceId = matched.workspaceId;
         } else if (typeof workspacesService.create === 'function') {
-          const created = await workspacesService.create({ path: activeWorkspace });
-          targetWorkspaceId = created?.workspaceId;
+          const res = await workspacesService.create({ path: activeWorkspace });
+          targetWorkspaceId = res?.workspaceId || res?.workspace?.workspaceId || res?.value?.workspace?.workspaceId;
         }
       } catch (e) {
         console.warn('[dsh-codegraph] 匹配 workspaceId 警告:', e);
@@ -719,8 +627,8 @@ async function createAndOpenCodeGraphSession(activeWorkspace: string): Promise<b
     }
 
     // 2. 首选方案: 调用 uiWorkspace.openWorkspace 或 startSession (0 Token 原生导航)
-    if (uiWorkspace && targetWorkspaceId) {
-      if (typeof uiWorkspace.openWorkspace === 'function') {
+    if (uiWorkspace) {
+      if (targetWorkspaceId && typeof uiWorkspace.openWorkspace === 'function') {
         try {
           await uiWorkspace.openWorkspace(targetWorkspaceId, (nextId: string) => {
             try {
@@ -883,23 +791,32 @@ function HeroCapsuleButton({
 /**
  * 全局常驻根插槽管理器 (挂载在 shell.overlay: scope="root", 永不卸载)
  * 1. 负责在新会话 Hero 界面通过 Portal 附着胶囊按钮 (绝对常驻不消失、零闪烁)
- * 2. 托管全局图谱 Overlay 沉浸式浮层
+ * 2. 托管图谱降级浮层 (严格限制在 CenterColumn 内部，严禁使用 fixed 9999 遮挡宿主左侧边栏与标题栏)
  */
 function CodeGraphShellManager(props: any) {
   const isDark = useHostTheme();
   const [heroContainer, setHeroContainer] = React.useState<HTMLElement | null>(null);
+  const [centerContainer, setCenterContainer] = React.useState<HTMLElement | null>(null);
   const [overlayState, setOverlayState] = React.useState<{ isOpen: boolean; workspace: string }>({
     isOpen: false,
     workspace: '',
   });
 
-  // 1. 持续监测 heroWorkspaceRow 挂载点
+  // 1. 持续监测 heroWorkspaceRow 挂载点与中心会话区容器
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
 
     const inspect = () => {
       const row = document.querySelector('[class*="heroWorkspaceRow"]') as HTMLElement | null;
       setHeroContainer((prev) => (prev !== row ? row : prev));
+
+      const center = (
+        document.querySelector('[data-conversation-content]') ||
+        document.querySelector('[class*="centerColumn"]') ||
+        document.querySelector('[class*="CenterColumn"]') ||
+        document.querySelector('main')
+      ) as HTMLElement | null;
+      setCenterContainer((prev) => (prev !== center ? center : prev));
     };
 
     inspect();
@@ -924,6 +841,15 @@ function CodeGraphShellManager(props: any) {
     return () => window.removeEventListener('codegraph:open-overlay', handleOpen);
   }, []);
 
+  const overlayPanel = overlayState.isOpen
+    ? h(CodeGraphViewPanel, {
+        ...props,
+        isOverlay: true,
+        activeWorkspace: overlayState.workspace,
+        onClose: () => setOverlayState({ isOpen: false, workspace: '' }),
+      })
+    : null;
+
   return h(
     React.Fragment,
     null,
@@ -938,27 +864,42 @@ function CodeGraphShellManager(props: any) {
         )
       : null,
 
-    // B. 全局沉浸式图谱浮层 (0 Token 降级保障)
-    overlayState.isOpen
-      ? h(
-          'div',
-          {
-            style: {
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 9999,
-            },
-          },
-          h(CodeGraphViewPanel, {
-            ...props,
-            isOverlay: true,
-            activeWorkspace: overlayState.workspace,
-            onClose: () => setOverlayState({ isOpen: false, workspace: '' }),
-          })
-        )
+    // B. 图谱浮层 (降级保障: 严格限制在主工作区内部，绝不覆盖左侧边栏与标题栏)
+    overlayState.isOpen && overlayPanel
+      ? (centerContainer
+          ? safeCreatePortal(
+              h(
+                'div',
+                {
+                  style: {
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 60,
+                    background: isDark ? '#151517' : '#ffffff',
+                  },
+                },
+                overlayPanel
+              ),
+              centerContainer
+            )
+          : h(
+              'div',
+              {
+                style: {
+                  position: 'fixed',
+                  top: 'var(--dsh-titlebar-height, 0px)',
+                  left: 'var(--dsh-windows-sidebar-width, 280px)',
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 60,
+                  background: isDark ? '#151517' : '#ffffff',
+                },
+              },
+              overlayPanel
+            ))
       : null
   );
 }
@@ -990,8 +931,16 @@ function InputCodeGraphUnifiedSlot(props: any) {
       }
     }
 
-    // 2. 否则向全局 Shell 发送打开图谱事件
+    // 2. 否则如果处在 Hero 界面，优先直接创建空白会话直达图谱 (0 Token)
     const ws = sessionCwd || detectHeroActiveWorkspace();
+    if (ws) {
+      try {
+        const opened = await createAndOpenCodeGraphSession(ws);
+        if (opened) return;
+      } catch {}
+    }
+
+    // 3. 降级模式: 向全局 Shell 发送打开图谱事件
     window.dispatchEvent(new CustomEvent('codegraph:open-overlay', { detail: { workspace: ws } }));
   };
 

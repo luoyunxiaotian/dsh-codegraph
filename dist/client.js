@@ -39,7 +39,7 @@ __export(client_exports, {
 });
 module.exports = __toCommonJS(client_exports);
 var import_react = __toESM(require("react"), 1);
-var inject = ["slots", "sessions", "workspaces", "uiWorkspace"];
+var inject = ["slots"];
 var h = import_react.default.createElement;
 function safeCreatePortal(children, container) {
   if (!container || typeof document === "undefined") return null;
@@ -303,8 +303,8 @@ function CodeGraphViewPanel(props) {
         } : {}
       }
     },
-    // 操作工具栏 (高度 36px)
-    h(
+    // 仅在浮层模式下展示极简顶部返回栏 (在正常会话 Tab 模式下由 Webview 顶部控制台完整接管，零冗余)
+    props?.isOverlay ? h(
       "div",
       {
         style: {
@@ -312,18 +312,19 @@ function CodeGraphViewPanel(props) {
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 12px",
-          height: "36px",
+          height: "32px",
           background: themeStyles.bgPanel,
           borderBottom: `0.5px solid ${themeStyles.borderSubtle}`,
           fontSize: "12px",
           flexShrink: 0,
-          userSelect: "none"
+          userSelect: "none",
+          zIndex: 10
         }
       },
       h(
         "div",
         { style: { display: "flex", alignItems: "center", gap: "8px" } },
-        props?.isOverlay ? h(
+        h(
           "button",
           {
             type: "button",
@@ -336,42 +337,16 @@ function CodeGraphViewPanel(props) {
               background: isDark ? "rgba(65, 118, 230, 0.15)" : "rgba(65, 118, 230, 0.1)",
               border: "0.5px solid rgba(65, 118, 230, 0.4)",
               color: "#4176e6",
-              borderRadius: "14px",
-              padding: "2px 10px",
+              borderRadius: "12px",
+              padding: "2px 8px",
               fontSize: "11px",
               fontWeight: 600,
               cursor: "pointer",
-              marginRight: "6px",
-              transition: "all 0.15s ease",
               outline: "none"
             }
           },
           h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u2190"),
           h("span", null, "\u8FD4\u56DE\u65B0\u5BF9\u8BDD")
-        ) : null,
-        h(
-          "span",
-          {
-            style: {
-              width: "18px",
-              height: "18px",
-              borderRadius: "4px",
-              background: "rgba(65, 118, 230, 0.15)",
-              border: "0.5px solid rgba(65, 118, 230, 0.3)",
-              color: "#4176e6",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "10px",
-              fontWeight: 700
-            }
-          },
-          "CG"
-        ),
-        h(
-          "span",
-          { style: { fontWeight: 600, color: themeStyles.textPrimary, fontSize: "12px", letterSpacing: "-0.2px" } },
-          "CodeGraph"
         ),
         h(
           "div",
@@ -383,7 +358,7 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
               alignItems: "center",
               gap: "4px",
               padding: "1px 7px",
-              borderRadius: "12px",
+              borderRadius: "10px",
               background: themeStyles.bgLayer1,
               border: `0.5px solid ${themeStyles.borderSubtle}`,
               fontSize: "11px",
@@ -393,95 +368,28 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
           },
           h("span", null, "\u{1F4C1}"),
           h("span", null, workspaceShortName)
-        ),
-        h(
-          "div",
-          {
-            style: {
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "11px",
-              color: status === "online" ? "#22c55e" : status === "offline" ? "#f59e0b" : themeStyles.textTertiary,
-              marginLeft: "2px"
-            }
-          },
-          h("span", {
-            style: {
-              width: "6px",
-              height: "6px",
-              borderRadius: "50%",
-              background: status === "online" ? "#22c55e" : status === "offline" ? "#f59e0b" : themeStyles.textTertiary,
-              display: "inline-block"
-            }
-          }),
-          h("span", null, statusText)
         )
       ),
       h(
-        "div",
-        { style: { display: "flex", alignItems: "center", gap: "6px" } },
-        h(
-          "button",
-          {
-            onClick: handleTriggerScan,
-            disabled: isScanning,
-            title: "\u5168\u91CF\u91CD\u65B0\u626B\u63CF\u5F53\u524D\u9879\u76EE AST \u5E76\u66F4\u65B0\u56FE\u8C31",
-            style: {
-              background: "transparent",
-              color: isScanning ? themeStyles.textTertiary : "#4176e6",
-              border: "0.5px solid rgba(65, 118, 230, 0.35)",
-              padding: "2px 8px",
-              borderRadius: "4px",
-              cursor: isScanning ? "not-allowed" : "pointer",
-              fontSize: "11px",
-              lineHeight: "18px",
-              transition: "all 0.15s"
-            }
-          },
-          isScanning ? "\u27F3 \u626B\u63CF\u4E2D..." : "\u21BB \u91CD\u65B0\u626B\u63CF"
-        ),
-        h(
-          "button",
-          {
-            onClick: handleRefresh,
-            title: "\u91CD\u65B0\u52A0\u8F7D\u56FE\u8C31\u89C6\u7A97",
-            style: {
-              background: "transparent",
-              color: themeStyles.textSecondary,
-              border: `0.5px solid ${themeStyles.borderMedium}`,
-              padding: "2px 8px",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "11px",
-              lineHeight: "18px",
-              transition: "all 0.15s"
-            }
-          },
-          "\u5237\u65B0"
-        ),
-        h(
-          "button",
-          {
-            onClick: handleOpenBrowser,
-            title: "\u5728\u72EC\u7ACB\u6D4F\u89C8\u5668\u7A97\u53E3\u4E2D\u5168\u5C4F\u6253\u5F00",
-            style: {
-              background: "#4176e6",
-              color: "#ffffff",
-              border: "none",
-              padding: "2px 10px",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "11px",
-              fontWeight: 500,
-              lineHeight: "18px",
-              transition: "background 0.15s"
-            }
-          },
-          "\u2197 \u72EC\u7ACB\u89C6\u7A97"
-        )
+        "button",
+        {
+          onClick: handleOpenBrowser,
+          title: "\u5728\u72EC\u7ACB\u6D4F\u89C8\u5668\u7A97\u53E3\u4E2D\u5168\u5C4F\u6253\u5F00",
+          style: {
+            background: "#4176e6",
+            color: "#ffffff",
+            border: "none",
+            padding: "2px 8px",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "11px",
+            fontWeight: 500,
+            lineHeight: "16px"
+          }
+        },
+        "\u2197 \u72EC\u7ACB\u89C6\u7A97"
       )
-    ),
+    ) : null,
     // 离线提示横幅
     status === "offline" ? h(
       "div",
@@ -592,7 +500,7 @@ async function createAndOpenCodeGraphSession(activeWorkspace) {
     let targetWorkspaceId;
     if (workspacesService?.list) {
       try {
-        const items = workspacesService.list.getSnapshot()?.items || [];
+        const items = workspacesService.list.getSnapshot?.()?.items || [];
         const matched = items.find((w) => {
           if (!w?.path) return false;
           const wNorm = norm(w.path);
@@ -601,15 +509,15 @@ async function createAndOpenCodeGraphSession(activeWorkspace) {
         if (matched?.workspaceId) {
           targetWorkspaceId = matched.workspaceId;
         } else if (typeof workspacesService.create === "function") {
-          const created = await workspacesService.create({ path: activeWorkspace });
-          targetWorkspaceId = created?.workspaceId;
+          const res = await workspacesService.create({ path: activeWorkspace });
+          targetWorkspaceId = res?.workspaceId || res?.workspace?.workspaceId || res?.value?.workspace?.workspaceId;
         }
       } catch (e) {
         console.warn("[dsh-codegraph] \u5339\u914D workspaceId \u8B66\u544A:", e);
       }
     }
-    if (uiWorkspace && targetWorkspaceId) {
-      if (typeof uiWorkspace.openWorkspace === "function") {
+    if (uiWorkspace) {
+      if (targetWorkspaceId && typeof uiWorkspace.openWorkspace === "function") {
         try {
           await uiWorkspace.openWorkspace(targetWorkspaceId, (nextId) => {
             try {
@@ -747,6 +655,7 @@ function HeroCapsuleButton({
 function CodeGraphShellManager(props) {
   const isDark = useHostTheme();
   const [heroContainer, setHeroContainer] = import_react.default.useState(null);
+  const [centerContainer, setCenterContainer] = import_react.default.useState(null);
   const [overlayState, setOverlayState] = import_react.default.useState({
     isOpen: false,
     workspace: ""
@@ -756,6 +665,8 @@ function CodeGraphShellManager(props) {
     const inspect = () => {
       const row = document.querySelector('[class*="heroWorkspaceRow"]');
       setHeroContainer((prev) => prev !== row ? row : prev);
+      const center = document.querySelector("[data-conversation-content]") || document.querySelector('[class*="centerColumn"]') || document.querySelector('[class*="CenterColumn"]') || document.querySelector("main");
+      setCenterContainer((prev) => prev !== center ? center : prev);
     };
     inspect();
     const observer = new MutationObserver(inspect);
@@ -774,6 +685,12 @@ function CodeGraphShellManager(props) {
     window.addEventListener("codegraph:open-overlay", handleOpen);
     return () => window.removeEventListener("codegraph:open-overlay", handleOpen);
   }, []);
+  const overlayPanel = overlayState.isOpen ? h(CodeGraphViewPanel, {
+    ...props,
+    isOverlay: true,
+    activeWorkspace: overlayState.workspace,
+    onClose: () => setOverlayState({ isOpen: false, workspace: "" })
+  }) : null;
   return h(
     import_react.default.Fragment,
     null,
@@ -785,25 +702,38 @@ function CodeGraphShellManager(props) {
       }),
       heroContainer
     ) : null,
-    // B. 全局沉浸式图谱浮层 (0 Token 降级保障)
-    overlayState.isOpen ? h(
+    // B. 图谱浮层 (降级保障: 严格限制在主工作区内部，绝不覆盖左侧边栏与标题栏)
+    overlayState.isOpen && overlayPanel ? centerContainer ? safeCreatePortal(
+      h(
+        "div",
+        {
+          style: {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 60,
+            background: isDark ? "#151517" : "#ffffff"
+          }
+        },
+        overlayPanel
+      ),
+      centerContainer
+    ) : h(
       "div",
       {
         style: {
           position: "fixed",
-          top: 0,
-          left: 0,
+          top: "var(--dsh-titlebar-height, 0px)",
+          left: "var(--dsh-windows-sidebar-width, 280px)",
           right: 0,
           bottom: 0,
-          zIndex: 9999
+          zIndex: 60,
+          background: isDark ? "#151517" : "#ffffff"
         }
       },
-      h(CodeGraphViewPanel, {
-        ...props,
-        isOverlay: true,
-        activeWorkspace: overlayState.workspace,
-        onClose: () => setOverlayState({ isOpen: false, workspace: "" })
-      })
+      overlayPanel
     ) : null
   );
 }
@@ -825,6 +755,13 @@ function InputCodeGraphUnifiedSlot(props) {
       }
     }
     const ws = sessionCwd || detectHeroActiveWorkspace();
+    if (ws) {
+      try {
+        const opened = await createAndOpenCodeGraphSession(ws);
+        if (opened) return;
+      } catch {
+      }
+    }
     window.dispatchEvent(new CustomEvent("codegraph:open-overlay", { detail: { workspace: ws } }));
   };
   return h(
