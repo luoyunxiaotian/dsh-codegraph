@@ -29,14 +29,12 @@ async function bundlePlugin() {
       '@deepseek-ai/cordis',
       'tree-sitter-wasms',
     ],
+    define: {
+      '__dirname': 'import.meta.dirname',
+      '__filename': 'import.meta.filename',
+    },
     banner: {
-      js: `import { createRequire as __createRequire } from 'module';
-import { fileURLToPath as __fileURLToPath } from 'url';
-import { dirname as __pathDirname } from 'path';
-const require = __createRequire(import.meta.url);
-const __filename = __fileURLToPath(import.meta.url);
-const __dirname = __pathDirname(__filename);
-`,
+      js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
     },
     sourcemap: false,
   });

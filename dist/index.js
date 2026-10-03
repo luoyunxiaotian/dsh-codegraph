@@ -1,10 +1,4 @@
-import { createRequire as __createRequire } from 'module';
-import { fileURLToPath as __fileURLToPath } from 'url';
-import { dirname as __pathDirname } from 'path';
-const require = __createRequire(import.meta.url);
-const __filename = __fileURLToPath(import.meta.url);
-const __dirname = __pathDirname(__filename);
-
+import { createRequire } from 'module'; const require = createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -5825,7 +5819,7 @@ var require_tree_sitter = __commonJS({
             if (ENVIRONMENT_IS_NODE) {
               var fs = __require("fs");
               var nodePath = __require("path");
-              scriptDirectory = __dirname + "/";
+              scriptDirectory = import.meta.dirname + "/";
               readBinary = (filename) => {
                 filename = isFileURI(filename) ? new URL(filename) : nodePath.normalize(filename);
                 var ret = fs.readFileSync(filename);
