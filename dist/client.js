@@ -39,9 +39,21 @@ __export(client_exports, {
 });
 module.exports = __toCommonJS(client_exports);
 var import_react = __toESM(require("react"), 1);
-var import_react_dom = __toESM(require("react-dom"), 1);
 var inject = ["slots"];
 var h = import_react.default.createElement;
+function safeCreatePortal(children, container) {
+  if (!container || typeof document === "undefined") return null;
+  try {
+    const rd = require("react-dom");
+    const portalFn = rd?.createPortal || rd?.default?.createPortal;
+    if (typeof portalFn === "function") {
+      return portalFn(children, container);
+    }
+  } catch (err) {
+    console.warn("[dsh-codegraph] safeCreatePortal error:", err);
+  }
+  return null;
+}
 function useHostTheme() {
   const [isDark, setIsDark] = import_react.default.useState(() => {
     if (typeof document !== "undefined") {
@@ -96,10 +108,10 @@ function useHeroPortalTarget() {
     inspect();
     const observer = new MutationObserver(() => {
       clearTimeout(timer);
-      timer = setTimeout(inspect, 20);
+      timer = setTimeout(inspect, 30);
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    const interval = setInterval(inspect, 250);
+    const interval = setInterval(inspect, 300);
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
@@ -108,51 +120,35 @@ function useHeroPortalTarget() {
   }, []);
   return state;
 }
-function resolveWorkspacePath(props) {
-  if (props?.activeWorkspace) return props.activeWorkspace;
-  if (typeof props?.useSessions === "function" && props?.sessionId) {
-    try {
-      const sessionCwd = props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd);
-      if (sessionCwd) return sessionCwd;
-    } catch {
-    }
-  }
-  let wsList = [];
-  if (typeof props?.useWorkspaces === "function") {
-    try {
-      wsList = props.useWorkspaces((s) => s?.items) || [];
-      if (Array.isArray(wsList) && wsList.length > 0) {
-        if (props?.sessionId) {
-          const matched = wsList.find((w) => w.sessionIds?.includes(props.sessionId));
-          if (matched?.path) return matched.path;
-        }
-      }
-    } catch {
-    }
-  }
-  if (typeof document !== "undefined") {
-    try {
-      const chip = document.querySelector('[class*="heroWorkspaceRow"] button') || document.querySelector('button[aria-label*="\u5DE5\u4F5C\u533A"]') || document.querySelector('button[aria-label*="workspace"]');
-      const text = chip?.textContent?.trim();
-      if (text && Array.isArray(wsList) && wsList.length > 0) {
-        const found = wsList.find((w) => w.title === text || w.path?.endsWith(text));
-        if (found?.path) return found.path;
-      }
-      if (text && (text.includes(":") || text.includes("/") || text.includes("\\"))) {
-        return text;
-      }
-    } catch {
-    }
-  }
-  if (Array.isArray(wsList) && wsList.length > 0 && wsList[0]?.path) {
-    return wsList[0].path;
-  }
-  return "";
-}
 function CodeGraphViewPanel(props) {
+  const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
+  const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
   const activeWorkspace = import_react.default.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.activeWorkspace, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+    if (props?.activeWorkspace) return props.activeWorkspace;
+    if (sessionCwd) return sessionCwd;
+    if (Array.isArray(workspaces) && workspaces.length > 0) {
+      if (props?.sessionId) {
+        const matched = workspaces.find((w) => w.sessionIds?.includes(props?.sessionId));
+        if (matched?.path) return matched.path;
+      }
+      if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    if (typeof document !== "undefined") {
+      try {
+        const chip = document.querySelector('[class*="heroWorkspaceRow"] button') || document.querySelector('button[aria-label*="\u5DE5\u4F5C\u533A"]') || document.querySelector('button[aria-label*="workspace"]');
+        const text = chip?.textContent?.trim();
+        if (text && Array.isArray(workspaces)) {
+          const found = workspaces.find((w) => w.title === text || w.path?.endsWith(text));
+          if (found?.path) return found.path;
+        }
+        if (text && (text.includes(":") || text.includes("/") || text.includes("\\"))) {
+          return text;
+        }
+      } catch {
+      }
+    }
+    return "";
+  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
   const isDark = useHostTheme();
   const iframeRef = import_react.default.useRef(null);
   import_react.default.useEffect(() => {
@@ -189,7 +185,7 @@ function CodeGraphViewPanel(props) {
     }
     params.set("theme", isDark ? "dark" : "light");
     return `${base}/?${params.toString()}`;
-  }, [activeWorkspace, key]);
+  }, [activeWorkspace, key, isDark]);
   const checkStatus = import_react.default.useCallback(async () => {
     setStatus("checking");
     try {
@@ -341,7 +337,7 @@ function CodeGraphViewPanel(props) {
         } : {}
       }
     },
-    // DeepSeek Harness 原生风格精简操作条 (高度 36px)
+    // 操作工具栏 (高度 36px)
     h(
       "div",
       {
@@ -361,7 +357,6 @@ function CodeGraphViewPanel(props) {
       h(
         "div",
         { style: { display: "flex", alignItems: "center", gap: "8px" } },
-        // 如果是 Overlay 模式，呈现「← 返回新对话」按钮
         props?.isOverlay ? h(
           "button",
           {
@@ -388,7 +383,6 @@ function CodeGraphViewPanel(props) {
           h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u2190"),
           h("span", null, "\u8FD4\u56DE\u65B0\u5BF9\u8BDD")
         ) : null,
-        // DeepSeek Blue 徽章
         h(
           "span",
           {
@@ -413,7 +407,6 @@ function CodeGraphViewPanel(props) {
           { style: { fontWeight: 600, color: themeStyles.textPrimary, fontSize: "12px", letterSpacing: "-0.2px" } },
           "CodeGraph"
         ),
-        // 工作区小标签
         h(
           "div",
           {
@@ -435,7 +428,6 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
           h("span", null, "\u{1F4C1}"),
           h("span", null, workspaceShortName)
         ),
-        // 状态圆点
         h(
           "div",
           {
@@ -524,7 +516,7 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
         )
       )
     ),
-    // 离线提示横幅 (DSH 标准提示风格)
+    // 离线提示横幅
     status === "offline" ? h(
       "div",
       {
@@ -654,13 +646,37 @@ function HeroCapsuleButton({
   );
 }
 function InputCodeGraphUnifiedSlot(props) {
+  const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
+  const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
   const [isHovered, setIsHovered] = import_react.default.useState(false);
   const [isOpen, setIsOpen] = import_react.default.useState(false);
   const isDark = useHostTheme();
   const portalTarget = useHeroPortalTarget();
   const activeWorkspace = import_react.default.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+    if (sessionCwd) return sessionCwd;
+    if (Array.isArray(workspaces) && workspaces.length > 0) {
+      if (props?.sessionId) {
+        const matched = workspaces.find((w) => w.sessionIds?.includes(props?.sessionId));
+        if (matched?.path) return matched.path;
+      }
+      if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    if (typeof document !== "undefined") {
+      try {
+        const chip = document.querySelector('[class*="heroWorkspaceRow"] button') || document.querySelector('button[aria-label*="\u5DE5\u4F5C\u533A"]') || document.querySelector('button[aria-label*="workspace"]');
+        const text = chip?.textContent?.trim();
+        if (text && Array.isArray(workspaces)) {
+          const found = workspaces.find((w) => w.title === text || w.path?.endsWith(text));
+          if (found?.path) return found.path;
+        }
+        if (text && (text.includes(":") || text.includes("/") || text.includes("\\"))) {
+          return text;
+        }
+      } catch {
+      }
+    }
+    return "";
+  }, [sessionCwd, workspaces, props?.sessionId]);
   const handleInputBtnClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -702,8 +718,8 @@ function InputCodeGraphUnifiedSlot(props) {
       h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u{1F9ED}"),
       h("span", null, "\u56FE\u8C31")
     ),
-    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅常驻 heroWorkspaceRow，自动恢复防 React 冲刷)
-    portalTarget.container ? import_react_dom.default.createPortal(
+    // B. 新会话 Hero 界面胶囊按钮 (通过 safeCreatePortal 附着 heroWorkspaceRow)
+    portalTarget.container ? safeCreatePortal(
       h(HeroCapsuleButton, {
         key: portalTarget.renderKey,
         activeWorkspace,
@@ -713,7 +729,7 @@ function InputCodeGraphUnifiedSlot(props) {
       portalTarget.container
     ) : null,
     // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
-    isOpen && typeof document !== "undefined" ? import_react_dom.default.createPortal(
+    isOpen && typeof document !== "undefined" ? safeCreatePortal(
       h(CodeGraphViewPanel, {
         ...props,
         isOverlay: true,
@@ -725,13 +741,23 @@ function InputCodeGraphUnifiedSlot(props) {
   );
 }
 function HeroInputDockCodeGraphButton(props) {
+  const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
+  const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
   const isDark = useHostTheme();
   const [isOpen, setIsOpen] = import_react.default.useState(false);
   const [isHovered, setIsHovered] = import_react.default.useState(false);
   const isHeroSession = props?.session?.blank === true || props?.session === void 0;
   const activeWorkspace = import_react.default.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.session, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+    if (sessionCwd) return sessionCwd;
+    if (Array.isArray(workspaces) && workspaces.length > 0) {
+      if (props?.sessionId) {
+        const matched = workspaces.find((w) => w.sessionIds?.includes(props?.sessionId));
+        if (matched?.path) return matched.path;
+      }
+      if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    return "";
+  }, [sessionCwd, workspaces, props?.sessionId]);
   const [hasHeroRowBtn, setHasHeroRowBtn] = import_react.default.useState(false);
   import_react.default.useEffect(() => {
     const check = () => {
@@ -820,7 +846,7 @@ function HeroInputDockCodeGraphButton(props) {
         )
       )
     ),
-    isOpen && typeof document !== "undefined" ? import_react_dom.default.createPortal(
+    isOpen && typeof document !== "undefined" ? safeCreatePortal(
       h(CodeGraphViewPanel, {
         ...props,
         isOverlay: true,

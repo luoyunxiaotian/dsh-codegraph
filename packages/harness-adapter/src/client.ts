@@ -1,9 +1,26 @@
 import React from 'react';
-import ReactDOM from 'react-dom';
 
 export const inject = ['slots'];
 
 const h = React.createElement;
+
+/**
+ * 安全的 createPortal 包装器 (兼容各种打包与模块加载环境，并附带 try-catch 容灾)
+ */
+function safeCreatePortal(children: any, container: any) {
+  if (!container || typeof document === 'undefined') return null;
+  try {
+    // 兼容 ESM 与 CJS 静态映射
+    const rd = require('react-dom');
+    const portalFn = rd?.createPortal || rd?.default?.createPortal;
+    if (typeof portalFn === 'function') {
+      return portalFn(children, container);
+    }
+  } catch (err) {
+    console.warn('[dsh-codegraph] safeCreatePortal error:', err);
+  }
+  return null;
+}
 
 /**
  * 宿主主题感知 Hook: 实时监听 DeepSeek Harness 宿主暗色/亮色切换
@@ -57,8 +74,8 @@ function useHostTheme(): boolean {
 
 /**
  * 智能 DOM 锚定 Hook:
- * 解决 React 18 父组件在会话就绪/状态变迁时重新 reconcile 子元素导致外来 DOM 节点被剔除的问题。
- * 当宿主组件 re-render 并冲掉我们的胶囊按钮时，自动检测并秒级无缝重新附着，保证绝对常驻不消失！
+ * 解决 React 18 父组件在状态更新时重新 reconcile 子元素导致外来 DOM 节点被冲刷的问题。
+ * 当宿主组件 re-render 冲掉胶囊按钮时，毫秒级捕获并触发 Portal 重新附着，保证绝对常驻不消失！
  */
 function useHeroPortalTarget(): { container: HTMLElement | null; renderKey: number } {
   const [state, setState] = React.useState<{ container: HTMLElement | null; renderKey: number }>({
@@ -79,7 +96,6 @@ function useHeroPortalTarget(): { container: HTMLElement | null; renderKey: numb
       }
       const existingBtn = row.querySelector('[data-codegraph-hero-btn]');
       if (!existingBtn) {
-        // 如果宿主重新渲染移除了按钮，立即自增 key 重新触发 Portal 渲染
         setState((prev) => ({ container: row, renderKey: prev.renderKey + 1 }));
       }
     };
@@ -88,11 +104,11 @@ function useHeroPortalTarget(): { container: HTMLElement | null; renderKey: numb
 
     const observer = new MutationObserver(() => {
       clearTimeout(timer);
-      timer = setTimeout(inspect, 20);
+      timer = setTimeout(inspect, 30);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });
-    const interval = setInterval(inspect, 250);
+    const interval = setInterval(inspect, 300);
 
     return () => {
       clearTimeout(timer);
@@ -105,73 +121,52 @@ function useHeroPortalTarget(): { container: HTMLElement | null; renderKey: numb
 }
 
 /**
- * 工作区路径解析助手函数: 4层兜底保证获取用户当前选中的项目目录
- */
-function resolveWorkspacePath(props: any): string {
-  if (props?.activeWorkspace) return props.activeWorkspace;
-
-  // 1. 尝试从 props.useSessions 读取当前会话绑定的 cwd
-  if (typeof props?.useSessions === 'function' && props?.sessionId) {
-    try {
-      const sessionCwd = props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd);
-      if (sessionCwd) return sessionCwd;
-    } catch {}
-  }
-
-  // 2. 尝试从 props.useWorkspaces 获取工作区列表
-  let wsList: any[] = [];
-  if (typeof props?.useWorkspaces === 'function') {
-    try {
-      wsList = props.useWorkspaces((s: any) => s?.items) || [];
-      if (Array.isArray(wsList) && wsList.length > 0) {
-        if (props?.sessionId) {
-          const matched = wsList.find((w: any) => w.sessionIds?.includes(props.sessionId));
-          if (matched?.path) return matched.path;
-        }
-      }
-    } catch {}
-  }
-
-  // 3. 从 DOM 辅助提取（当用户在工作区选择器刚切换时）
-  if (typeof document !== 'undefined') {
-    try {
-      const chip =
-        document.querySelector('[class*="heroWorkspaceRow"] button') ||
-        document.querySelector('button[aria-label*="工作区"]') ||
-        document.querySelector('button[aria-label*="workspace"]');
-      const text = chip?.textContent?.trim();
-      if (text && Array.isArray(wsList) && wsList.length > 0) {
-        const found = wsList.find((w: any) => w.title === text || w.path?.endsWith(text));
-        if (found?.path) return found.path;
-      }
-      if (text && (text.includes(':') || text.includes('/') || text.includes('\\'))) {
-        return text;
-      }
-    } catch {}
-  }
-
-  // 4. 兜底采用第一个工作区路径
-  if (Array.isArray(wsList) && wsList.length > 0 && wsList[0]?.path) {
-    return wsList[0].path;
-  }
-
-  return '';
-}
-
-/**
  * 代码图谱主面板组件 (同时支持作为独立 Tab 视图或新会话 Overlay 浮层呈现)
  */
 function CodeGraphViewPanel(props: any) {
-  // 1. 动态感知 DeepSeek Harness 当前工作区根目录
-  const activeWorkspace = React.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.activeWorkspace, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+  // 1. 严格在组件顶层调用 React Hooks，严禁在 useMemo 或条件语句内部调用 hook
+  const sessionCwd = typeof props?.useSessions === 'function' && props?.sessionId
+    ? props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd)
+    : undefined;
 
-  // 2. 宿主主题与 iframe 交互
+  const workspaces = typeof props?.useWorkspaces === 'function'
+    ? props.useWorkspaces((s: any) => s?.items)
+    : undefined;
+
+  // 2. 动态感知工作区根目录
+  const activeWorkspace = React.useMemo(() => {
+    if (props?.activeWorkspace) return props.activeWorkspace;
+    if (sessionCwd) return sessionCwd;
+    if (Array.isArray(workspaces) && workspaces.length > 0) {
+      if (props?.sessionId) {
+        const matched = workspaces.find((w: any) => w.sessionIds?.includes(props?.sessionId));
+        if (matched?.path) return matched.path;
+      }
+      if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    if (typeof document !== 'undefined') {
+      try {
+        const chip =
+          document.querySelector('[class*="heroWorkspaceRow"] button') ||
+          document.querySelector('button[aria-label*="工作区"]') ||
+          document.querySelector('button[aria-label*="workspace"]');
+        const text = chip?.textContent?.trim();
+        if (text && Array.isArray(workspaces)) {
+          const found = workspaces.find((w: any) => w.title === text || w.path?.endsWith(text));
+          if (found?.path) return found.path;
+        }
+        if (text && (text.includes(':') || text.includes('/') || text.includes('\\'))) {
+          return text;
+        }
+      } catch {}
+    }
+    return '';
+  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+
+  // 3. 宿主主题与 iframe 交互
   const isDark = useHostTheme();
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
 
-  // 当宿主主题切换时，向 iframe 发送无感切肤消息
   React.useEffect(() => {
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
@@ -209,9 +204,9 @@ function CodeGraphViewPanel(props: any) {
     }
     params.set('theme', isDark ? 'dark' : 'light');
     return `${base}/?${params.toString()}`;
-  }, [activeWorkspace, key]);
+  }, [activeWorkspace, key, isDark]);
 
-  // 3. 状态检测与向 CodeGraph 后台同步当前工作区
+  // 4. 状态检测与向 CodeGraph 后台同步当前工作区
   const checkStatus = React.useCallback(async () => {
     setStatus('checking');
     try {
@@ -254,14 +249,13 @@ function CodeGraphViewPanel(props: any) {
     }
   }, [activeWorkspace]);
 
-  // 4. 监听来自嵌入 iframe 的图谱上下文注入请求，自动填入下方聊天框
+  // 5. 监听来自嵌入 iframe 的图谱上下文注入请求，自动填入下方聊天框
   React.useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       if (e.data?.type === 'codegraph:insert-chat') {
         const textToInsert = e.data.payload;
         if (!textToInsert) return;
 
-        // 查找 DeepSeek Harness 主聊天输入框 [data-composer-input]
         const composerInput = document.querySelector('[data-composer-input]') as HTMLElement;
         if (composerInput) {
           composerInput.focus();
@@ -278,7 +272,7 @@ function CodeGraphViewPanel(props: any) {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  // 5. 键盘 Esc 关闭浮层
+  // 6. 键盘 Esc 关闭浮层
   React.useEffect(() => {
     if (!props?.isOverlay || !props?.onClose) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -384,7 +378,7 @@ function CodeGraphViewPanel(props: any) {
           : {}),
       },
     },
-    // DeepSeek Harness 原生风格精简操作条 (高度 36px)
+    // 操作工具栏 (高度 36px)
     h(
       'div',
       {
@@ -404,7 +398,6 @@ function CodeGraphViewPanel(props: any) {
       h(
         'div',
         { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-        // 如果是 Overlay 模式，呈现「← 返回新对话」按钮
         props?.isOverlay
           ? h(
               'button',
@@ -433,7 +426,6 @@ function CodeGraphViewPanel(props: any) {
               h('span', null, '返回新对话')
             )
           : null,
-        // DeepSeek Blue 徽章
         h(
           'span',
           {
@@ -458,7 +450,6 @@ function CodeGraphViewPanel(props: any) {
           { style: { fontWeight: 600, color: themeStyles.textPrimary, fontSize: '12px', letterSpacing: '-0.2px' } },
           'CodeGraph'
         ),
-        // 工作区小标签
         h(
           'div',
           {
@@ -479,7 +470,6 @@ function CodeGraphViewPanel(props: any) {
           h('span', null, '📁'),
           h('span', null, workspaceShortName)
         ),
-        // 状态圆点
         h(
           'div',
           {
@@ -568,7 +558,7 @@ function CodeGraphViewPanel(props: any) {
         )
       )
     ),
-    // 离线提示横幅 (DSH 标准提示风格)
+    // 离线提示横幅
     status === 'offline'
       ? h(
           'div',
@@ -642,7 +632,7 @@ function CodeGraphViewPanel(props: any) {
 }
 
 /**
- * 新对话 Hero 工作区行旁边的胶囊按钮组件 (标记 data-codegraph-hero-btn，供 DOM 锚定追踪)
+ * 新对话 Hero 工作区行旁边的胶囊按钮组件
  */
 function HeroCapsuleButton({
   activeWorkspace,
@@ -723,20 +713,49 @@ function HeroCapsuleButton({
 
 /**
  * 注入输入框底栏工具栏的快捷组件 (挂载在 conversation.input.right)
- * 具备双重功能:
- * 1. 在输入框右下角展示「🧭 图谱」快捷按钮 (全场景可用)
- * 2. 如果检测到新对话 Hero 工作区行 (heroWorkspaceRow)，通过 Portal 无侵入插入「🧭 生成代码图谱」胶囊按钮
- *    （绝对不注册 conversation.hero.agentPreset single slot，因此完全不会与 PTC / 极简模式产生冲突）
  */
 function InputCodeGraphUnifiedSlot(props: any) {
+  // 顶层合法调用 Hooks
+  const sessionCwd = typeof props?.useSessions === 'function' && props?.sessionId
+    ? props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd)
+    : undefined;
+
+  const workspaces = typeof props?.useWorkspaces === 'function'
+    ? props.useWorkspaces((s: any) => s?.items)
+    : undefined;
+
   const [isHovered, setIsHovered] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
   const isDark = useHostTheme();
   const portalTarget = useHeroPortalTarget();
 
   const activeWorkspace = React.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+    if (sessionCwd) return sessionCwd;
+    if (Array.isArray(workspaces) && workspaces.length > 0) {
+      if (props?.sessionId) {
+        const matched = workspaces.find((w: any) => w.sessionIds?.includes(props?.sessionId));
+        if (matched?.path) return matched.path;
+      }
+      if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    if (typeof document !== 'undefined') {
+      try {
+        const chip =
+          document.querySelector('[class*="heroWorkspaceRow"] button') ||
+          document.querySelector('button[aria-label*="工作区"]') ||
+          document.querySelector('button[aria-label*="workspace"]');
+        const text = chip?.textContent?.trim();
+        if (text && Array.isArray(workspaces)) {
+          const found = workspaces.find((w: any) => w.title === text || w.path?.endsWith(text));
+          if (found?.path) return found.path;
+        }
+        if (text && (text.includes(':') || text.includes('/') || text.includes('\\'))) {
+          return text;
+        }
+      } catch {}
+    }
+    return '';
+  }, [sessionCwd, workspaces, props?.sessionId]);
 
   const handleInputBtnClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -785,9 +804,9 @@ function InputCodeGraphUnifiedSlot(props: any) {
       h('span', null, '图谱')
     ),
 
-    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅常驻 heroWorkspaceRow，自动恢复防 React 冲刷)
+    // B. 新会话 Hero 界面胶囊按钮 (通过 safeCreatePortal 附着 heroWorkspaceRow)
     portalTarget.container
-      ? ReactDOM.createPortal(
+      ? safeCreatePortal(
           h(HeroCapsuleButton, {
             key: portalTarget.renderKey,
             activeWorkspace,
@@ -800,7 +819,7 @@ function InputCodeGraphUnifiedSlot(props: any) {
 
     // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
     isOpen && typeof document !== 'undefined'
-      ? ReactDOM.createPortal(
+      ? safeCreatePortal(
           h(CodeGraphViewPanel, {
             ...props,
             isOverlay: true,
@@ -815,20 +834,36 @@ function InputCodeGraphUnifiedSlot(props: any) {
 
 /**
  * 注入 conversation.input.dock 作为 Hero 状态下的第二道常驻防线
- * 如果用户界面有特殊布局导致 heroWorkspaceRow 未挂载，此处直接渲染常驻行
  */
 function HeroInputDockCodeGraphButton(props: any) {
+  // 顶层合法调用 Hooks
+  const sessionCwd = typeof props?.useSessions === 'function' && props?.sessionId
+    ? props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd)
+    : undefined;
+
+  const workspaces = typeof props?.useWorkspaces === 'function'
+    ? props.useWorkspaces((s: any) => s?.items)
+    : undefined;
+
   const isDark = useHostTheme();
   const [isOpen, setIsOpen] = React.useState(false);
   const [isHovered, setIsHovered] = React.useState(false);
 
   // 只在空白新会话 (Hero 模式) 下生效
   const isHeroSession = props?.session?.blank === true || props?.session === void 0;
-  const activeWorkspace = React.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.session, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
 
-  // 如果已经挂载在 heroWorkspaceRow，则 Dock 区域不需要重复渲染
+  const activeWorkspace = React.useMemo(() => {
+    if (sessionCwd) return sessionCwd;
+    if (Array.isArray(workspaces) && workspaces.length > 0) {
+      if (props?.sessionId) {
+        const matched = workspaces.find((w: any) => w.sessionIds?.includes(props?.sessionId));
+        if (matched?.path) return matched.path;
+      }
+      if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    return '';
+  }, [sessionCwd, workspaces, props?.sessionId]);
+
   const [hasHeroRowBtn, setHasHeroRowBtn] = React.useState(false);
   React.useEffect(() => {
     const check = () => {
@@ -924,7 +959,7 @@ function HeroInputDockCodeGraphButton(props: any) {
       )
     ),
     isOpen && typeof document !== 'undefined'
-      ? ReactDOM.createPortal(
+      ? safeCreatePortal(
           h(CodeGraphViewPanel, {
             ...props,
             isOverlay: true,
