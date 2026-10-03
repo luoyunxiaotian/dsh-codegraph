@@ -6,6 +6,7 @@ import { ProcessFlowCanvas } from './components/ProcessFlowCanvas.js';
 import { DrillDownCanvas } from './components/DrillDownCanvas.js';
 import { CodeDrawer } from './components/CodeDrawer.js';
 import { Toast } from './components/Toast.js';
+import { showToast } from './utils/chatBridge.js';
 import { FullGraphResult, ArchetypeType, CodeNode } from '../../core/src/types/index.js';
 
 export const App: React.FC = () => {
@@ -105,9 +106,13 @@ export const App: React.FC = () => {
         setCacheTime('已同步保存');
         if (customScope) setScopePath(customScope);
         if (customWs) setWorkspaceRoot(customWs);
+      } else {
+        const errorMsg = data.error || '扫描返回异常';
+        showToast(`❌ ${errorMsg}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('扫描失败:', err);
+      showToast(`❌ 扫描连接失败: ${err.message || err}`);
     } finally {
       setIsLoading(false);
     }
@@ -123,9 +128,12 @@ export const App: React.FC = () => {
         setGraphData(data.graph);
         setLayoutData(data.layout?.architecture);
         setCacheTime('增量已保存');
+      } else {
+        showToast(`❌ 增量更新失败: ${data.error || '未知错误'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('增量更新失败:', err);
+      showToast(`❌ 增量连接失败: ${err.message || err}`);
     } finally {
       setIsUpdating(false);
     }
@@ -160,13 +168,16 @@ export const App: React.FC = () => {
   // 尚未初始化时展示待命就绪卡片
   if (!isInitialized || !graphData) {
     return (
-      <SetupView
-        workspaceRoot={workspaceRoot}
-        onStartScan={handleFullScan}
-        isLoading={isLoading}
-        hasExistingGraph={!!graphData}
-        onCancel={() => setIsInitialized(true)}
-      />
+      <div className="relative w-screen h-screen">
+        <SetupView
+          workspaceRoot={workspaceRoot}
+          onStartScan={handleFullScan}
+          isLoading={isLoading}
+          hasExistingGraph={!!graphData}
+          onCancel={() => setIsInitialized(true)}
+        />
+        <Toast />
+      </div>
     );
   }
 

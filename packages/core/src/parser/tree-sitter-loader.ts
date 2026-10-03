@@ -60,11 +60,41 @@ function resolveWasmPath(filename: string): string {
 }
 
 /**
+ * 定位 web-tree-sitter 核心运行时 tree-sitter.wasm
+ */
+function resolveTreeSitterWasm(): string | undefined {
+  const candidateDirs = [
+    path.resolve(__dirname, '.'),
+    path.resolve(__dirname, '..'),
+    path.resolve(__dirname, 'wasm'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(process.cwd(), 'dist/wasm'),
+    path.resolve(process.cwd(), 'node_modules/web-tree-sitter'),
+    path.resolve(process.cwd(), 'packages/core/node_modules/web-tree-sitter'),
+  ];
+  for (const dir of candidateDirs) {
+    const fullPath = path.join(dir, 'tree-sitter.wasm');
+    if (fs.existsSync(fullPath)) {
+      return fullPath;
+    }
+  }
+  return undefined;
+}
+
+/**
  * 初始化 WebTreeSitter 运行时并载入指定语言
  */
 export async function getParserForLanguage(language: string = 'python'): Promise<Parser> {
   if (!isInitialized) {
-    await Parser.init();
+    const coreWasm = resolveTreeSitterWasm();
+    await Parser.init({
+      locateFile(scriptName: string, scriptDirectory?: string) {
+        if (scriptName === 'tree-sitter.wasm' && coreWasm) {
+          return coreWasm;
+        }
+        return (scriptDirectory || '') + scriptName;
+      },
+    });
     isInitialized = true;
   }
 

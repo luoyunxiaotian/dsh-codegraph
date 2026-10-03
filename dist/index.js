@@ -1,4 +1,10 @@
-import { createRequire } from 'module'; const require = createRequire(import.meta.url);
+import { createRequire as __createRequire } from 'module';
+import { fileURLToPath as __fileURLToPath } from 'url';
+import { dirname as __pathDirname } from 'path';
+const require = __createRequire(import.meta.url);
+const __filename = __fileURLToPath(import.meta.url);
+const __dirname = __pathDirname(__filename);
+
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -105482,9 +105488,35 @@ function resolveWasmPath(filename) {
   }
   throw new Error(`\u627E\u4E0D\u5230\u8BED\u6CD5 wasm \u6587\u4EF6: ${filename}\uFF0C\u8BF7\u786E\u8BA4\u5DF2\u5B89\u88C5 tree-sitter-wasms`);
 }
+function resolveTreeSitterWasm() {
+  const candidateDirs = [
+    path.resolve(__dirname2, "."),
+    path.resolve(__dirname2, ".."),
+    path.resolve(__dirname2, "wasm"),
+    path.resolve(process.cwd(), "dist"),
+    path.resolve(process.cwd(), "dist/wasm"),
+    path.resolve(process.cwd(), "node_modules/web-tree-sitter"),
+    path.resolve(process.cwd(), "packages/core/node_modules/web-tree-sitter")
+  ];
+  for (const dir of candidateDirs) {
+    const fullPath = path.join(dir, "tree-sitter.wasm");
+    if (fs2.existsSync(fullPath)) {
+      return fullPath;
+    }
+  }
+  return void 0;
+}
 async function getParserForLanguage(language = "python") {
   if (!isInitialized) {
-    await import_web_tree_sitter.default.init();
+    const coreWasm = resolveTreeSitterWasm();
+    await import_web_tree_sitter.default.init({
+      locateFile(scriptName, scriptDirectory2) {
+        if (scriptName === "tree-sitter.wasm" && coreWasm) {
+          return coreWasm;
+        }
+        return (scriptDirectory2 || "") + scriptName;
+      }
+    });
     isInitialized = true;
   }
   const langKey = language.toLowerCase();

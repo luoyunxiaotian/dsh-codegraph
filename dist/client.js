@@ -86,40 +86,6 @@ function useHostTheme() {
   }, []);
   return isDark;
 }
-function useHeroPortalTarget() {
-  const [state, setState] = import_react.default.useState({
-    container: null,
-    renderKey: 0
-  });
-  import_react.default.useEffect(() => {
-    if (typeof document === "undefined") return;
-    let timer = null;
-    const inspect = () => {
-      const row = document.querySelector('[class*="heroWorkspaceRow"]');
-      if (!row) {
-        setState((prev) => prev.container !== null ? { container: null, renderKey: prev.renderKey + 1 } : prev);
-        return;
-      }
-      const existingBtn = row.querySelector("[data-codegraph-hero-btn]");
-      if (!existingBtn) {
-        setState((prev) => ({ container: row, renderKey: prev.renderKey + 1 }));
-      }
-    };
-    inspect();
-    const observer = new MutationObserver(() => {
-      clearTimeout(timer);
-      timer = setTimeout(inspect, 30);
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    const interval = setInterval(inspect, 300);
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-      observer.disconnect();
-    };
-  }, []);
-  return state;
-}
 function CodeGraphViewPanel(props) {
   const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
   const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
@@ -587,19 +553,46 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
   );
 }
 var globalClientCtx = null;
+function detectHeroActiveWorkspace() {
+  if (typeof document === "undefined") return "";
+  try {
+    const chip = document.querySelector('[class*="heroWorkspaceRow"] button') || document.querySelector('button[aria-label*="\u5DE5\u4F5C\u533A"]') || document.querySelector('button[aria-label*="workspace"]');
+    const chipText = chip?.textContent?.trim() || "";
+    const ctx = globalClientCtx;
+    const uiWorkspace = ctx?.uiWorkspace || ctx?.get?.("uiWorkspace");
+    const workspacesService = uiWorkspace?.workspaces || ctx?.workspaces || ctx?.get?.("workspaces");
+    const items = workspacesService?.list?.getSnapshot?.()?.items || [];
+    if (chipText && items.length > 0) {
+      const found = items.find(
+        (w) => w.title === chipText || w.path?.endsWith("/" + chipText) || w.path?.endsWith("\\" + chipText) || w.path?.toLowerCase().includes(chipText.toLowerCase())
+      );
+      if (found?.path) return found.path;
+    }
+    if (chipText && (chipText.includes(":") || chipText.includes("/") || chipText.includes("\\"))) {
+      return chipText;
+    }
+    if (items.length > 0 && items[0]?.path) {
+      return items[0].path;
+    }
+    const lastRecent = localStorage.getItem("dsh.recentWorkspace");
+    if (lastRecent) return lastRecent;
+  } catch {
+  }
+  return "";
+}
 async function createAndOpenCodeGraphSession(activeWorkspace) {
   if (!activeWorkspace) return false;
   try {
     const ctx = globalClientCtx;
-    const workspacesService = ctx?.workspaces || ctx?.get?.("workspaces");
-    const sessionsService = ctx?.sessions || ctx?.get?.("sessions");
-    const uiWorkspaceService = ctx?.uiWorkspace || ctx?.get?.("uiWorkspace");
+    const uiWorkspace = ctx?.uiWorkspace || ctx?.get?.("uiWorkspace");
+    const workspacesService = uiWorkspace?.workspaces || ctx?.workspaces || ctx?.get?.("workspaces");
+    const sessionsService = uiWorkspace?.sessions || ctx?.sessions || ctx?.get?.("sessions");
+    const norm = (p) => p.replace(/[\\\/]+/g, "/").toLowerCase().trim();
+    const targetNorm = norm(activeWorkspace);
     let targetWorkspaceId;
     if (workspacesService?.list) {
       try {
         const items = workspacesService.list.getSnapshot()?.items || [];
-        const norm = (p) => p.replace(/[\\\/]+/g, "/").toLowerCase().trim();
-        const targetNorm = norm(activeWorkspace);
         const matched = items.find((w) => {
           if (!w?.path) return false;
           const wNorm = norm(w.path);
@@ -615,55 +608,74 @@ async function createAndOpenCodeGraphSession(activeWorkspace) {
         console.warn("[dsh-codegraph] \u5339\u914D workspaceId \u8B66\u544A:", e);
       }
     }
+    if (uiWorkspace && targetWorkspaceId) {
+      if (typeof uiWorkspace.openWorkspace === "function") {
+        try {
+          await uiWorkspace.openWorkspace(targetWorkspaceId, (nextId) => {
+            try {
+              localStorage.setItem(
+                `dsh.conversation.${nextId}`,
+                JSON.stringify({ view: "codegraph", draft: "", viewRequest: null })
+              );
+            } catch {
+            }
+          });
+          return true;
+        } catch (err) {
+          console.warn("[dsh-codegraph] uiWorkspace.openWorkspace \u5F02\u5E38:", err);
+        }
+      }
+      if (typeof uiWorkspace.startSession === "function") {
+        try {
+          uiWorkspace.startSession(targetWorkspaceId);
+          return true;
+        } catch (err) {
+          console.warn("[dsh-codegraph] uiWorkspace.startSession \u5F02\u5E38:", err);
+        }
+      }
+    }
     let newSessionId;
     if (sessionsService && typeof sessionsService.create === "function") {
-      newSessionId = await sessionsService.create({
-        workspaceId: targetWorkspaceId,
-        cwd: activeWorkspace
-      });
-    }
-    if (!newSessionId) {
-      console.warn("[dsh-codegraph] \u4F1A\u8BDD\u521B\u5EFA\u672A\u8FD4\u56DE sessionId");
-      return false;
-    }
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem(
-          `dsh.conversation.${newSessionId}`,
-          JSON.stringify({ view: "codegraph", draft: "", viewRequest: null })
-        );
+      try {
+        newSessionId = await sessionsService.create({
+          workspaceId: targetWorkspaceId,
+          cwd: activeWorkspace
+        });
+      } catch (e) {
+        console.warn("[dsh-codegraph] sessionsService.create \u5F02\u5E38:", e);
       }
-    } catch {
     }
-    try {
-      await fetch("http://127.0.0.1:3333/api/workspace", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceRoot: activeWorkspace })
-      });
-    } catch (err) {
-      console.warn("[dsh-codegraph] \u540E\u53F0\u670D\u52A1\u8FDE\u63A5\u5F02\u5E38:", err);
-    }
-    if (uiWorkspaceService && typeof uiWorkspaceService.openSession === "function") {
-      uiWorkspaceService.openSession(newSessionId);
-      return true;
+    if (newSessionId) {
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(
+            `dsh.conversation.${newSessionId}`,
+            JSON.stringify({ view: "codegraph", draft: "", viewRequest: null })
+          );
+        }
+      } catch {
+      }
+      if (uiWorkspace && typeof uiWorkspace.openSession === "function") {
+        uiWorkspace.openSession(newSessionId);
+        return true;
+      }
     }
   } catch (err) {
-    console.error("[dsh-codegraph] \u521B\u5EFA\u4F1A\u8BDD\u7A97\u53E3\u5931\u8D25:", err);
+    console.error("[dsh-codegraph] \u521B\u5EFA\u4F1A\u8BDD\u7A97\u53E3\u4E25\u91CD\u5F02\u5E38:", err);
   }
   return false;
 }
 function HeroCapsuleButton({
-  activeWorkspace,
   isDark,
-  onOpen
+  onOpenOverlay
 }) {
   const [isHovered, setIsHovered] = import_react.default.useState(false);
   const [isCreating, setIsCreating] = import_react.default.useState(false);
   const handleClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!activeWorkspace) {
+    const targetWs = detectHeroActiveWorkspace();
+    if (!targetWs) {
       alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u5728\u5DE6\u4FA7\u9009\u62E9\u6216\u5173\u8054\u4E00\u4E2A\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939\uFF0C\u518D\u751F\u6210\u4EE3\u7801\u56FE\u8C31\u3002");
       try {
         const chipBtn = document.querySelector(
@@ -676,25 +688,24 @@ function HeroCapsuleButton({
     }
     setIsCreating(true);
     try {
-      const success = await createAndOpenCodeGraphSession(activeWorkspace);
-      if (success) {
-        setIsCreating(false);
-        return;
-      }
-    } catch (err) {
-      console.warn("[dsh-codegraph] \u521B\u5EFA\u4F1A\u8BDD\u7A97\u53E3\u672A\u5B8C\u6210\uFF0C\u964D\u7EA7\u4E3A\u6D6E\u5C42\u6A21\u5F0F:", err);
-    }
-    try {
       await fetch("http://127.0.0.1:3333/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceRoot: activeWorkspace })
+        body: JSON.stringify({ workspaceRoot: targetWs })
       }).catch(() => {
       });
     } catch {
     }
+    let navigated = false;
+    try {
+      navigated = await createAndOpenCodeGraphSession(targetWs);
+    } catch (err) {
+      console.warn("[dsh-codegraph] \u521B\u5EFA\u4F1A\u8BDD\u7A97\u53E3\u672A\u5B8C\u6210\uFF0C\u964D\u7EA7\u4E3A\u6D6E\u5C42\u6A21\u5F0F:", err);
+    }
     setIsCreating(false);
-    onOpen();
+    if (!navigated) {
+      onOpenOverlay(targetWs);
+    }
   };
   return h(
     "button",
@@ -705,16 +716,16 @@ function HeroCapsuleButton({
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),
       disabled: isCreating,
-      title: activeWorkspace ? `\u4E3A\u3010${activeWorkspace}\u3011\u521B\u5EFA\u4F1A\u8BDD\u5E76\u5236\u4F5C\u4EE3\u7801\u56FE\u8C31 (0 Token)` : "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token)",
+      title: "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token \xB7 \u672C\u5730\u9759\u6001\u67B6\u6784\u5206\u6790)",
       style: {
         display: "inline-flex",
         alignItems: "center",
         gap: "5px",
-        height: "28px",
-        padding: "0 11px",
+        height: "26px",
+        padding: "0 10px",
         marginLeft: "6px",
-        borderRadius: "14px",
-        fontSize: "12px",
+        borderRadius: "13px",
+        fontSize: "11px",
         fontWeight: 500,
         cursor: isCreating ? "wait" : "pointer",
         opacity: isCreating ? 0.8 : 1,
@@ -729,49 +740,80 @@ function HeroCapsuleButton({
         flexShrink: 0
       }
     },
-    h("span", { style: { fontSize: "13px", lineHeight: 1 } }, isCreating ? "\u23F3" : "\u{1F9ED}"),
+    h("span", { style: { fontSize: "12px", lineHeight: 1 } }, isCreating ? "\u23F3" : "\u{1F9ED}"),
     h("span", null, isCreating ? "\u6B63\u5728\u521B\u5EFA\u4F1A\u8BDD..." : "\u751F\u6210\u4EE3\u7801\u56FE\u8C31")
+  );
+}
+function CodeGraphShellManager(props) {
+  const isDark = useHostTheme();
+  const [heroContainer, setHeroContainer] = import_react.default.useState(null);
+  const [overlayState, setOverlayState] = import_react.default.useState({
+    isOpen: false,
+    workspace: ""
+  });
+  import_react.default.useEffect(() => {
+    if (typeof document === "undefined") return;
+    const inspect = () => {
+      const row = document.querySelector('[class*="heroWorkspaceRow"]');
+      setHeroContainer((prev) => prev !== row ? row : prev);
+    };
+    inspect();
+    const observer = new MutationObserver(inspect);
+    observer.observe(document.body, { childList: true, subtree: true });
+    const interval = setInterval(inspect, 200);
+    return () => {
+      clearInterval(interval);
+      observer.disconnect();
+    };
+  }, []);
+  import_react.default.useEffect(() => {
+    const handleOpen = (e) => {
+      const ws = e.detail?.workspace || detectHeroActiveWorkspace();
+      setOverlayState({ isOpen: true, workspace: ws });
+    };
+    window.addEventListener("codegraph:open-overlay", handleOpen);
+    return () => window.removeEventListener("codegraph:open-overlay", handleOpen);
+  }, []);
+  return h(
+    import_react.default.Fragment,
+    null,
+    // A. 附着在 Hero 界面工作区行旁的胶囊按钮
+    heroContainer ? safeCreatePortal(
+      h(HeroCapsuleButton, {
+        isDark,
+        onOpenOverlay: (ws) => setOverlayState({ isOpen: true, workspace: ws })
+      }),
+      heroContainer
+    ) : null,
+    // B. 全局沉浸式图谱浮层 (0 Token 降级保障)
+    overlayState.isOpen ? h(
+      "div",
+      {
+        style: {
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999
+        }
+      },
+      h(CodeGraphViewPanel, {
+        ...props,
+        isOverlay: true,
+        activeWorkspace: overlayState.workspace,
+        onClose: () => setOverlayState({ isOpen: false, workspace: "" })
+      })
+    ) : null
   );
 }
 function InputCodeGraphUnifiedSlot(props) {
   const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
-  const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
   const [isHovered, setIsHovered] = import_react.default.useState(false);
-  const [isOpen, setIsOpen] = import_react.default.useState(false);
   const isDark = useHostTheme();
-  const portalTarget = useHeroPortalTarget();
-  const activeWorkspace = import_react.default.useMemo(() => {
-    if (sessionCwd) return sessionCwd;
-    if (Array.isArray(workspaces) && workspaces.length > 0) {
-      if (props?.sessionId) {
-        const matched = workspaces.find((w) => w.sessionIds?.includes(props?.sessionId));
-        if (matched?.path) return matched.path;
-      }
-      if (workspaces[0]?.path) return workspaces[0].path;
-    }
-    if (typeof document !== "undefined") {
-      try {
-        const chip = document.querySelector('[class*="heroWorkspaceRow"] button') || document.querySelector('button[aria-label*="\u5DE5\u4F5C\u533A"]') || document.querySelector('button[aria-label*="workspace"]');
-        const text = chip?.textContent?.trim();
-        if (text && Array.isArray(workspaces)) {
-          const found = workspaces.find((w) => w.title === text || w.path?.endsWith(text));
-          if (found?.path) return found.path;
-        }
-        if (text && (text.includes(":") || text.includes("/") || text.includes("\\"))) {
-          return text;
-        }
-      } catch {
-      }
-    }
-    return "";
-  }, [sessionCwd, workspaces, props?.sessionId]);
   const handleInputBtnClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!activeWorkspace) {
-      alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u9009\u62E9\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939");
-      return;
-    }
     if (typeof document !== "undefined") {
       const tabBtns = Array.from(document.querySelectorAll('button[role="tab"]'));
       const graphTab = tabBtns.find(
@@ -782,64 +824,36 @@ function InputCodeGraphUnifiedSlot(props) {
         return;
       }
     }
-    if (!props?.sessionId || props?.session?.blank) {
-      const ok = await createAndOpenCodeGraphSession(activeWorkspace);
-      if (ok) return;
-    }
-    setIsOpen(true);
+    const ws = sessionCwd || detectHeroActiveWorkspace();
+    window.dispatchEvent(new CustomEvent("codegraph:open-overlay", { detail: { workspace: ws } }));
   };
   return h(
-    import_react.default.Fragment,
-    null,
-    // A. 输入框底栏快捷按钮 (位于发送按钮旁)
-    h(
-      "button",
-      {
-        type: "button",
-        onClick: handleInputBtnClick,
-        onMouseEnter: () => setIsHovered(true),
-        onMouseLeave: () => setIsHovered(false),
-        title: "\u4EE3\u7801\u56FE\u8C31 (0 Token \u76F4\u63A5\u67E5\u770B/\u751F\u6210)",
-        style: {
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "4px",
-          height: "24px",
-          padding: "0 8px",
-          borderRadius: "4px",
-          fontSize: "11px",
-          fontWeight: 500,
-          cursor: "pointer",
-          background: isHovered ? isDark ? "rgba(65, 118, 230, 0.2)" : "rgba(65, 118, 230, 0.12)" : "transparent",
-          color: isHovered ? "#4176e6" : isDark ? "#9ca3af" : "#6b7280",
-          border: isHovered ? "0.5px solid rgba(65, 118, 230, 0.4)" : "0.5px solid transparent",
-          transition: "all 0.15s ease",
-          outline: "none"
-        }
-      },
-      h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u{1F9ED}"),
-      h("span", null, "\u56FE\u8C31")
-    ),
-    // B. 新会话 Hero 界面胶囊按钮 (通过 safeCreatePortal 附着 heroWorkspaceRow)
-    portalTarget.container ? safeCreatePortal(
-      h(HeroCapsuleButton, {
-        key: portalTarget.renderKey,
-        activeWorkspace,
-        isDark,
-        onOpen: () => setIsOpen(true)
-      }),
-      portalTarget.container
-    ) : null,
-    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token 降级保障)
-    isOpen && typeof document !== "undefined" ? safeCreatePortal(
-      h(CodeGraphViewPanel, {
-        ...props,
-        isOverlay: true,
-        onClose: () => setIsOpen(false),
-        activeWorkspace
-      }),
-      document.querySelector("[data-conversation-content]") || document.body
-    ) : null
+    "button",
+    {
+      type: "button",
+      onClick: handleInputBtnClick,
+      onMouseEnter: () => setIsHovered(true),
+      onMouseLeave: () => setIsHovered(false),
+      title: "\u4EE3\u7801\u56FE\u8C31 (0 Token \u76F4\u63A5\u67E5\u770B/\u751F\u6210)",
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "4px",
+        height: "24px",
+        padding: "0 8px",
+        borderRadius: "4px",
+        fontSize: "11px",
+        fontWeight: 500,
+        cursor: "pointer",
+        background: isHovered ? isDark ? "rgba(65, 118, 230, 0.2)" : "rgba(65, 118, 230, 0.12)" : "transparent",
+        color: isHovered ? "#4176e6" : isDark ? "#9ca3af" : "#6b7280",
+        border: isHovered ? "0.5px solid rgba(65, 118, 230, 0.4)" : "0.5px solid transparent",
+        transition: "all 0.15s ease",
+        outline: "none"
+      }
+    },
+    h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u{1F9ED}"),
+    h("span", null, "\u56FE\u8C31")
   );
 }
 function apply(ctx) {
@@ -855,6 +869,17 @@ function apply(ctx) {
           label: () => "\u4EE3\u7801\u56FE\u8C31"
         },
         CodeGraphViewPanel
+      )
+    );
+    ctx.slots.inject(
+      "shell.overlay",
+      () => ctx.slots.register(
+        {
+          name: "shell.overlay",
+          id: "codegraph-shell-manager",
+          order: 50
+        },
+        CodeGraphShellManager
       )
     );
     ctx.slots.inject(
