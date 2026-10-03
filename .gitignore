@@ -35,3 +35,4 @@ scratch/
 .cache/
 .temp/
 .codegraph/
+scripts/publish-repo.mjs

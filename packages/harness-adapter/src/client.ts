@@ -1,30 +1,14 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 
 export const inject = ['slots'];
 
 const h = React.createElement;
 
-function CodeGraphViewPanel(props: any) {
-  // 1. 动态感知 DeepSeek Harness 当前会话或工作区绑定的根目录
-  const sessionCwd = typeof props?.useSessions === 'function' && props?.sessionId
-    ? props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd)
-    : undefined;
-
-  const workspaces = typeof props?.useWorkspaces === 'function'
-    ? props.useWorkspaces((s: any) => s?.items)
-    : undefined;
-
-  const activeWorkspace = React.useMemo(() => {
-    if (sessionCwd) return sessionCwd;
-    if (Array.isArray(workspaces)) {
-      const matched = workspaces.find((w: any) => w.sessionIds?.includes(props?.sessionId));
-      if (matched?.path) return matched.path;
-      if (workspaces[0]?.path) return workspaces[0].path;
-    }
-    return '';
-  }, [sessionCwd, workspaces, props?.sessionId]);
-
-  // 2. 宿主主题自适应感知 (深色/浅色) 与 iframe 动态切肤通道
+/**
+ * 宿主主题感知 Hook: 实时监听 DeepSeek Harness 宿主暗色/亮色切换
+ */
+function useHostTheme(): boolean {
   const [isDark, setIsDark] = React.useState<boolean>(() => {
     if (typeof document !== 'undefined') {
       return (
@@ -35,8 +19,6 @@ function CodeGraphViewPanel(props: any) {
     }
     return false;
   });
-
-  const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
 
   React.useEffect(() => {
     const updateTheme = () => {
@@ -70,7 +52,78 @@ function CodeGraphViewPanel(props: any) {
     return () => observer.disconnect();
   }, []);
 
-  // 当宿主主题切换时，向 iframe 发送无感无缝切肤消息
+  return isDark;
+}
+
+/**
+ * 工作区路径解析助手函数: 4层兜底保证获取用户当前选中的项目目录
+ */
+function resolveWorkspacePath(props: any): string {
+  // 1. 如果组件显式传参，优先采用
+  if (props?.activeWorkspace) return props.activeWorkspace;
+
+  // 2. 尝试从 props.useSessions 读取当前会话绑定的 cwd
+  if (typeof props?.useSessions === 'function' && props?.sessionId) {
+    try {
+      const sessionCwd = props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd);
+      if (sessionCwd) return sessionCwd;
+    } catch {}
+  }
+
+  // 3. 尝试从 props.useWorkspaces 获取工作区列表
+  let wsList: any[] = [];
+  if (typeof props?.useWorkspaces === 'function') {
+    try {
+      wsList = props.useWorkspaces((s: any) => s?.items) || [];
+      if (Array.isArray(wsList) && wsList.length > 0) {
+        if (props?.sessionId) {
+          const matched = wsList.find((w: any) => w.sessionIds?.includes(props.sessionId));
+          if (matched?.path) return matched.path;
+        }
+      }
+    } catch {}
+  }
+
+  // 4. 从 DOM 辅助提取（当用户在工作区选择器刚切换时）
+  if (typeof document !== 'undefined') {
+    try {
+      const chip =
+        document.querySelector('[class*="heroWorkspaceRow"] button') ||
+        document.querySelector('button[aria-label*="工作区"]') ||
+        document.querySelector('button[aria-label*="workspace"]');
+      const text = chip?.textContent?.trim();
+      if (text && Array.isArray(wsList) && wsList.length > 0) {
+        const found = wsList.find((w: any) => w.title === text || w.path?.endsWith(text));
+        if (found?.path) return found.path;
+      }
+      if (text && (text.includes(':') || text.includes('/') || text.includes('\\'))) {
+        return text;
+      }
+    } catch {}
+  }
+
+  // 5. 兜底采用第一个工作区路径
+  if (Array.isArray(wsList) && wsList.length > 0 && wsList[0]?.path) {
+    return wsList[0].path;
+  }
+
+  return '';
+}
+
+/**
+ * 代码图谱主面板组件 (同时支持作为独立 Tab 视图或新会话 Overlay 浮层呈现)
+ */
+function CodeGraphViewPanel(props: any) {
+  // 1. 动态感知 DeepSeek Harness 当前工作区根目录
+  const activeWorkspace = React.useMemo(() => {
+    return resolveWorkspacePath(props);
+  }, [props?.activeWorkspace, props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+
+  // 2. 宿主主题与 iframe 交互
+  const isDark = useHostTheme();
+  const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
+
+  // 当宿主主题切换时，向 iframe 发送无感切肤消息
   React.useEffect(() => {
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
@@ -98,6 +151,7 @@ function CodeGraphViewPanel(props: any) {
   const [key, setKey] = React.useState(0);
   const [status, setStatus] = React.useState<'checking' | 'online' | 'offline'>('checking');
   const [statusText, setStatusText] = React.useState('正在检测引擎状态...');
+  const [isScanning, setIsScanning] = React.useState(false);
 
   const iframeUrl = React.useMemo(() => {
     const base = 'http://127.0.0.1:3333';
@@ -176,9 +230,45 @@ function CodeGraphViewPanel(props: any) {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // 5. 键盘 Esc 关闭浮层
+  React.useEffect(() => {
+    if (!props?.isOverlay || !props?.onClose) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        props.onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [props?.isOverlay, props?.onClose]);
+
   const handleRefresh = () => {
     setKey((prev) => prev + 1);
     checkStatus();
+  };
+
+  const handleTriggerScan = async () => {
+    if (!activeWorkspace) {
+      alert('请先选择目标工作区');
+      return;
+    }
+    setIsScanning(true);
+    setStatusText('全量扫描中...');
+    try {
+      const res = await fetch('http://127.0.0.1:3333/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace }),
+      });
+      if (res.ok) {
+        setKey((prev) => prev + 1);
+        await checkStatus();
+      }
+    } catch (err) {
+      console.warn('[dsh-codegraph] 扫描触发异常:', err);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const handleOpenBrowser = () => {
@@ -233,9 +323,20 @@ function CodeGraphViewPanel(props: any) {
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
         overflow: 'hidden',
+        ...(props?.isOverlay
+          ? {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 90,
+              boxShadow: isDark ? '0 0 24px rgba(0, 0, 0, 0.5)' : '0 0 24px rgba(0, 0, 0, 0.1)',
+            }
+          : {}),
       },
     },
-    // DeepSeek Harness 原生风格精简操作条 (高度 34px)
+    // DeepSeek Harness 原生风格精简操作条 (高度 36px)
     h(
       'div',
       {
@@ -244,7 +345,7 @@ function CodeGraphViewPanel(props: any) {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '0 12px',
-          height: '34px',
+          height: '36px',
           background: themeStyles.bgPanel,
           borderBottom: `0.5px solid ${themeStyles.borderSubtle}`,
           fontSize: '12px',
@@ -255,6 +356,35 @@ function CodeGraphViewPanel(props: any) {
       h(
         'div',
         { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+        // 如果是 Overlay 模式，呈现「← 返回新对话」按钮
+        props?.isOverlay
+          ? h(
+              'button',
+              {
+                type: 'button',
+                onClick: props?.onClose,
+                title: '返回新对话界面 (Esc)',
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: isDark ? 'rgba(65, 118, 230, 0.15)' : 'rgba(65, 118, 230, 0.1)',
+                  border: '0.5px solid rgba(65, 118, 230, 0.4)',
+                  color: '#4176e6',
+                  borderRadius: '14px',
+                  padding: '2px 10px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  marginRight: '6px',
+                  transition: 'all 0.15s ease',
+                  outline: 'none',
+                },
+              },
+              h('span', { style: { fontSize: '12px', lineHeight: 1 } }, '←'),
+              h('span', null, '返回新对话')
+            )
+          : null,
         // DeepSeek Blue 徽章
         h(
           'span',
@@ -289,16 +419,17 @@ function CodeGraphViewPanel(props: any) {
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              padding: '1px 6px',
-              borderRadius: '4px',
+              padding: '1px 7px',
+              borderRadius: '12px',
               background: themeStyles.bgLayer1,
               border: `0.5px solid ${themeStyles.borderSubtle}`,
               fontSize: '11px',
-              color: themeStyles.textTertiary,
+              color: themeStyles.textSecondary,
               fontFamily: 'monospace',
             },
           },
-          workspaceShortName
+          h('span', null, '📁'),
+          h('span', null, workspaceShortName)
         ),
         // 状态圆点
         h(
@@ -331,8 +462,28 @@ function CodeGraphViewPanel(props: any) {
         h(
           'button',
           {
+            onClick: handleTriggerScan,
+            disabled: isScanning,
+            title: '全量重新扫描当前项目 AST 并更新图谱',
+            style: {
+              background: 'transparent',
+              color: isScanning ? themeStyles.textTertiary : '#4176e6',
+              border: '0.5px solid rgba(65, 118, 230, 0.35)',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              cursor: isScanning ? 'not-allowed' : 'pointer',
+              fontSize: '11px',
+              lineHeight: '18px',
+              transition: 'all 0.15s',
+            },
+          },
+          isScanning ? '⟳ 扫描中...' : '↻ 重新扫描'
+        ),
+        h(
+          'button',
+          {
             onClick: handleRefresh,
-            title: '刷新视窗',
+            title: '重新加载图谱视窗',
             style: {
               background: 'transparent',
               color: themeStyles.textSecondary,
@@ -442,9 +593,183 @@ function CodeGraphViewPanel(props: any) {
   );
 }
 
+/**
+ * 注入新对话 (Hero 空白状态) 界面工作区行右侧的胶囊按钮组件
+ */
+function HeroCodeGraphButton(props: any) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [isHovered, setIsHovered] = React.useState(false);
+  const isDark = useHostTheme();
+
+  // 动态解析当前选中的工作区路径
+  const activeWorkspace = React.useMemo(() => {
+    return resolveWorkspacePath(props);
+  }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+
+  const handleOpenGraph = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    let target = activeWorkspace;
+    if (!target) {
+      target = resolveWorkspacePath(props);
+    }
+
+    if (!target) {
+      alert('💡 提示：请先在左侧选择或关联一个项目工作区文件夹，再生成代码图谱。');
+      return;
+    }
+
+    // 1. 静默同步目标工作区给后台引擎，触发项目持久化检查与就绪准备 (0 Token，不发送大模型对话)
+    try {
+      await fetch('http://127.0.0.1:3333/api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceRoot: target }),
+      });
+    } catch (err) {
+      console.warn('[dsh-codegraph] 后台服务连接异常:', err);
+    }
+
+    // 2. 打开沉浸式图谱工作台
+    setIsOpen(true);
+  };
+
+  return h(
+    React.Fragment,
+    null,
+    // 1. 新会话界面的胶囊按钮 (与 WorkspaceChip 紧密并列)
+    h(
+      'button',
+      {
+        type: 'button',
+        onClick: handleOpenGraph,
+        onMouseEnter: () => setIsHovered(true),
+        onMouseLeave: () => setIsHovered(false),
+        title: activeWorkspace
+          ? `生成/查看【${activeWorkspace}】代码图谱 (0 Token)`
+          : '生成当前工作区代码图谱 (0 Token)',
+        style: {
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          height: '28px',
+          padding: '0 11px',
+          marginLeft: '6px',
+          borderRadius: '14px',
+          fontSize: '12px',
+          fontWeight: 500,
+          cursor: 'pointer',
+          background: isHovered
+            ? (isDark ? 'rgba(65, 118, 230, 0.22)' : 'rgba(65, 118, 230, 0.12)')
+            : (isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'),
+          color: isHovered
+            ? '#4176e6'
+            : (isDark ? '#e1e4ea' : '#333333'),
+          border: isHovered
+            ? '0.5px solid rgba(65, 118, 230, 0.5)'
+            : (isDark ? '0.5px solid rgba(255, 255, 255, 0.12)' : '0.5px solid rgba(0, 0, 0, 0.1)'),
+          transition: 'all 0.15s ease',
+          outline: 'none',
+          boxShadow: isHovered ? '0 0 10px rgba(65, 118, 230, 0.25)' : 'none',
+          userSelect: 'none',
+        },
+      },
+      h('span', { style: { fontSize: '13px', lineHeight: 1 } }, '🧭'),
+      h('span', null, '生成代码图谱')
+    ),
+    // 2. 沉浸式图谱视图浮层 (Portal 到主对话容器)
+    isOpen && typeof document !== 'undefined'
+      ? ReactDOM.createPortal(
+          h(CodeGraphViewPanel, {
+            ...props,
+            isOverlay: true,
+            onClose: () => setIsOpen(false),
+            activeWorkspace,
+          }),
+          document.querySelector('[data-conversation-content]') || document.body
+        )
+      : null
+  );
+}
+
+/**
+ * 注入输入框底栏工具栏的快捷按钮组件 (在发送按钮旁)
+ */
+function InputCodeGraphButton(props: any) {
+  const [isHovered, setIsHovered] = React.useState(false);
+  const [isOpen, setIsOpen] = React.useState(false);
+  const isDark = useHostTheme();
+
+  const activeWorkspace = React.useMemo(() => {
+    return resolveWorkspacePath(props);
+  }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeWorkspace) {
+      alert('💡 提示：请先选择项目工作区文件夹');
+      return;
+    }
+    setIsOpen(true);
+  };
+
+  return h(
+    React.Fragment,
+    null,
+    h(
+      'button',
+      {
+        type: 'button',
+        onClick: handleClick,
+        onMouseEnter: () => setIsHovered(true),
+        onMouseLeave: () => setIsHovered(false),
+        title: '代码图谱 (0 Token 直接查看/生成)',
+        style: {
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          height: '24px',
+          padding: '0 8px',
+          borderRadius: '4px',
+          fontSize: '11px',
+          fontWeight: 500,
+          cursor: 'pointer',
+          background: isHovered
+            ? (isDark ? 'rgba(65, 118, 230, 0.2)' : 'rgba(65, 118, 230, 0.12)')
+            : 'transparent',
+          color: isHovered ? '#4176e6' : (isDark ? '#9ca3af' : '#6b7280'),
+          border: isHovered
+            ? '0.5px solid rgba(65, 118, 230, 0.4)'
+            : '0.5px solid transparent',
+          transition: 'all 0.15s ease',
+          outline: 'none',
+        },
+      },
+      h('span', { style: { fontSize: '12px', lineHeight: 1 } }, '🧭'),
+      h('span', null, '图谱')
+    ),
+    isOpen && typeof document !== 'undefined'
+      ? ReactDOM.createPortal(
+          h(CodeGraphViewPanel, {
+            ...props,
+            isOverlay: true,
+            onClose: () => setIsOpen(false),
+            activeWorkspace,
+          }),
+          document.querySelector('[data-conversation-content]') || document.body
+        )
+      : null
+  );
+}
+
+/**
+ * DSH 插件注册入口
+ */
 export function apply(ctx: any): void {
-  // 注入会话顶部视图列表: 注册「代码图谱」标签页 (与「对话」、「轨迹」并列)
   if (ctx.slots && typeof ctx.slots.inject === 'function') {
+    // 1. 注入会话顶部视图列表: 注册「代码图谱」标签页 (有会话历史时与「对话」、「轨迹」并列)
     ctx.slots.inject('conversation.view', () =>
       ctx.slots.register(
         {
@@ -454,6 +779,28 @@ export function apply(ctx: any): void {
           label: () => '代码图谱',
         },
         CodeGraphViewPanel
+      )
+    );
+
+    // 2. 注入新会话 (Hero) 界面工作区操作行: 在 WorkspaceChip 右侧呈现「🧭 生成代码图谱」胶囊按钮
+    ctx.slots.inject('conversation.hero.agentPreset', () =>
+      ctx.slots.register(
+        {
+          name: 'conversation.hero.agentPreset',
+        },
+        HeroCodeGraphButton
+      )
+    );
+
+    // 3. 注入输入框底栏工具栏: 呈现「🧭 图谱」快捷入口
+    ctx.slots.inject('conversation.input.right', () =>
+      ctx.slots.register(
+        {
+          name: 'conversation.input.right',
+          id: 'codegraph-input-action',
+          order: 5,
+        },
+        InputCodeGraphButton
       )
     );
   }
