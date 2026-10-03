@@ -56,6 +56,39 @@ function useHostTheme(): boolean {
 }
 
 /**
+ * 动态监听 Hero 工作区行容器 (heroWorkspaceRow)，用于通过 Portal 无侵入插入胶囊按钮
+ * 绝对不触碰或覆盖 DSH 核心 single slot (如 agentPreset)，彻底避免模式选择下拉框 (PTC/极简) 冲突
+ */
+function useHeroWorkspaceRow(): HTMLElement | null {
+  const [rowEl, setRowEl] = React.useState<HTMLElement | null>(() => {
+    if (typeof document !== 'undefined') {
+      return document.querySelector('[class*="heroWorkspaceRow"]');
+    }
+    return null;
+  });
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const update = () => {
+      const el = document.querySelector('[class*="heroWorkspaceRow"]') as HTMLElement | null;
+      setRowEl((prev) => (prev !== el ? el : prev));
+    };
+
+    update();
+
+    const observer = new MutationObserver(() => {
+      update();
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  return rowEl;
+}
+
+/**
  * 工作区路径解析助手函数: 4层兜底保证获取用户当前选中的项目目录
  */
 function resolveWorkspacePath(props: any): string {
@@ -594,118 +627,103 @@ function CodeGraphViewPanel(props: any) {
 }
 
 /**
- * 注入新对话 (Hero 空白状态) 界面工作区行右侧的胶囊按钮组件
+ * 新对话 Hero 工作区行旁边的胶囊按钮组件
  */
-function HeroCodeGraphButton(props: any) {
-  const [isOpen, setIsOpen] = React.useState(false);
+function HeroCapsuleButton({
+  activeWorkspace,
+  isDark,
+  onOpen,
+}: {
+  activeWorkspace: string;
+  isDark: boolean;
+  onOpen: () => void;
+}) {
   const [isHovered, setIsHovered] = React.useState(false);
-  const isDark = useHostTheme();
 
-  // 动态解析当前选中的工作区路径
-  const activeWorkspace = React.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
-
-  const handleOpenGraph = async (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    let target = activeWorkspace;
-    if (!target) {
-      target = resolveWorkspacePath(props);
-    }
-
-    if (!target) {
+    if (!activeWorkspace) {
       alert('💡 提示：请先在左侧选择或关联一个项目工作区文件夹，再生成代码图谱。');
       return;
     }
 
-    // 1. 静默同步目标工作区给后台引擎，触发项目持久化检查与就绪准备 (0 Token，不发送大模型对话)
+    // 静默向后台发送工作区路径并准备图谱 (0 Token)
     try {
       await fetch('http://127.0.0.1:3333/api/workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceRoot: target }),
+        body: JSON.stringify({ workspaceRoot: activeWorkspace }),
       });
     } catch (err) {
       console.warn('[dsh-codegraph] 后台服务连接异常:', err);
     }
 
-    // 2. 打开沉浸式图谱工作台
-    setIsOpen(true);
+    onOpen();
   };
 
   return h(
-    React.Fragment,
-    null,
-    // 1. 新会话界面的胶囊按钮 (与 WorkspaceChip 紧密并列)
-    h(
-      'button',
-      {
-        type: 'button',
-        onClick: handleOpenGraph,
-        onMouseEnter: () => setIsHovered(true),
-        onMouseLeave: () => setIsHovered(false),
-        title: activeWorkspace
-          ? `生成/查看【${activeWorkspace}】代码图谱 (0 Token)`
-          : '生成当前工作区代码图谱 (0 Token)',
-        style: {
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          height: '28px',
-          padding: '0 11px',
-          marginLeft: '6px',
-          borderRadius: '14px',
-          fontSize: '12px',
-          fontWeight: 500,
-          cursor: 'pointer',
-          background: isHovered
-            ? (isDark ? 'rgba(65, 118, 230, 0.22)' : 'rgba(65, 118, 230, 0.12)')
-            : (isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'),
-          color: isHovered
-            ? '#4176e6'
-            : (isDark ? '#e1e4ea' : '#333333'),
-          border: isHovered
-            ? '0.5px solid rgba(65, 118, 230, 0.5)'
-            : (isDark ? '0.5px solid rgba(255, 255, 255, 0.12)' : '0.5px solid rgba(0, 0, 0, 0.1)'),
-          transition: 'all 0.15s ease',
-          outline: 'none',
-          boxShadow: isHovered ? '0 0 10px rgba(65, 118, 230, 0.25)' : 'none',
-          userSelect: 'none',
-        },
+    'button',
+    {
+      type: 'button',
+      onClick: handleClick,
+      onMouseEnter: () => setIsHovered(true),
+      onMouseLeave: () => setIsHovered(false),
+      title: activeWorkspace
+        ? `生成/查看【${activeWorkspace}】代码图谱 (0 Token)`
+        : '生成当前工作区代码图谱 (0 Token)',
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        height: '28px',
+        padding: '0 11px',
+        marginLeft: '6px',
+        borderRadius: '14px',
+        fontSize: '12px',
+        fontWeight: 500,
+        cursor: 'pointer',
+        background: isHovered
+          ? (isDark ? 'rgba(65, 118, 230, 0.22)' : 'rgba(65, 118, 230, 0.12)')
+          : (isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'),
+        color: isHovered
+          ? '#4176e6'
+          : (isDark ? '#e1e4ea' : '#333333'),
+        border: isHovered
+          ? '0.5px solid rgba(65, 118, 230, 0.5)'
+          : (isDark ? '0.5px solid rgba(255, 255, 255, 0.12)' : '0.5px solid rgba(0, 0, 0, 0.1)'),
+        transition: 'all 0.15s ease',
+        outline: 'none',
+        boxShadow: isHovered ? '0 0 10px rgba(65, 118, 230, 0.25)' : 'none',
+        userSelect: 'none',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
       },
-      h('span', { style: { fontSize: '13px', lineHeight: 1 } }, '🧭'),
-      h('span', null, '生成代码图谱')
-    ),
-    // 2. 沉浸式图谱视图浮层 (Portal 到主对话容器)
-    isOpen && typeof document !== 'undefined'
-      ? ReactDOM.createPortal(
-          h(CodeGraphViewPanel, {
-            ...props,
-            isOverlay: true,
-            onClose: () => setIsOpen(false),
-            activeWorkspace,
-          }),
-          document.querySelector('[data-conversation-content]') || document.body
-        )
-      : null
+    },
+    h('span', { style: { fontSize: '13px', lineHeight: 1 } }, '🧭'),
+    h('span', null, '生成代码图谱')
   );
 }
 
 /**
- * 注入输入框底栏工具栏的快捷按钮组件 (在发送按钮旁)
+ * 注入输入框底栏工具栏的快捷组件 (挂载在 conversation.input.right)
+ * 具备双重功能:
+ * 1. 在输入框右下角展示「🧭 图谱」快捷按钮 (全场景可用)
+ * 2. 如果检测到新对话 Hero 工作区行 (heroWorkspaceRow)，通过 Portal 无侵入插入「🧭 生成代码图谱」胶囊按钮
+ *    （绝对不注册 conversation.hero.agentPreset single slot，因此完全不会与 PTC / 极简模式产生冲突）
  */
-function InputCodeGraphButton(props: any) {
+function InputCodeGraphUnifiedSlot(props: any) {
   const [isHovered, setIsHovered] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
   const isDark = useHostTheme();
+  const heroRowEl = useHeroWorkspaceRow();
 
   const activeWorkspace = React.useMemo(() => {
     return resolveWorkspacePath(props);
   }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleInputBtnClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!activeWorkspace) {
@@ -718,11 +736,12 @@ function InputCodeGraphButton(props: any) {
   return h(
     React.Fragment,
     null,
+    // A. 输入框底栏快捷按钮 (位于发送按钮旁)
     h(
       'button',
       {
         type: 'button',
-        onClick: handleClick,
+        onClick: handleInputBtnClick,
         onMouseEnter: () => setIsHovered(true),
         onMouseLeave: () => setIsHovered(false),
         title: '代码图谱 (0 Token 直接查看/生成)',
@@ -750,6 +769,20 @@ function InputCodeGraphButton(props: any) {
       h('span', { style: { fontSize: '12px', lineHeight: 1 } }, '🧭'),
       h('span', null, '图谱')
     ),
+
+    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅注入 heroWorkspaceRow，排在模式选择右侧)
+    heroRowEl
+      ? ReactDOM.createPortal(
+          h(HeroCapsuleButton, {
+            activeWorkspace,
+            isDark,
+            onOpen: () => setIsOpen(true),
+          }),
+          heroRowEl
+        )
+      : null,
+
+    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
     isOpen && typeof document !== 'undefined'
       ? ReactDOM.createPortal(
           h(CodeGraphViewPanel, {
@@ -765,7 +798,7 @@ function InputCodeGraphButton(props: any) {
 }
 
 /**
- * DSH 插件注册入口
+ * DSH 插件注册入口: 仅使用 list 类型安全插槽，坚决不触碰 single 独占插槽
  */
 export function apply(ctx: any): void {
   if (ctx.slots && typeof ctx.slots.inject === 'function') {
@@ -782,17 +815,8 @@ export function apply(ctx: any): void {
       )
     );
 
-    // 2. 注入新会话 (Hero) 界面工作区操作行: 在 WorkspaceChip 右侧呈现「🧭 生成代码图谱」胶囊按钮
-    ctx.slots.inject('conversation.hero.agentPreset', () =>
-      ctx.slots.register(
-        {
-          name: 'conversation.hero.agentPreset',
-        },
-        HeroCodeGraphButton
-      )
-    );
-
-    // 3. 注入输入框底栏工具栏: 呈现「🧭 图谱」快捷入口
+    // 2. 注入输入框底栏工具栏 (conversation.input.right 是 list 类型安全插槽，支持多插件并存)
+    //    该组件内部负责渲染底栏图标，并在 Hero 状态下通过 Portal 投射胶囊按钮到 heroWorkspaceRow
     ctx.slots.inject('conversation.input.right', () =>
       ctx.slots.register(
         {
@@ -800,7 +824,7 @@ export function apply(ctx: any): void {
           id: 'codegraph-input-action',
           order: 5,
         },
-        InputCodeGraphButton
+        InputCodeGraphUnifiedSlot
       )
     );
   }

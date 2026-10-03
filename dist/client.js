@@ -74,6 +74,28 @@ function useHostTheme() {
   }, []);
   return isDark;
 }
+function useHeroWorkspaceRow() {
+  const [rowEl, setRowEl] = import_react.default.useState(() => {
+    if (typeof document !== "undefined") {
+      return document.querySelector('[class*="heroWorkspaceRow"]');
+    }
+    return null;
+  });
+  import_react.default.useEffect(() => {
+    if (typeof document === "undefined") return;
+    const update = () => {
+      const el = document.querySelector('[class*="heroWorkspaceRow"]');
+      setRowEl((prev) => prev !== el ? el : prev);
+    };
+    update();
+    const observer = new MutationObserver(() => {
+      update();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+  return rowEl;
+}
 function resolveWorkspacePath(props) {
   if (props?.activeWorkspace) return props.activeWorkspace;
   if (typeof props?.useSessions === "function" && props?.sessionId) {
@@ -560,21 +582,16 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
     })
   );
 }
-function HeroCodeGraphButton(props) {
-  const [isOpen, setIsOpen] = import_react.default.useState(false);
+function HeroCapsuleButton({
+  activeWorkspace,
+  isDark,
+  onOpen
+}) {
   const [isHovered, setIsHovered] = import_react.default.useState(false);
-  const isDark = useHostTheme();
-  const activeWorkspace = import_react.default.useMemo(() => {
-    return resolveWorkspacePath(props);
-  }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
-  const handleOpenGraph = async (e) => {
+  const handleClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    let target = activeWorkspace;
-    if (!target) {
-      target = resolveWorkspacePath(props);
-    }
-    if (!target) {
+    if (!activeWorkspace) {
       alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u5728\u5DE6\u4FA7\u9009\u62E9\u6216\u5173\u8054\u4E00\u4E2A\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939\uFF0C\u518D\u751F\u6210\u4EE3\u7801\u56FE\u8C31\u3002");
       return;
     }
@@ -582,68 +599,56 @@ function HeroCodeGraphButton(props) {
       await fetch("http://127.0.0.1:3333/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceRoot: target })
+        body: JSON.stringify({ workspaceRoot: activeWorkspace })
       });
     } catch (err) {
       console.warn("[dsh-codegraph] \u540E\u53F0\u670D\u52A1\u8FDE\u63A5\u5F02\u5E38:", err);
     }
-    setIsOpen(true);
+    onOpen();
   };
   return h(
-    import_react.default.Fragment,
-    null,
-    // 1. 新会话界面的胶囊按钮 (与 WorkspaceChip 紧密并列)
-    h(
-      "button",
-      {
-        type: "button",
-        onClick: handleOpenGraph,
-        onMouseEnter: () => setIsHovered(true),
-        onMouseLeave: () => setIsHovered(false),
-        title: activeWorkspace ? `\u751F\u6210/\u67E5\u770B\u3010${activeWorkspace}\u3011\u4EE3\u7801\u56FE\u8C31 (0 Token)` : "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token)",
-        style: {
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "5px",
-          height: "28px",
-          padding: "0 11px",
-          marginLeft: "6px",
-          borderRadius: "14px",
-          fontSize: "12px",
-          fontWeight: 500,
-          cursor: "pointer",
-          background: isHovered ? isDark ? "rgba(65, 118, 230, 0.22)" : "rgba(65, 118, 230, 0.12)" : isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)",
-          color: isHovered ? "#4176e6" : isDark ? "#e1e4ea" : "#333333",
-          border: isHovered ? "0.5px solid rgba(65, 118, 230, 0.5)" : isDark ? "0.5px solid rgba(255, 255, 255, 0.12)" : "0.5px solid rgba(0, 0, 0, 0.1)",
-          transition: "all 0.15s ease",
-          outline: "none",
-          boxShadow: isHovered ? "0 0 10px rgba(65, 118, 230, 0.25)" : "none",
-          userSelect: "none"
-        }
-      },
-      h("span", { style: { fontSize: "13px", lineHeight: 1 } }, "\u{1F9ED}"),
-      h("span", null, "\u751F\u6210\u4EE3\u7801\u56FE\u8C31")
-    ),
-    // 2. 沉浸式图谱视图浮层 (Portal 到主对话容器)
-    isOpen && typeof document !== "undefined" ? import_react_dom.default.createPortal(
-      h(CodeGraphViewPanel, {
-        ...props,
-        isOverlay: true,
-        onClose: () => setIsOpen(false),
-        activeWorkspace
-      }),
-      document.querySelector("[data-conversation-content]") || document.body
-    ) : null
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      onMouseEnter: () => setIsHovered(true),
+      onMouseLeave: () => setIsHovered(false),
+      title: activeWorkspace ? `\u751F\u6210/\u67E5\u770B\u3010${activeWorkspace}\u3011\u4EE3\u7801\u56FE\u8C31 (0 Token)` : "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token)",
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        height: "28px",
+        padding: "0 11px",
+        marginLeft: "6px",
+        borderRadius: "14px",
+        fontSize: "12px",
+        fontWeight: 500,
+        cursor: "pointer",
+        background: isHovered ? isDark ? "rgba(65, 118, 230, 0.22)" : "rgba(65, 118, 230, 0.12)" : isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)",
+        color: isHovered ? "#4176e6" : isDark ? "#e1e4ea" : "#333333",
+        border: isHovered ? "0.5px solid rgba(65, 118, 230, 0.5)" : isDark ? "0.5px solid rgba(255, 255, 255, 0.12)" : "0.5px solid rgba(0, 0, 0, 0.1)",
+        transition: "all 0.15s ease",
+        outline: "none",
+        boxShadow: isHovered ? "0 0 10px rgba(65, 118, 230, 0.25)" : "none",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      }
+    },
+    h("span", { style: { fontSize: "13px", lineHeight: 1 } }, "\u{1F9ED}"),
+    h("span", null, "\u751F\u6210\u4EE3\u7801\u56FE\u8C31")
   );
 }
-function InputCodeGraphButton(props) {
+function InputCodeGraphUnifiedSlot(props) {
   const [isHovered, setIsHovered] = import_react.default.useState(false);
   const [isOpen, setIsOpen] = import_react.default.useState(false);
   const isDark = useHostTheme();
+  const heroRowEl = useHeroWorkspaceRow();
   const activeWorkspace = import_react.default.useMemo(() => {
     return resolveWorkspacePath(props);
   }, [props?.sessionId, props?.useSessions, props?.useWorkspaces]);
-  const handleClick = (e) => {
+  const handleInputBtnClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!activeWorkspace) {
@@ -655,11 +660,12 @@ function InputCodeGraphButton(props) {
   return h(
     import_react.default.Fragment,
     null,
+    // A. 输入框底栏快捷按钮 (位于发送按钮旁)
     h(
       "button",
       {
         type: "button",
-        onClick: handleClick,
+        onClick: handleInputBtnClick,
         onMouseEnter: () => setIsHovered(true),
         onMouseLeave: () => setIsHovered(false),
         title: "\u4EE3\u7801\u56FE\u8C31 (0 Token \u76F4\u63A5\u67E5\u770B/\u751F\u6210)",
@@ -683,6 +689,16 @@ function InputCodeGraphButton(props) {
       h("span", { style: { fontSize: "12px", lineHeight: 1 } }, "\u{1F9ED}"),
       h("span", null, "\u56FE\u8C31")
     ),
+    // B. 新会话 Hero 界面胶囊按钮 (通过 Portal 优雅注入 heroWorkspaceRow，排在模式选择右侧)
+    heroRowEl ? import_react_dom.default.createPortal(
+      h(HeroCapsuleButton, {
+        activeWorkspace,
+        isDark,
+        onOpen: () => setIsOpen(true)
+      }),
+      heroRowEl
+    ) : null,
+    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
     isOpen && typeof document !== "undefined" ? import_react_dom.default.createPortal(
       h(CodeGraphViewPanel, {
         ...props,
@@ -709,15 +725,6 @@ function apply(ctx) {
       )
     );
     ctx.slots.inject(
-      "conversation.hero.agentPreset",
-      () => ctx.slots.register(
-        {
-          name: "conversation.hero.agentPreset"
-        },
-        HeroCodeGraphButton
-      )
-    );
-    ctx.slots.inject(
       "conversation.input.right",
       () => ctx.slots.register(
         {
@@ -725,7 +732,7 @@ function apply(ctx) {
           id: "codegraph-input-action",
           order: 5
         },
-        InputCodeGraphButton
+        InputCodeGraphUnifiedSlot
       )
     );
   }
