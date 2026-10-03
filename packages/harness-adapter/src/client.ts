@@ -833,147 +833,7 @@ function InputCodeGraphUnifiedSlot(props: any) {
 }
 
 /**
- * 注入 conversation.input.dock 作为 Hero 状态下的第二道常驻防线
- */
-function HeroInputDockCodeGraphButton(props: any) {
-  // 顶层合法调用 Hooks
-  const sessionCwd = typeof props?.useSessions === 'function' && props?.sessionId
-    ? props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd)
-    : undefined;
-
-  const workspaces = typeof props?.useWorkspaces === 'function'
-    ? props.useWorkspaces((s: any) => s?.items)
-    : undefined;
-
-  const isDark = useHostTheme();
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [isHovered, setIsHovered] = React.useState(false);
-
-  // 只在空白新会话 (Hero 模式) 下生效
-  const isHeroSession = props?.session?.blank === true || props?.session === void 0;
-
-  const activeWorkspace = React.useMemo(() => {
-    if (sessionCwd) return sessionCwd;
-    if (Array.isArray(workspaces) && workspaces.length > 0) {
-      if (props?.sessionId) {
-        const matched = workspaces.find((w: any) => w.sessionIds?.includes(props?.sessionId));
-        if (matched?.path) return matched.path;
-      }
-      if (workspaces[0]?.path) return workspaces[0].path;
-    }
-    return '';
-  }, [sessionCwd, workspaces, props?.sessionId]);
-
-  const [hasHeroRowBtn, setHasHeroRowBtn] = React.useState(false);
-  React.useEffect(() => {
-    const check = () => {
-      const exists = document.querySelector('[data-codegraph-hero-btn]');
-      setHasHeroRowBtn(!!exists);
-    };
-    check();
-    const timer = setInterval(check, 300);
-    return () => clearInterval(timer);
-  }, []);
-
-  if (!isHeroSession || hasHeroRowBtn) {
-    return null;
-  }
-
-  const handleClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!activeWorkspace) {
-      alert('💡 提示：请先选择项目工作区文件夹');
-      return;
-    }
-    try {
-      await fetch('http://127.0.0.1:3333/api/workspace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceRoot: activeWorkspace }),
-      });
-    } catch {}
-    setIsOpen(true);
-  };
-
-  return h(
-    React.Fragment,
-    null,
-    h(
-      'div',
-      {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '0 20px',
-          marginTop: '-2px',
-          marginBottom: '4px',
-        },
-      },
-      h(
-        'button',
-        {
-          type: 'button',
-          onClick: handleClick,
-          onMouseEnter: () => setIsHovered(true),
-          onMouseLeave: () => setIsHovered(false),
-          title: '生成当前工作区代码图谱 (0 Token)',
-          style: {
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '5px',
-            height: '28px',
-            padding: '0 12px',
-            borderRadius: '14px',
-            fontSize: '12px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            background: isHovered
-              ? (isDark ? 'rgba(65, 118, 230, 0.22)' : 'rgba(65, 118, 230, 0.12)')
-              : (isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'),
-            color: isHovered ? '#4176e6' : (isDark ? '#e1e4ea' : '#333333'),
-            border: isHovered
-              ? '0.5px solid rgba(65, 118, 230, 0.5)'
-              : (isDark ? '0.5px solid rgba(255, 255, 255, 0.12)' : '0.5px solid rgba(0, 0, 0, 0.1)'),
-            transition: 'all 0.15s ease',
-            outline: 'none',
-          },
-        },
-        h('span', { style: { fontSize: '13px' } }, '🧭'),
-        h('span', null, '生成代码图谱'),
-        h(
-          'span',
-          {
-            style: {
-              fontSize: '10px',
-              padding: '1px 5px',
-              borderRadius: '4px',
-              background: isDark ? 'rgba(65, 118, 230, 0.2)' : 'rgba(65, 118, 230, 0.1)',
-              color: '#4176e6',
-              marginLeft: '4px',
-            },
-          },
-          '0 Token'
-        )
-      )
-    ),
-    isOpen && typeof document !== 'undefined'
-      ? safeCreatePortal(
-          h(CodeGraphViewPanel, {
-            ...props,
-            isOverlay: true,
-            onClose: () => setIsOpen(false),
-            activeWorkspace,
-          }),
-          document.querySelector('[data-conversation-content]') || document.body
-        )
-      : null
-  );
-}
-
-/**
- * DSH 插件注册入口: 仅使用 list 类型安全插槽，坚决不触碰 single 独占插槽
+ * DSH 插件注册入口
  */
 export function apply(ctx: any): void {
   if (ctx.slots && typeof ctx.slots.inject === 'function') {
@@ -990,7 +850,8 @@ export function apply(ctx: any): void {
       )
     );
 
-    // 2. 注入输入框底栏工具栏 (conversation.input.right)
+    // 2. 注入输入框底栏工具栏 (conversation.input.right: list 类型安全插槽)
+    //    该组件内部负责渲染底栏「🧭 图谱」图标，并在新会话状态下常驻呈现工作区行右侧的「🧭 生成代码图谱」胶囊按钮
     ctx.slots.inject('conversation.input.right', () =>
       ctx.slots.register(
         {
@@ -1001,16 +862,6 @@ export function apply(ctx: any): void {
         InputCodeGraphUnifiedSlot
       )
     );
-
-    // 3. 注入输入区顶部停靠栏 (conversation.input.dock: list 类型官方槽位，作为 Hero 模式双保险)
-    ctx.slots.inject('conversation.input.dock', () =>
-      ctx.slots.register(
-        {
-          name: 'conversation.input.dock',
-          id: 'codegraph-hero-dock',
-        },
-        HeroInputDockCodeGraphButton
-      )
-    );
   }
 }
+
