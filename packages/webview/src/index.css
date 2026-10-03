@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* DeepSeek Harness (DSH) Design System Tokens */
+  --dsw-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --dsw-font-family-brand: "Montserrat", var(--dsw-font-family);
+
+  --dsw-radius-xs: 4px;
+  --dsw-radius-sm: 8px;
+  --dsw-radius-md: 12px;
+  --dsw-radius-lg: 16px;
+  --dsw-radius-xl: 20px;
+  --dsw-radius-panel: 28px;
+
+  /* 默认：DeepSeek Harness 浅色 / 白色主题 (Light Theme) */
+  --dsw-alias-bg-base: #f7f8fa;
+  --dsw-alias-bg-module-platform: #f0f2f5;
+  --dsw-alias-bg-layer-1: #ffffff;
+  --dsw-alias-bg-layer-2: #f2f4f7;
+  --dsw-alias-bg-layer-3: #e5e7eb;
+
+  --dsw-alias-border-l1: rgba(0, 0, 0, 0.05);
+  --dsw-alias-border-l2: rgba(0, 0, 0, 0.09);
+  --dsw-alias-border-l3: rgba(0, 0, 0, 0.14);
+  --dsw-alias-border-l4: rgba(0, 0, 0, 0.20);
+
+  --dsw-alias-label-primary: #111827;
+  --dsw-alias-label-secondary: #4b5563;
+  --dsw-alias-label-tertiary: #6b7280;
+  --dsw-alias-label-dimmed: #9ca3af;
+
+  --dsw-blue-tint: rgba(65, 118, 230, 0.08);
+  --dsw-blue-border: rgba(65, 118, 230, 0.24);
+  --dsw-green-tint: rgba(22, 163, 74, 0.08);
+  --dsw-green-border: rgba(22, 163, 74, 0.24);
+  --dsw-amber-tint: rgba(217, 119, 6, 0.08);
+  --dsw-amber-border: rgba(217, 119, 6, 0.24);
+
+  --dsw-rf-dot: rgba(0, 0, 0, 0.08);
+  --dsw-rf-edge: rgba(0, 0, 0, 0.24);
+  --dsw-minimap-mask: rgba(247, 248, 250, 0.85);
+  --dsw-scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --dsw-scrollbar-hover: rgba(0, 0, 0, 0.25);
+}
+
+/* DeepSeek Harness 深色主题 (Dark Theme) */
+[data-theme="dark"], body[data-ds-dark-theme], .dark {
+  --dsw-alias-bg-base: #151517;
+  --dsw-alias-bg-module-platform: #1b1b1c;
+  --dsw-alias-bg-layer-1: #232324;
+  --dsw-alias-bg-layer-2: #2c2c2e;
+  --dsw-alias-bg-layer-3: #353638;
+
+  --dsw-alias-border-l1: rgba(255, 255, 255, 0.06);
+  --dsw-alias-border-l2: rgba(255, 255, 255, 0.12);
+  --dsw-alias-border-l3: rgba(255, 255, 255, 0.16);
+  --dsw-alias-border-l4: rgba(255, 255, 255, 0.20);
+
+  --dsw-alias-label-primary: #f9fafb;
+  --dsw-alias-label-secondary: #cfd3d6;
+  --dsw-alias-label-tertiary: #979da6;
+  --dsw-alias-label-dimmed: #81858c;
+
+  --dsw-blue-tint: rgba(65, 118, 230, 0.12);
+  --dsw-blue-border: rgba(65, 118, 230, 0.30);
+  --dsw-green-tint: rgba(34, 197, 94, 0.12);
+  --dsw-green-border: rgba(34, 197, 94, 0.30);
+  --dsw-amber-tint: rgba(245, 158, 11, 0.12);
+  --dsw-amber-border: rgba(245, 158, 11, 0.30);
+
+  --dsw-rf-dot: rgba(255, 255, 255, 0.08);
+  --dsw-rf-edge: rgba(255, 255, 255, 0.22);
+  --dsw-minimap-mask: rgba(21, 21, 23, 0.85);
+  --dsw-scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --dsw-scrollbar-hover: rgba(255, 255, 255, 0.25);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* DeepSeek Desktop 精细滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--dsw-scrollbar-thumb);
+  border-radius: var(--dsw-radius-xs);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dsw-scrollbar-hover);
+}
+
+/* React Flow 全局自适应背景 */
+.react-flow__background {
+  background-color: var(--dsw-alias-bg-base) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--dsw-rf-edge) !important;
+  stroke-width: 1.5 !important;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #4176e6 !important;
+  stroke-width: 2.5 !important;
+}
+
+.react-flow__handle {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 3px !important;
+  background-color: #4176e6 !important;
+  border: 1.5px solid var(--dsw-alias-bg-base) !important;
+}
+
+/* DeepSeek Blue 流程流动动效 */
+@keyframes dshFlowDash {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.flow-running-edge .react-flow__edge-path {
+  stroke: #4176e6 !important;
+  stroke-dasharray: 4 4;
+  animation: dshFlowDash 1.2s linear infinite;
+}

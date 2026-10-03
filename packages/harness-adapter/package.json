@@ -1,0 +1,47 @@
+{
+  "name": "@codegraph/harness-adapter",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness thin integration adapter for CodeGraph Studio (AST topology, process flow, and AI agent tool)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "default": "./dist/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "dependencies": {
+    "@codegraph/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "cordis": ">=4.0.0-rc <5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "@types/react": "^18.3.18",
+    "esbuild": "^0.25.0",
+    "react": "^18.3.1",
+    "typescript": "^5.8.2"
+  }
+}

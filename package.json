@@ -1,0 +1,70 @@
+{
+  "name": "dsh-codegraph",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 代码架构图谱与业务时序流分析插件 (0-Token 本地静态解析 · 宏观架构 · 业务时序流 · 模块下钻)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "start-codegraph.bat",
+    "启动CodeGraph.bat",
+    "scripts/"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots"
+      ]
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "codegraph",
+    "code-graph",
+    "architecture-diagram",
+    "flowchart",
+    "ast",
+    "visualization"
+  ],
+  "author": "luoyunxiaotian",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luoyunxiaotian/dsh-codegraph.git"
+  },
+  "bugs": {
+    "url": "https://github.com/luoyunxiaotian/dsh-codegraph/issues"
+  },
+  "homepage": "https://github.com/luoyunxiaotian/dsh-codegraph#readme",
+  "scripts": {
+    "build": "pnpm -r run build && node scripts/bundle-plugin.mjs",
+    "bundle": "node scripts/bundle-plugin.mjs",
+    "test": "pnpm -r run test",
+    "clean": "pnpm -r run clean"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-client-ui-slots": "*",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,7 @@
+# DeepSeek Harness 代码图谱插件补丁层
+# 注册会话顶部「代码图谱」专属视窗，并托管 0-Token 本地静态分析引擎与 Agent 查询工具
+- insert:
+    - id: codegraph
+      name: dsh-codegraph
+      config:
+        port: 3333

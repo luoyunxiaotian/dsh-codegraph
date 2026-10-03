@@ -1,0 +1,6 @@
+# CodeGraph Studio adapter patch for DeepSeek Harness desktop profile
+- insert:
+    - id: codegraph-adapter
+      name: '@codegraph/harness-adapter'
+      config:
+        port: 3333

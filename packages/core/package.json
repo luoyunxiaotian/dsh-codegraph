@@ -1,0 +1,28 @@
+{
+  "name": "@codegraph/core",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Core engine for 0-Token code graph parsing, archetype detection, dual-model compilation, and incremental tracking",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "serve": "tsx src/cli.ts serve",
+    "test": "tsx test/run.ts"
+  },
+  "dependencies": {
+    "elkjs": "^0.9.3",
+    "fast-glob": "^3.3.3",
+    "graphology": "^0.25.4",
+    "graphology-communities-louvain": "^2.0.2",
+    "picomatch": "^4.0.2",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.24.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "@types/picomatch": "^3.0.2",
+    "typescript": "^5.8.2"
+  }
+}
