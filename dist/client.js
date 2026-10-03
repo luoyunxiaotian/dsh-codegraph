@@ -39,7 +39,7 @@ __export(client_exports, {
 });
 module.exports = __toCommonJS(client_exports);
 var import_react = __toESM(require("react"), 1);
-var inject = ["slots"];
+var inject = ["slots", "sessions", "workspaces", "uiWorkspace"];
 var h = import_react.default.createElement;
 function safeCreatePortal(children, container) {
   if (!container || typeof document === "undefined") return null;
@@ -586,18 +586,54 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
     })
   );
 }
-function HeroCapsuleButton({
-  activeWorkspace,
-  isDark,
-  onOpen
-}) {
-  const [isHovered, setIsHovered] = import_react.default.useState(false);
-  const handleClick = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!activeWorkspace) {
-      alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u5728\u5DE6\u4FA7\u9009\u62E9\u6216\u5173\u8054\u4E00\u4E2A\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939\uFF0C\u518D\u751F\u6210\u4EE3\u7801\u56FE\u8C31\u3002");
-      return;
+var globalClientCtx = null;
+async function createAndOpenCodeGraphSession(activeWorkspace) {
+  if (!activeWorkspace) return false;
+  try {
+    const ctx = globalClientCtx;
+    const workspacesService = ctx?.workspaces || ctx?.get?.("workspaces");
+    const sessionsService = ctx?.sessions || ctx?.get?.("sessions");
+    const uiWorkspaceService = ctx?.uiWorkspace || ctx?.get?.("uiWorkspace");
+    let targetWorkspaceId;
+    if (workspacesService?.list) {
+      try {
+        const items = workspacesService.list.getSnapshot()?.items || [];
+        const norm = (p) => p.replace(/[\\\/]+/g, "/").toLowerCase().trim();
+        const targetNorm = norm(activeWorkspace);
+        const matched = items.find((w) => {
+          if (!w?.path) return false;
+          const wNorm = norm(w.path);
+          return wNorm === targetNorm || wNorm.endsWith("/" + targetNorm) || targetNorm.endsWith("/" + wNorm);
+        });
+        if (matched?.workspaceId) {
+          targetWorkspaceId = matched.workspaceId;
+        } else if (typeof workspacesService.create === "function") {
+          const created = await workspacesService.create({ path: activeWorkspace });
+          targetWorkspaceId = created?.workspaceId;
+        }
+      } catch (e) {
+        console.warn("[dsh-codegraph] \u5339\u914D workspaceId \u8B66\u544A:", e);
+      }
+    }
+    let newSessionId;
+    if (sessionsService && typeof sessionsService.create === "function") {
+      newSessionId = await sessionsService.create({
+        workspaceId: targetWorkspaceId,
+        cwd: activeWorkspace
+      });
+    }
+    if (!newSessionId) {
+      console.warn("[dsh-codegraph] \u4F1A\u8BDD\u521B\u5EFA\u672A\u8FD4\u56DE sessionId");
+      return false;
+    }
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(
+          `dsh.conversation.${newSessionId}`,
+          JSON.stringify({ view: "codegraph", draft: "", viewRequest: null })
+        );
+      }
+    } catch {
     }
     try {
       await fetch("http://127.0.0.1:3333/api/workspace", {
@@ -608,6 +644,56 @@ function HeroCapsuleButton({
     } catch (err) {
       console.warn("[dsh-codegraph] \u540E\u53F0\u670D\u52A1\u8FDE\u63A5\u5F02\u5E38:", err);
     }
+    if (uiWorkspaceService && typeof uiWorkspaceService.openSession === "function") {
+      uiWorkspaceService.openSession(newSessionId);
+      return true;
+    }
+  } catch (err) {
+    console.error("[dsh-codegraph] \u521B\u5EFA\u4F1A\u8BDD\u7A97\u53E3\u5931\u8D25:", err);
+  }
+  return false;
+}
+function HeroCapsuleButton({
+  activeWorkspace,
+  isDark,
+  onOpen
+}) {
+  const [isHovered, setIsHovered] = import_react.default.useState(false);
+  const [isCreating, setIsCreating] = import_react.default.useState(false);
+  const handleClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeWorkspace) {
+      alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u5728\u5DE6\u4FA7\u9009\u62E9\u6216\u5173\u8054\u4E00\u4E2A\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939\uFF0C\u518D\u751F\u6210\u4EE3\u7801\u56FE\u8C31\u3002");
+      try {
+        const chipBtn = document.querySelector(
+          '[class*="heroWorkspaceRow"] button, button[class*="workspace"]'
+        );
+        if (chipBtn) chipBtn.click();
+      } catch {
+      }
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const success = await createAndOpenCodeGraphSession(activeWorkspace);
+      if (success) {
+        setIsCreating(false);
+        return;
+      }
+    } catch (err) {
+      console.warn("[dsh-codegraph] \u521B\u5EFA\u4F1A\u8BDD\u7A97\u53E3\u672A\u5B8C\u6210\uFF0C\u964D\u7EA7\u4E3A\u6D6E\u5C42\u6A21\u5F0F:", err);
+    }
+    try {
+      await fetch("http://127.0.0.1:3333/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace })
+      }).catch(() => {
+      });
+    } catch {
+    }
+    setIsCreating(false);
     onOpen();
   };
   return h(
@@ -618,7 +704,8 @@ function HeroCapsuleButton({
       onClick: handleClick,
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),
-      title: activeWorkspace ? `\u751F\u6210/\u67E5\u770B\u3010${activeWorkspace}\u3011\u4EE3\u7801\u56FE\u8C31 (0 Token)` : "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token)",
+      disabled: isCreating,
+      title: activeWorkspace ? `\u4E3A\u3010${activeWorkspace}\u3011\u521B\u5EFA\u4F1A\u8BDD\u5E76\u5236\u4F5C\u4EE3\u7801\u56FE\u8C31 (0 Token)` : "\u751F\u6210\u5F53\u524D\u5DE5\u4F5C\u533A\u4EE3\u7801\u56FE\u8C31 (0 Token)",
       style: {
         display: "inline-flex",
         alignItems: "center",
@@ -629,7 +716,8 @@ function HeroCapsuleButton({
         borderRadius: "14px",
         fontSize: "12px",
         fontWeight: 500,
-        cursor: "pointer",
+        cursor: isCreating ? "wait" : "pointer",
+        opacity: isCreating ? 0.8 : 1,
         background: isHovered ? isDark ? "rgba(65, 118, 230, 0.22)" : "rgba(65, 118, 230, 0.12)" : isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)",
         color: isHovered ? "#4176e6" : isDark ? "#e1e4ea" : "#333333",
         border: isHovered ? "0.5px solid rgba(65, 118, 230, 0.5)" : isDark ? "0.5px solid rgba(255, 255, 255, 0.12)" : "0.5px solid rgba(0, 0, 0, 0.1)",
@@ -641,8 +729,8 @@ function HeroCapsuleButton({
         flexShrink: 0
       }
     },
-    h("span", { style: { fontSize: "13px", lineHeight: 1 } }, "\u{1F9ED}"),
-    h("span", null, "\u751F\u6210\u4EE3\u7801\u56FE\u8C31")
+    h("span", { style: { fontSize: "13px", lineHeight: 1 } }, isCreating ? "\u23F3" : "\u{1F9ED}"),
+    h("span", null, isCreating ? "\u6B63\u5728\u521B\u5EFA\u4F1A\u8BDD..." : "\u751F\u6210\u4EE3\u7801\u56FE\u8C31")
   );
 }
 function InputCodeGraphUnifiedSlot(props) {
@@ -677,12 +765,26 @@ function InputCodeGraphUnifiedSlot(props) {
     }
     return "";
   }, [sessionCwd, workspaces, props?.sessionId]);
-  const handleInputBtnClick = (e) => {
+  const handleInputBtnClick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!activeWorkspace) {
       alert("\u{1F4A1} \u63D0\u793A\uFF1A\u8BF7\u5148\u9009\u62E9\u9879\u76EE\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939");
       return;
+    }
+    if (typeof document !== "undefined") {
+      const tabBtns = Array.from(document.querySelectorAll('button[role="tab"]'));
+      const graphTab = tabBtns.find(
+        (b) => b.textContent?.includes("\u4EE3\u7801\u56FE\u8C31") || b.textContent?.includes("\u56FE\u8C31")
+      );
+      if (graphTab) {
+        graphTab.click();
+        return;
+      }
+    }
+    if (!props?.sessionId || props?.session?.blank) {
+      const ok = await createAndOpenCodeGraphSession(activeWorkspace);
+      if (ok) return;
     }
     setIsOpen(true);
   };
@@ -728,7 +830,7 @@ function InputCodeGraphUnifiedSlot(props) {
       }),
       portalTarget.container
     ) : null,
-    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
+    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token 降级保障)
     isOpen && typeof document !== "undefined" ? safeCreatePortal(
       h(CodeGraphViewPanel, {
         ...props,
@@ -741,6 +843,7 @@ function InputCodeGraphUnifiedSlot(props) {
   );
 }
 function apply(ctx) {
+  globalClientCtx = ctx;
   if (ctx.slots && typeof ctx.slots.inject === "function") {
     ctx.slots.inject(
       "conversation.view",

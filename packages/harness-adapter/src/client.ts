@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const inject = ['slots'];
+export const inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace'];
 
 const h = React.createElement;
 
@@ -631,6 +631,92 @@ function CodeGraphViewPanel(props: any) {
   );
 }
 
+let globalClientCtx: any = null;
+
+/**
+ * 为指定工作区在 DSH 中直接创建会话并导航进入代码图谱视图 (0 Token)
+ */
+async function createAndOpenCodeGraphSession(activeWorkspace: string): Promise<boolean> {
+  if (!activeWorkspace) return false;
+
+  try {
+    const ctx = globalClientCtx;
+    const workspacesService = ctx?.workspaces || ctx?.get?.('workspaces');
+    const sessionsService = ctx?.sessions || ctx?.get?.('sessions');
+    const uiWorkspaceService = ctx?.uiWorkspace || ctx?.get?.('uiWorkspace');
+
+    let targetWorkspaceId: string | undefined;
+
+    // 1. 查找或创建对应的工作区 ID
+    if (workspacesService?.list) {
+      try {
+        const items = workspacesService.list.getSnapshot()?.items || [];
+        const norm = (p: string) => p.replace(/[\\\/]+/g, '/').toLowerCase().trim();
+        const targetNorm = norm(activeWorkspace);
+
+        const matched = items.find((w: any) => {
+          if (!w?.path) return false;
+          const wNorm = norm(w.path);
+          return wNorm === targetNorm || wNorm.endsWith('/' + targetNorm) || targetNorm.endsWith('/' + wNorm);
+        });
+
+        if (matched?.workspaceId) {
+          targetWorkspaceId = matched.workspaceId;
+        } else if (typeof workspacesService.create === 'function') {
+          const created = await workspacesService.create({ path: activeWorkspace });
+          targetWorkspaceId = created?.workspaceId;
+        }
+      } catch (e) {
+        console.warn('[dsh-codegraph] 匹配 workspaceId 警告:', e);
+      }
+    }
+
+    // 2. 调用 DSH 会话服务创建全新会话 (0 Token)
+    let newSessionId: string | undefined;
+    if (sessionsService && typeof sessionsService.create === 'function') {
+      newSessionId = await sessionsService.create({
+        workspaceId: targetWorkspaceId,
+        cwd: activeWorkspace,
+      });
+    }
+
+    if (!newSessionId) {
+      console.warn('[dsh-codegraph] 会话创建未返回 sessionId');
+      return false;
+    }
+
+    // 3. 预先设置该会话的首选视图为 'codegraph' (代码图谱)
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(
+          `dsh.conversation.${newSessionId}`,
+          JSON.stringify({ view: 'codegraph', draft: '', viewRequest: null })
+        );
+      }
+    } catch {}
+
+    // 4. 同步通知 CodeGraph 后台服务装配该工作区
+    try {
+      await fetch('http://127.0.0.1:3333/api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace }),
+      });
+    } catch (err) {
+      console.warn('[dsh-codegraph] 后台服务连接异常:', err);
+    }
+
+    // 5. 导航切换进入该新会话窗口
+    if (uiWorkspaceService && typeof uiWorkspaceService.openSession === 'function') {
+      uiWorkspaceService.openSession(newSessionId);
+      return true;
+    }
+  } catch (err) {
+    console.error('[dsh-codegraph] 创建会话窗口失败:', err);
+  }
+  return false;
+}
+
 /**
  * 新对话 Hero 工作区行旁边的胶囊按钮组件
  */
@@ -644,6 +730,7 @@ function HeroCapsuleButton({
   onOpen: () => void;
 }) {
   const [isHovered, setIsHovered] = React.useState(false);
+  const [isCreating, setIsCreating] = React.useState(false);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -651,19 +738,37 @@ function HeroCapsuleButton({
 
     if (!activeWorkspace) {
       alert('💡 提示：请先在左侧选择或关联一个项目工作区文件夹，再生成代码图谱。');
+      try {
+        const chipBtn = document.querySelector(
+          '[class*="heroWorkspaceRow"] button, button[class*="workspace"]'
+        ) as HTMLButtonElement;
+        if (chipBtn) chipBtn.click();
+      } catch {}
       return;
     }
 
+    setIsCreating(true);
+    try {
+      // 优先走创建会话窗口并直达图谱标签页的流程 (0 Token)
+      const success = await createAndOpenCodeGraphSession(activeWorkspace);
+      if (success) {
+        setIsCreating(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('[dsh-codegraph] 创建会话窗口未完成，降级为浮层模式:', err);
+    }
+
+    // 降级模式：打开浮层
     try {
       await fetch('http://127.0.0.1:3333/api/workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceRoot: activeWorkspace }),
-      });
-    } catch (err) {
-      console.warn('[dsh-codegraph] 后台服务连接异常:', err);
-    }
+      }).catch(() => {});
+    } catch {}
 
+    setIsCreating(false);
     onOpen();
   };
 
@@ -675,8 +780,9 @@ function HeroCapsuleButton({
       onClick: handleClick,
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),
+      disabled: isCreating,
       title: activeWorkspace
-        ? `生成/查看【${activeWorkspace}】代码图谱 (0 Token)`
+        ? `为【${activeWorkspace}】创建会话并制作代码图谱 (0 Token)`
         : '生成当前工作区代码图谱 (0 Token)',
       style: {
         display: 'inline-flex',
@@ -688,13 +794,12 @@ function HeroCapsuleButton({
         borderRadius: '14px',
         fontSize: '12px',
         fontWeight: 500,
-        cursor: 'pointer',
+        cursor: isCreating ? 'wait' : 'pointer',
+        opacity: isCreating ? 0.8 : 1,
         background: isHovered
           ? (isDark ? 'rgba(65, 118, 230, 0.22)' : 'rgba(65, 118, 230, 0.12)')
           : (isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)'),
-        color: isHovered
-          ? '#4176e6'
-          : (isDark ? '#e1e4ea' : '#333333'),
+        color: isHovered ? '#4176e6' : (isDark ? '#e1e4ea' : '#333333'),
         border: isHovered
           ? '0.5px solid rgba(65, 118, 230, 0.5)'
           : (isDark ? '0.5px solid rgba(255, 255, 255, 0.12)' : '0.5px solid rgba(0, 0, 0, 0.1)'),
@@ -706,8 +811,8 @@ function HeroCapsuleButton({
         flexShrink: 0,
       },
     },
-    h('span', { style: { fontSize: '13px', lineHeight: 1 } }, '🧭'),
-    h('span', null, '生成代码图谱')
+    h('span', { style: { fontSize: '13px', lineHeight: 1 } }, isCreating ? '⏳' : '🧭'),
+    h('span', null, isCreating ? '正在创建会话...' : '生成代码图谱')
   );
 }
 
@@ -757,13 +862,34 @@ function InputCodeGraphUnifiedSlot(props: any) {
     return '';
   }, [sessionCwd, workspaces, props?.sessionId]);
 
-  const handleInputBtnClick = (e: React.MouseEvent) => {
+  const handleInputBtnClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
     if (!activeWorkspace) {
       alert('💡 提示：请先选择项目工作区文件夹');
       return;
     }
+
+    // 1. 如果当前处在已激活的会话中，尝试直接点击切换至「代码图谱」Tab
+    if (typeof document !== 'undefined') {
+      const tabBtns = Array.from(document.querySelectorAll('button[role="tab"]'));
+      const graphTab = tabBtns.find(
+        (b) => b.textContent?.includes('代码图谱') || b.textContent?.includes('图谱')
+      ) as HTMLButtonElement;
+      if (graphTab) {
+        graphTab.click();
+        return;
+      }
+    }
+
+    // 2. 如果处在空白新会话状态 (无 sessionId 或空白会话)，点击底栏图谱按钮同样直接创建并切入会话
+    if (!props?.sessionId || props?.session?.blank) {
+      const ok = await createAndOpenCodeGraphSession(activeWorkspace);
+      if (ok) return;
+    }
+
+    // 3. 降级：展开图谱全屏浮层
     setIsOpen(true);
   };
 
@@ -817,7 +943,7 @@ function InputCodeGraphUnifiedSlot(props: any) {
         )
       : null,
 
-    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token)
+    // C. 沉浸式图谱工作台浮层 (全屏 Overlay 展开，0 Token 降级保障)
     isOpen && typeof document !== 'undefined'
       ? safeCreatePortal(
           h(CodeGraphViewPanel, {
@@ -836,6 +962,8 @@ function InputCodeGraphUnifiedSlot(props: any) {
  * DSH 插件注册入口
  */
 export function apply(ctx: any): void {
+  globalClientCtx = ctx;
+
   if (ctx.slots && typeof ctx.slots.inject === 'function') {
     // 1. 注入会话顶部视图列表: 注册「代码图谱」标签页 (有会话历史时与「对话」、「轨迹」并列)
     ctx.slots.inject('conversation.view', () =>
@@ -864,4 +992,5 @@ export function apply(ctx: any): void {
     );
   }
 }
+
 
