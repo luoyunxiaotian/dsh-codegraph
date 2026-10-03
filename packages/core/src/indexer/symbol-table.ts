@@ -1,12 +1,17 @@
 import path from 'path';
-import { CodeNode, CodeEdge } from '../types/index.js';
-import { ExtractedFileResult, formatNodeId } from '../parser/python-extractor.js';
+import { CodeNode, CodeEdge, ExtractedFileResult } from '../types/index.js';
+import { formatNodeId } from '../parser/scip-utils.js';
+import { ContractLinker } from '../graph/contract-linker.js';
 
 export class SymbolTable {
   // 所有节点字典: nodeId -> CodeNode
   private nodes: Map<string, CodeNode> = new Map();
   // 所有确定关系边字典: edgeId -> CodeEdge
   private edges: Map<string, CodeEdge> = new Map();
+
+  // 契约节点与边追踪集合 (用于幂等刷新)
+  private contractNodeIds: Set<string> = new Set();
+  private contractEdgeIds: Set<string> = new Set();
 
   // 按文件分组的节点索引: filePath -> Set<nodeId>
   private fileNodeIndex: Map<string, Set<string>> = new Map();
@@ -83,6 +88,17 @@ export class SymbolTable {
    * 全局跨文件调用与依赖关系解析 (Symbol Linking & Architecture Dependency)
    */
   public resolveCrossFileReferences(): void {
+    // 0. 清除旧契约节点与边 (保障幂等更新)
+    for (const cid of this.contractNodeIds) {
+      this.nodes.delete(cid);
+    }
+    this.contractNodeIds.clear();
+
+    for (const eid of this.contractEdgeIds) {
+      this.edges.delete(eid);
+    }
+    this.contractEdgeIds.clear();
+
     // 1. 建立跨文件导入依赖边 (IMPORTS)
     for (const [filePath, extracted] of this.fileExtractionCache.entries()) {
       const fileNodeId = formatNodeId(filePath, 'file');
@@ -349,10 +365,21 @@ export class SymbolTable {
         }
       }
     }
+
+    // 4. 执行跨语言契约中枢链接 (Polyglot Contract Hub Linker)
+    const contractResult = ContractLinker.linkContracts(this.nodes, this.fileExtractionCache.values());
+    for (const cNode of contractResult.contractNodes) {
+      this.nodes.set(cNode.id, cNode);
+      this.contractNodeIds.add(cNode.id);
+    }
+    for (const cEdge of contractResult.contractEdges) {
+      this.edges.set(cEdge.id, cEdge);
+      this.contractEdgeIds.add(cEdge.id);
+    }
   }
 
   /**
-   * 辅助方法：将 Python 导入模块路径 (如 .service, ..utils, src.services.user) 解析为工作区实际文件相对路径
+   * 辅助方法：将多语言导入模块路径解析为工作区实际文件相对路径
    */
   public resolveModuleToFilePath(
     sourceFilePath: string,
@@ -361,6 +388,11 @@ export class SymbolTable {
   ): string | undefined {
     const normSource = sourceFilePath.replace(/\\/g, '/');
     const sourceDir = path.posix.dirname(normSource);
+    const sourceExt = path.posix.extname(normSource).toLowerCase();
+
+    const exts = sourceExt === '.py'
+      ? ['.py']
+      : ['.ts', '.tsx', '.js', '.jsx', '.go', '.java', '.rs', '.cpp', '.c', '.h', '.hpp', '.cs', '.py'];
 
     // 1. 处理相对导入 (以 . 开头)
     if (modulePath.startsWith('.')) {
@@ -376,19 +408,25 @@ export class SymbolTable {
 
         const candidates: string[] = [];
         if (subPath) {
-          const rel = subPath.replace(/\./g, '/');
-          candidates.push(path.posix.join(targetDir, `${rel}.py`));
-          candidates.push(path.posix.join(targetDir, rel, '__init__.py'));
+          const rel = subPath.replace(/\./g, '/').replace(/^\//, '');
+          for (const ext of exts) {
+            candidates.push(path.posix.join(targetDir, `${rel}${ext}`));
+            candidates.push(path.posix.join(targetDir, rel, `index${ext}`));
+            candidates.push(path.posix.join(targetDir, rel, `__init__${ext}`));
+            candidates.push(path.posix.join(targetDir, rel, `mod${ext}`));
+          }
         }
         if (importedName && importedName !== '*') {
           const nameRel = importedName.replace(/\./g, '/');
           if (subPath) {
-            const rel = subPath.replace(/\./g, '/');
-            candidates.push(path.posix.join(targetDir, rel, `${nameRel}.py`));
-            candidates.push(path.posix.join(targetDir, rel, nameRel, '__init__.py'));
+            const rel = subPath.replace(/\./g, '/').replace(/^\//, '');
+            for (const ext of exts) {
+              candidates.push(path.posix.join(targetDir, rel, `${nameRel}${ext}`));
+            }
           } else {
-            candidates.push(path.posix.join(targetDir, `${nameRel}.py`));
-            candidates.push(path.posix.join(targetDir, nameRel, '__init__.py'));
+            for (const ext of exts) {
+              candidates.push(path.posix.join(targetDir, `${nameRel}${ext}`));
+            }
           }
         }
 
@@ -399,16 +437,24 @@ export class SymbolTable {
       }
     }
 
-    // 2. 处理绝对或顶层包导入 (如 app.models 或 src.services.user)
+    // 2. 处理绝对或顶层别名导入 (如 @/components, src.services.user, app.models)
     if (modulePath) {
-      const relPath = modulePath.replace(/\./g, '/');
-      const candidates: string[] = [
-        `${relPath}.py`,
-        `${relPath}/__init__.py`,
-      ];
+      let cleanMod = modulePath;
+      if (cleanMod.startsWith('@/') || cleanMod.startsWith('~/')) {
+        cleanMod = cleanMod.slice(2);
+      }
+      const relPath = cleanMod.replace(/\./g, '/');
+      const candidates: string[] = [];
+      for (const ext of exts) {
+        candidates.push(`${relPath}${ext}`);
+        candidates.push(`${relPath}/index${ext}`);
+        candidates.push(`${relPath}/__init__${ext}`);
+        candidates.push(`${relPath}/mod${ext}`);
+      }
       if (importedName && importedName !== '*') {
-        candidates.push(`${relPath}/${importedName}.py`);
-        candidates.push(`${relPath}/${importedName}/__init__.py`);
+        for (const ext of exts) {
+          candidates.push(`${relPath}/${importedName}${ext}`);
+        }
       }
 
       for (const cand of candidates) {

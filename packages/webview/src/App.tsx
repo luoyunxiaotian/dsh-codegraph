@@ -201,6 +201,7 @@ export const App: React.FC = () => {
         isUpdating={isUpdating}
         selectedModuleName={selectedModule?.name}
         cacheTime={cacheTime}
+        languages={graphData.meta.languages}
       />
 
       {/* 主画布展示区 */}

@@ -11,11 +11,16 @@ const WASM_FILE_MAP: Record<string, string> = {
   python: 'tree-sitter-python.wasm',
   typescript: 'tree-sitter-typescript.wasm',
   javascript: 'tree-sitter-javascript.wasm',
+  tsx: 'tree-sitter-tsx.wasm',
   go: 'tree-sitter-go.wasm',
   java: 'tree-sitter-java.wasm',
+  rust: 'tree-sitter-rust.wasm',
+  rs: 'tree-sitter-rust.wasm',
   c: 'tree-sitter-c.wasm',
   cpp: 'tree-sitter-cpp.wasm',
   c_sharp: 'tree-sitter-c_sharp.wasm',
+  csharp: 'tree-sitter-c_sharp.wasm',
+  cs: 'tree-sitter-c_sharp.wasm',
 };
 
 let isInitialized = false;
@@ -28,8 +33,10 @@ function resolveWasmPath(filename: string): string {
   // 备选路径搜索列表
   const candidateDirs = [
     // 0. 打包分发目录 (插件自身内置 wasm)
+    path.resolve(process.cwd(), 'dist/wasm'),
     path.resolve(__dirname, 'wasm'),
     path.resolve(__dirname, '../wasm'),
+    path.resolve(__dirname, '../../dist/wasm'),
     // 1. 本地 node_modules
     path.resolve(process.cwd(), 'node_modules/tree-sitter-wasms/out'),
     path.resolve(process.cwd(), 'packages/core/node_modules/tree-sitter-wasms/out'),

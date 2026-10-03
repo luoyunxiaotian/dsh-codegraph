@@ -103,7 +103,7 @@ var require_path = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.convertPosixPathToPattern = exports2.convertWindowsPathToPattern = exports2.convertPathToPattern = exports2.escapePosixPath = exports2.escapeWindowsPath = exports2.escape = exports2.removeLeadingDotSegment = exports2.makeAbsolute = exports2.unixify = void 0;
     var os = __require("os");
-    var path9 = __require("path");
+    var path10 = __require("path");
     var IS_WINDOWS_PLATFORM = os.platform() === "win32";
     var LEADING_DOT_SEGMENT_CHARACTERS_COUNT = 2;
     var POSIX_UNESCAPED_GLOB_SYMBOLS_RE = /(\\?)([()*?[\]{|}]|^!|[!+@](?=\()|\\(?![!()*+?@[\]{|}]))/g;
@@ -115,7 +115,7 @@ var require_path = __commonJS({
     }
     exports2.unixify = unixify;
     function makeAbsolute(cwd, filepath) {
-      return path9.resolve(cwd, filepath);
+      return path10.resolve(cwd, filepath);
     }
     exports2.makeAbsolute = makeAbsolute;
     function removeLeadingDotSegment(entry) {
@@ -1412,7 +1412,7 @@ var require_braces = __commonJS({
 var require_constants2 = __commonJS({
   "node_modules/.pnpm/picomatch@2.3.2/node_modules/picomatch/lib/constants.js"(exports2, module2) {
     "use strict";
-    var path9 = __require("path");
+    var path10 = __require("path");
     var WIN_SLASH = "\\\\/";
     var WIN_NO_SLASH = `[^${WIN_SLASH}]`;
     var DEFAULT_MAX_EXTGLOB_RECURSION = 0;
@@ -1586,7 +1586,7 @@ var require_constants2 = __commonJS({
       /* | */
       CHAR_ZERO_WIDTH_NOBREAK_SPACE: 65279,
       /* \uFEFF */
-      SEP: path9.sep,
+      SEP: path10.sep,
       /**
        * Create EXTGLOB_CHARS
        */
@@ -1613,7 +1613,7 @@ var require_constants2 = __commonJS({
 var require_utils2 = __commonJS({
   "node_modules/.pnpm/picomatch@2.3.2/node_modules/picomatch/lib/utils.js"(exports2) {
     "use strict";
-    var path9 = __require("path");
+    var path10 = __require("path");
     var win32 = process.platform === "win32";
     var {
       REGEX_BACKSLASH,
@@ -1642,7 +1642,7 @@ var require_utils2 = __commonJS({
       if (options && typeof options.windows === "boolean") {
         return options.windows;
       }
-      return win32 === true || path9.sep === "\\";
+      return win32 === true || path10.sep === "\\";
     };
     exports2.escapeLast = (input, char, lastIdx) => {
       const idx = input.lastIndexOf(char, lastIdx);
@@ -3006,7 +3006,7 @@ var require_parse2 = __commonJS({
 var require_picomatch = __commonJS({
   "node_modules/.pnpm/picomatch@2.3.2/node_modules/picomatch/lib/picomatch.js"(exports2, module2) {
     "use strict";
-    var path9 = __require("path");
+    var path10 = __require("path");
     var scan = require_scan();
     var parse = require_parse2();
     var utils = require_utils2();
@@ -3091,7 +3091,7 @@ var require_picomatch = __commonJS({
     };
     picomatch.matchBase = (input, glob, options, posix = utils.isWindows(options)) => {
       const regex = glob instanceof RegExp ? glob : picomatch.makeRe(glob, options);
-      return regex.test(path9.basename(input));
+      return regex.test(path10.basename(input));
     };
     picomatch.isMatch = (str, patterns, options) => picomatch(patterns, options)(str);
     picomatch.parse = (pattern, options) => {
@@ -3318,7 +3318,7 @@ var require_pattern = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.isAbsolute = exports2.partitionAbsoluteAndRelative = exports2.removeDuplicateSlashes = exports2.matchAny = exports2.convertPatternsToRe = exports2.makeRe = exports2.getPatternParts = exports2.expandBraceExpansion = exports2.expandPatternsWithBraceExpansion = exports2.isAffectDepthOfReadingPattern = exports2.endsWithSlashGlobStar = exports2.hasGlobStar = exports2.getBaseDirectory = exports2.isPatternRelatedToParentDirectory = exports2.getPatternsOutsideCurrentDirectory = exports2.getPatternsInsideCurrentDirectory = exports2.getPositivePatterns = exports2.getNegativePatterns = exports2.isPositivePattern = exports2.isNegativePattern = exports2.convertToNegativePattern = exports2.convertToPositivePattern = exports2.isDynamicPattern = exports2.isStaticPattern = void 0;
-    var path9 = __require("path");
+    var path10 = __require("path");
     var globParent = require_glob_parent();
     var micromatch = require_micromatch();
     var GLOBSTAR = "**";
@@ -3413,7 +3413,7 @@ var require_pattern = __commonJS({
     }
     exports2.endsWithSlashGlobStar = endsWithSlashGlobStar;
     function isAffectDepthOfReadingPattern(pattern) {
-      const basename = path9.basename(pattern);
+      const basename = path10.basename(pattern);
       return endsWithSlashGlobStar(pattern) || isStaticPattern(basename);
     }
     exports2.isAffectDepthOfReadingPattern = isAffectDepthOfReadingPattern;
@@ -3471,7 +3471,7 @@ var require_pattern = __commonJS({
     }
     exports2.partitionAbsoluteAndRelative = partitionAbsoluteAndRelative;
     function isAbsolute(pattern) {
-      return path9.isAbsolute(pattern);
+      return path10.isAbsolute(pattern);
     }
     exports2.isAbsolute = isAbsolute;
   }
@@ -3648,8 +3648,8 @@ var require_utils3 = __commonJS({
     exports2.errno = errno;
     var fs9 = require_fs();
     exports2.fs = fs9;
-    var path9 = require_path();
-    exports2.path = path9;
+    var path10 = require_path();
+    exports2.path = path10;
     var pattern = require_pattern();
     exports2.pattern = pattern;
     var stream = require_stream();
@@ -3761,8 +3761,8 @@ var require_async = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.read = void 0;
-    function read(path9, settings, callback) {
-      settings.fs.lstat(path9, (lstatError, lstat) => {
+    function read(path10, settings, callback) {
+      settings.fs.lstat(path10, (lstatError, lstat) => {
         if (lstatError !== null) {
           callFailureCallback(callback, lstatError);
           return;
@@ -3771,7 +3771,7 @@ var require_async = __commonJS({
           callSuccessCallback(callback, lstat);
           return;
         }
-        settings.fs.stat(path9, (statError, stat) => {
+        settings.fs.stat(path10, (statError, stat) => {
           if (statError !== null) {
             if (settings.throwErrorOnBrokenSymbolicLink) {
               callFailureCallback(callback, statError);
@@ -3803,13 +3803,13 @@ var require_sync = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.read = void 0;
-    function read(path9, settings) {
-      const lstat = settings.fs.lstatSync(path9);
+    function read(path10, settings) {
+      const lstat = settings.fs.lstatSync(path10);
       if (!lstat.isSymbolicLink() || !settings.followSymbolicLink) {
         return lstat;
       }
       try {
-        const stat = settings.fs.statSync(path9);
+        const stat = settings.fs.statSync(path10);
         if (settings.markSymbolicLink) {
           stat.isSymbolicLink = () => true;
         }
@@ -3880,17 +3880,17 @@ var require_out = __commonJS({
     var sync = require_sync();
     var settings_1 = require_settings();
     exports2.Settings = settings_1.default;
-    function stat(path9, optionsOrSettingsOrCallback, callback) {
+    function stat(path10, optionsOrSettingsOrCallback, callback) {
       if (typeof optionsOrSettingsOrCallback === "function") {
-        async.read(path9, getSettings(), optionsOrSettingsOrCallback);
+        async.read(path10, getSettings(), optionsOrSettingsOrCallback);
         return;
       }
-      async.read(path9, getSettings(optionsOrSettingsOrCallback), callback);
+      async.read(path10, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports2.stat = stat;
-    function statSync(path9, optionsOrSettings) {
+    function statSync(path10, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
-      return sync.read(path9, settings);
+      return sync.read(path10, settings);
     }
     exports2.statSync = statSync;
     function getSettings(settingsOrOptions = {}) {
@@ -4106,16 +4106,16 @@ var require_async2 = __commonJS({
           return;
         }
         const tasks = names.map((name3) => {
-          const path9 = common.joinPathSegments(directory, name3, settings.pathSegmentSeparator);
+          const path10 = common.joinPathSegments(directory, name3, settings.pathSegmentSeparator);
           return (done) => {
-            fsStat.stat(path9, settings.fsStatSettings, (error, stats) => {
+            fsStat.stat(path10, settings.fsStatSettings, (error, stats) => {
               if (error !== null) {
                 done(error);
                 return;
               }
               const entry = {
                 name: name3,
-                path: path9,
+                path: path10,
                 dirent: utils.fs.createDirentFromStats(name3, stats)
               };
               if (settings.stats) {
@@ -4233,7 +4233,7 @@ var require_settings2 = __commonJS({
   "node_modules/.pnpm/@nodelib+fs.scandir@2.1.5/node_modules/@nodelib/fs.scandir/out/settings.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path9 = __require("path");
+    var path10 = __require("path");
     var fsStat = require_out();
     var fs9 = require_fs4();
     var Settings = class {
@@ -4241,7 +4241,7 @@ var require_settings2 = __commonJS({
         this._options = _options;
         this.followSymbolicLinks = this._getValue(this._options.followSymbolicLinks, false);
         this.fs = fs9.createFileSystemAdapter(this._options.fs);
-        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path9.sep);
+        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path10.sep);
         this.stats = this._getValue(this._options.stats, false);
         this.throwErrorOnBrokenSymbolicLink = this._getValue(this._options.throwErrorOnBrokenSymbolicLink, true);
         this.fsStatSettings = new fsStat.Settings({
@@ -4268,17 +4268,17 @@ var require_out2 = __commonJS({
     var sync = require_sync2();
     var settings_1 = require_settings2();
     exports2.Settings = settings_1.default;
-    function scandir(path9, optionsOrSettingsOrCallback, callback) {
+    function scandir(path10, optionsOrSettingsOrCallback, callback) {
       if (typeof optionsOrSettingsOrCallback === "function") {
-        async.read(path9, getSettings(), optionsOrSettingsOrCallback);
+        async.read(path10, getSettings(), optionsOrSettingsOrCallback);
         return;
       }
-      async.read(path9, getSettings(optionsOrSettingsOrCallback), callback);
+      async.read(path10, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports2.scandir = scandir;
-    function scandirSync(path9, optionsOrSettings) {
+    function scandirSync(path10, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
-      return sync.read(path9, settings);
+      return sync.read(path10, settings);
     }
     exports2.scandirSync = scandirSync;
     function getSettings(settingsOrOptions = {}) {
@@ -4926,7 +4926,7 @@ var require_settings3 = __commonJS({
   "node_modules/.pnpm/@nodelib+fs.walk@1.2.8/node_modules/@nodelib/fs.walk/out/settings.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path9 = __require("path");
+    var path10 = __require("path");
     var fsScandir = require_out2();
     var Settings = class {
       constructor(_options = {}) {
@@ -4936,7 +4936,7 @@ var require_settings3 = __commonJS({
         this.deepFilter = this._getValue(this._options.deepFilter, null);
         this.entryFilter = this._getValue(this._options.entryFilter, null);
         this.errorFilter = this._getValue(this._options.errorFilter, null);
-        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path9.sep);
+        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path10.sep);
         this.fsScandirSettings = new fsScandir.Settings({
           followSymbolicLinks: this._options.followSymbolicLinks,
           fs: this._options.fs,
@@ -4998,7 +4998,7 @@ var require_reader2 = __commonJS({
   "node_modules/.pnpm/fast-glob@3.3.3/node_modules/fast-glob/out/readers/reader.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path9 = __require("path");
+    var path10 = __require("path");
     var fsStat = require_out();
     var utils = require_utils3();
     var Reader = class {
@@ -5011,7 +5011,7 @@ var require_reader2 = __commonJS({
         });
       }
       _getFullEntryPath(filepath) {
-        return path9.resolve(this._settings.cwd, filepath);
+        return path10.resolve(this._settings.cwd, filepath);
       }
       _makeEntry(stats, pattern) {
         const entry = {
@@ -5427,7 +5427,7 @@ var require_provider = __commonJS({
   "node_modules/.pnpm/fast-glob@3.3.3/node_modules/fast-glob/out/providers/provider.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path9 = __require("path");
+    var path10 = __require("path");
     var deep_1 = require_deep();
     var entry_1 = require_entry();
     var error_1 = require_error();
@@ -5441,7 +5441,7 @@ var require_provider = __commonJS({
         this.entryTransformer = new entry_2.default(this._settings);
       }
       _getRootDirectory(task) {
-        return path9.resolve(this._settings.cwd, task.base);
+        return path10.resolve(this._settings.cwd, task.base);
       }
       _getReaderOptions(task) {
         const basePath = task.base === "." ? "" : task.base;
@@ -5809,11 +5809,11 @@ var require_tree_sitter = __commonJS({
               throw toThrow;
             };
             var scriptDirectory = "";
-            function locateFile(path9) {
+            function locateFile(path10) {
               if (Module["locateFile"]) {
-                return Module["locateFile"](path9, scriptDirectory);
+                return Module["locateFile"](path10, scriptDirectory);
               }
-              return scriptDirectory + path9;
+              return scriptDirectory + path10;
             }
             var readAsync, readBinary;
             if (ENVIRONMENT_IS_NODE) {
@@ -105424,14 +105424,14 @@ var require_elk_bundled = __commonJS({
 });
 
 // packages/harness-adapter/src/index.ts
-import path8 from "path";
+import path9 from "path";
 import fs8 from "fs";
 import { fileURLToPath as fileURLToPath3 } from "url";
 
 // packages/core/dist/index.js
 var import_fast_glob2 = __toESM(require_out4(), 1);
 import fs7 from "fs";
-import path7 from "path";
+import path8 from "path";
 
 // packages/core/dist/parser/tree-sitter-loader.js
 var import_web_tree_sitter = __toESM(require_tree_sitter(), 1);
@@ -105444,19 +105444,26 @@ var WASM_FILE_MAP = {
   python: "tree-sitter-python.wasm",
   typescript: "tree-sitter-typescript.wasm",
   javascript: "tree-sitter-javascript.wasm",
+  tsx: "tree-sitter-tsx.wasm",
   go: "tree-sitter-go.wasm",
   java: "tree-sitter-java.wasm",
+  rust: "tree-sitter-rust.wasm",
+  rs: "tree-sitter-rust.wasm",
   c: "tree-sitter-c.wasm",
   cpp: "tree-sitter-cpp.wasm",
-  c_sharp: "tree-sitter-c_sharp.wasm"
+  c_sharp: "tree-sitter-c_sharp.wasm",
+  csharp: "tree-sitter-c_sharp.wasm",
+  cs: "tree-sitter-c_sharp.wasm"
 };
 var isInitialized = false;
 var loadedLanguages = /* @__PURE__ */ new Map();
 function resolveWasmPath(filename) {
   const candidateDirs = [
     // 0. 打包分发目录 (插件自身内置 wasm)
+    path.resolve(process.cwd(), "dist/wasm"),
     path.resolve(__dirname2, "wasm"),
     path.resolve(__dirname2, "../wasm"),
+    path.resolve(__dirname2, "../../dist/wasm"),
     // 1. 本地 node_modules
     path.resolve(process.cwd(), "node_modules/tree-sitter-wasms/out"),
     path.resolve(process.cwd(), "packages/core/node_modules/tree-sitter-wasms/out"),
@@ -105529,16 +105536,67 @@ async function getParserForLanguage(language = "python") {
   return parser;
 }
 
-// packages/core/dist/parser/python-extractor.js
-function formatNodeId(filePath, entityName) {
+// packages/core/dist/parser/extractor-registry.js
+import path2 from "path";
+
+// packages/core/dist/parser/scip-utils.js
+function sanitizeIdentifier(str) {
+  return str.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+function formatNodeId(filePath, entityName, suffix = "") {
   const cleanPath = filePath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
   const cleanEntity = entityName.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
-  return `${cleanPath}_${cleanEntity}`;
+  const s = suffix ? `_${sanitizeIdentifier(suffix).toLowerCase()}` : "";
+  return `${cleanPath}_${cleanEntity}${s}`;
 }
 function formatQualifiedName(filePath, entityName) {
   const cleanPath = filePath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\.[^/.]+$/, "").replace(/\//g, ".");
   return `${cleanPath}.${entityName}`;
 }
+function formatScipUri(language, filePath, scope, symbolName, kind = "def") {
+  const cleanPath = filePath.replace(/\\/g, "/").replace(/^\.\//, "");
+  const scopePart = scope ? `${scope}#` : "";
+  let descriptor = symbolName;
+  if (kind === "method" || kind === "def") {
+    descriptor = `${symbolName}().`;
+  } else if (kind === "class" || kind === "interface") {
+    descriptor = `${symbolName}#`;
+  }
+  return `scip/${language}/local/${cleanPath}#${scopePart}${descriptor}`;
+}
+function normalizeRoutePattern(routePath) {
+  if (!routePath)
+    return "/";
+  let norm = routePath.trim();
+  if (!norm.startsWith("/"))
+    norm = "/" + norm;
+  if (norm.length > 1 && norm.endsWith("/")) {
+    norm = norm.slice(0, -1);
+  }
+  norm = norm.replace(/\{[a-zA-Z0-9_]+\}/g, "{param}");
+  norm = norm.replace(/:[a-zA-Z0-9_]+/g, "{param}");
+  norm = norm.replace(/<([a-zA-Z0-9_]+:)?[a-zA-Z0-9_]+>/g, "{param}");
+  norm = norm.replace(/\$\{[^}]+\}/g, "{param}");
+  return norm.toLowerCase();
+}
+function formatContractEndpointId(method, normalizedRoute) {
+  const cleanMethod = (method || "GET").toUpperCase();
+  const cleanRoute = normalizedRoute.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
+  return `contract_rest_${cleanMethod.toLowerCase()}_${cleanRoute}`;
+}
+function formatContractTopicId(topicName) {
+  return `contract_topic_${sanitizeIdentifier(topicName).toLowerCase()}`;
+}
+
+// packages/core/dist/parser/extractors/python-extractor.js
+var PythonExtractor = class {
+  language = "python";
+  fileExtensions = [".py"];
+  wasmGrammarName = "python";
+  extractFile(tree, filePath, sourceCode) {
+    return extractPythonFile(tree, filePath, sourceCode);
+  }
+};
 function extractPythonFile(tree, filePath, sourceCode) {
   const nodes = [];
   const edges = [];
@@ -105546,13 +105604,17 @@ function extractPythonFile(tree, filePath, sourceCode) {
   const unresolvedCalls = [];
   const unresolvedInheritance = [];
   const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("python", filePath, "", fileName, "def");
   nodes.push({
     id: fileNodeId,
-    name: filePath.split(/[/\\]/).pop() || filePath,
+    name: fileName,
     qualifiedName: formatQualifiedName(filePath, "file"),
     entityType: "FILE",
     semanticRole: "UNKNOWN",
     filePath,
+    language: "python",
+    scipUri: fileScip,
     loc: {
       startLine: tree.rootNode.startPosition.row + 1,
       endLine: tree.rootNode.endPosition.row + 1
@@ -105577,14 +105639,41 @@ function extractPythonFile(tree, filePath, sourceCode) {
     }
     return void 0;
   }
-  function isWebEndpoint(decorators) {
-    const routePattern = /@(app|router|api|blueprint|bp|route|server|web)\.(get|post|put|delete|patch|options|head|route|websocket|api_route)\b/i;
-    const extraPattern = /@(action|api_view)\b/i;
-    return decorators.some((dec) => routePattern.test(dec) || extraPattern.test(dec));
+  function parseRouteMeta(decorators) {
+    for (const dec of decorators) {
+      const fastApiMatch = dec.match(/@(?:app|router|api|blueprint|bp|route|server|web)\.(get|post|put|delete|patch|options|head|api_route)\s*\(\s*["']([^"']+)["']/i);
+      if (fastApiMatch) {
+        return {
+          isEndpoint: true,
+          method: fastApiMatch[1].toUpperCase(),
+          routePath: fastApiMatch[2]
+        };
+      }
+      const flaskMatch = dec.match(/@(?:app|blueprint|bp|api)\.route\s*\(\s*["']([^"']+)["'](?:[^)]*methods\s*=\s*\[\s*["']([A-Z]+)["'])?/i);
+      if (flaskMatch) {
+        return {
+          isEndpoint: true,
+          method: (flaskMatch[2] || "GET").toUpperCase(),
+          routePath: flaskMatch[1]
+        };
+      }
+      if (/@(?:action|api_view)\b/i.test(dec)) {
+        return { isEndpoint: true, method: "GET", routePath: "" };
+      }
+    }
+    return { isEndpoint: false };
   }
-  function isWorkerTask(decorators) {
-    const taskPattern = /@(task|shared_task|celery|job|schedule|worker|event|receiver|on_event)\b/i;
-    return decorators.some((dec) => taskPattern.test(dec));
+  function parseWorkerMeta(decorators) {
+    for (const dec of decorators) {
+      const taskMatch = dec.match(/@(?:task|shared_task|celery|job)\s*(?:\(\s*(?:name\s*=\s*)?["']([^"']+)["'])?/i);
+      if (taskMatch) {
+        return { isWorker: true, topicName: taskMatch[1] };
+      }
+      if (/@(?:schedule|worker|event|receiver|on_event)\b/i.test(dec)) {
+        return { isWorker: true };
+      }
+    }
+    return { isWorker: false };
   }
   function isCliCommand(decorators) {
     const cliPattern = /@(click|app|cli|typer|cmd)\.(command|group)\b/i;
@@ -105669,6 +105758,7 @@ function extractPythonFile(tree, filePath, sourceCode) {
       const nodeId = formatNodeId(filePath, className);
       const bodyNode = cursorNode.childForFieldName("body");
       const docstring = bodyNode ? getDocstring(bodyNode) : void 0;
+      const scipUri = formatScipUri("python", filePath, "", className, "class");
       const classNode = {
         id: nodeId,
         name: className,
@@ -105676,6 +105766,8 @@ function extractPythonFile(tree, filePath, sourceCode) {
         entityType: "CLASS",
         semanticRole: "UNKNOWN",
         filePath,
+        language: "python",
+        scipUri,
         loc: {
           startLine: cursorNode.startPosition.row + 1,
           endLine: cursorNode.endPosition.row + 1
@@ -105733,18 +105825,20 @@ function extractPythonFile(tree, filePath, sourceCode) {
       const funcName = nameNode ? nameNode.text : "anonymous_func";
       const isInsideClass = contextStack.some((n) => n.entityType === "CLASS");
       const parentContainer = contextStack[contextStack.length - 1] || nodes[0];
-      const isEndpoint = isWebEndpoint(decorators);
+      const routeMeta = parseRouteMeta(decorators);
+      const workerMeta = parseWorkerMeta(decorators);
       const isCli = isCliCommand(decorators);
-      const isWorker = isWorkerTask(decorators);
       const isStdEntry = !isInsideClass && isStandardEntryName(funcName);
-      const isEntry = isEndpoint || isCli || isWorker || isStdEntry;
-      const entityType = isEndpoint ? "ENDPOINT" : isInsideClass ? "METHOD" : "FUNCTION";
+      const isEntry = routeMeta.isEndpoint || workerMeta.isWorker || isCli || isStdEntry;
+      const entityType = routeMeta.isEndpoint ? "ENDPOINT" : isInsideClass ? "METHOD" : "FUNCTION";
       const semanticRole = isEntry ? "ENTRY" : "UNKNOWN";
       const nodeId = formatNodeId(filePath, isInsideClass ? `${parentContainer.name}_${funcName}` : funcName);
       const bodyNode = funcNode.childForFieldName("body");
       const docstring = bodyNode ? getDocstring(bodyNode) : void 0;
       const paramsNode = funcNode.childForFieldName("parameters");
       const signature = `def ${funcName}${paramsNode ? paramsNode.text : "()"}`;
+      const parentScope = isInsideClass ? parentContainer.name : "";
+      const scipUri = formatScipUri("python", filePath, parentScope, funcName, isInsideClass ? "method" : "def");
       const codeNode = {
         id: nodeId,
         name: funcName,
@@ -105752,6 +105846,8 @@ function extractPythonFile(tree, filePath, sourceCode) {
         entityType,
         semanticRole,
         filePath,
+        language: "python",
+        scipUri,
         loc: {
           startLine: (cursorNode.type === "decorated_definition" ? cursorNode : funcNode).startPosition.row + 1,
           endLine: funcNode.endPosition.row + 1
@@ -105763,6 +105859,19 @@ function extractPythonFile(tree, filePath, sourceCode) {
           isAsync: funcNode.type === "async_function_definition"
         }
       };
+      if (routeMeta.isEndpoint && routeMeta.method) {
+        codeNode.endpointMeta = {
+          httpMethod: routeMeta.method,
+          routePath: normalizeRoutePattern(routeMeta.routePath || `/${funcName}`),
+          isClientCall: false
+        };
+      }
+      if (workerMeta.isWorker) {
+        codeNode.topicMeta = {
+          topicName: workerMeta.topicName || funcName,
+          isPublisher: false
+        };
+      }
       nodes.push(codeNode);
       edges.push({
         id: `contains_${parentContainer.id}_${nodeId}`,
@@ -105787,10 +105896,48 @@ function extractPythonFile(tree, filePath, sourceCode) {
       if (functionNode) {
         const caller = getCurrentCaller() || nodes[0];
         if (caller) {
+          const callText = functionNode.text;
+          const line = cursorNode.startPosition.row + 1;
+          const httpMatch = callText.match(/(?:requests|httpx|session|client|http)\.(get|post|put|delete|patch)\b/i);
+          let apiCallMeta;
+          if (httpMatch) {
+            const argsNode = cursorNode.childForFieldName("arguments");
+            if (argsNode && argsNode.namedChildCount > 0) {
+              const firstArg = argsNode.namedChild(0);
+              if (firstArg && firstArg.type === "string") {
+                const url = firstArg.text.replace(/^['"]|['"]$/g, "");
+                const pathMatch = url.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+                if (pathMatch) {
+                  apiCallMeta = {
+                    httpMethod: httpMatch[1].toUpperCase(),
+                    routePattern: normalizeRoutePattern(pathMatch[1])
+                  };
+                }
+              }
+            }
+          }
+          let topicMeta;
+          if (/(?:\.delay|\.apply_async)\b/.test(callText)) {
+            const taskObj = callText.replace(/\.(delay|apply_async)$/, "");
+            topicMeta = { topicName: taskObj, isPublish: true };
+          } else if (/(?:send_task|publish)\b/.test(callText)) {
+            const argsNode = cursorNode.childForFieldName("arguments");
+            if (argsNode && argsNode.namedChildCount > 0) {
+              const firstArg = argsNode.namedChild(0);
+              if (firstArg && firstArg.type === "string") {
+                topicMeta = {
+                  topicName: firstArg.text.replace(/^['"]|['"]$/g, ""),
+                  isPublish: true
+                };
+              }
+            }
+          }
           unresolvedCalls.push({
             callerNodeId: caller.id,
-            calleeExpression: functionNode.text,
-            line: cursorNode.startPosition.row + 1
+            calleeExpression: callText,
+            line,
+            apiCallMeta,
+            topicMeta
           });
         }
       }
@@ -105804,6 +105951,7 @@ function extractPythonFile(tree, filePath, sourceCode) {
   traverse(tree.rootNode);
   return {
     filePath,
+    language: "python",
     nodes,
     edges,
     imports,
@@ -105812,13 +105960,2170 @@ function extractPythonFile(tree, filePath, sourceCode) {
   };
 }
 
+// packages/core/dist/parser/extractors/typescript-extractor.js
+var TypeScriptExtractor = class {
+  language = "typescript";
+  fileExtensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+  wasmGrammarName = "typescript";
+  extractFile(tree, filePath, sourceCode) {
+    return extractTypeScriptFile(tree, filePath, sourceCode);
+  }
+};
+function extractTypeScriptFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lang = filePath.endsWith(".js") || filePath.endsWith(".jsx") || filePath.endsWith(".mjs") || filePath.endsWith(".cjs") ? "javascript" : "typescript";
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri(lang, filePath, "", fileName, "def");
+  nodes.push({
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: lang,
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  });
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function isNextJsRouteFile(pathStr) {
+    const norm = pathStr.replace(/\\/g, "/").toLowerCase();
+    return (norm.includes("/app/") || norm.includes("/api/")) && /route\.[jt]sx?$/.test(norm);
+  }
+  function deriveNextJsRoutePath(pathStr) {
+    const norm = pathStr.replace(/\\/g, "/");
+    const match = norm.match(/(?:app|pages\/api)(\/.*)\/route\.[jt]sx?$/);
+    if (match) {
+      let r = match[1];
+      r = r.replace(/\[([^\]]+)\]/g, "{$1}");
+      return normalizeRoutePattern(r);
+    }
+    return "/api";
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "import_statement") {
+      const line = cursorNode.startPosition.row + 1;
+      const sourceNode = cursorNode.childForFieldName("source");
+      const modulePath = sourceNode ? sourceNode.text.replace(/^['"]|['"]$/g, "") : "";
+      const importedNames = [];
+      const importClause = cursorNode.namedChildren.find((c) => c.type === "import_clause");
+      if (importClause) {
+        for (let i2 = 0; i2 < importClause.namedChildCount; i2++) {
+          const child = importClause.namedChild(i2);
+          if (!child)
+            continue;
+          if (child.type === "identifier") {
+            importedNames.push({ name: child.text, alias: "default" });
+          } else if (child.type === "named_imports") {
+            for (let j = 0; j < child.namedChildCount; j++) {
+              const specifier = child.namedChild(j);
+              if (specifier?.type === "import_specifier") {
+                const nameNode = specifier.childForFieldName("name");
+                const aliasNode = specifier.childForFieldName("alias");
+                if (nameNode) {
+                  importedNames.push({
+                    name: nameNode.text,
+                    alias: aliasNode ? aliasNode.text : void 0
+                  });
+                }
+              }
+            }
+          } else if (child.type === "namespace_import") {
+            const alias = child.namedChildren.find((c) => c.type === "identifier")?.text;
+            importedNames.push({ name: "*", alias });
+          }
+        }
+      }
+      if (modulePath) {
+        imports.push({
+          modulePath,
+          importedNames,
+          isFromImport: true,
+          line
+        });
+      }
+    }
+    if (nodeType === "variable_declarator") {
+      const init2 = cursorNode.childForFieldName("value");
+      if (init2 && init2.type === "call_expression" && init2.childForFieldName("function")?.text === "require") {
+        const args2 = init2.childForFieldName("arguments");
+        if (args2 && args2.namedChildCount > 0) {
+          const modArg = args2.namedChild(0);
+          if (modArg && modArg.type === "string") {
+            const modulePath = modArg.text.replace(/^['"]|['"]$/g, "");
+            const nameNode = cursorNode.childForFieldName("name");
+            const varName = nameNode ? nameNode.text : "";
+            imports.push({
+              modulePath,
+              importedNames: [{ name: varName }],
+              isFromImport: false,
+              line: cursorNode.startPosition.row + 1
+            });
+          }
+        }
+      }
+    }
+    if (nodeType === "class_declaration" || nodeType === "class") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const className = nameNode ? nameNode.text : "AnonymousClass";
+      const nodeId = formatNodeId(filePath, className);
+      const scipUri = formatScipUri(lang, filePath, "", className, "class");
+      const decorators = [];
+      let parentIter = cursorNode.parent;
+      if (parentIter && parentIter.type === "export_statement") {
+        parentIter = parentIter.parent;
+      }
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const child = cursorNode.namedChild(i2);
+        if (child?.type === "decorator") {
+          decorators.push(child.text);
+        }
+      }
+      let routePrefix = "";
+      for (const dec of decorators) {
+        const ctrlMatch = dec.match(/@Controller\s*\(\s*["']([^"']*)["']\s*\)/i);
+        if (ctrlMatch) {
+          routePrefix = ctrlMatch[1] || "";
+        }
+      }
+      const classNode = {
+        id: nodeId,
+        name: className,
+        qualifiedName: formatQualifiedName(filePath, className),
+        entityType: "CLASS",
+        semanticRole: routePrefix ? "ENTRY" : "UNKNOWN",
+        filePath,
+        language: lang,
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        },
+        metadata: { decorators, routePrefix }
+      };
+      nodes.push(classNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const child = cursorNode.namedChild(i2);
+        if (child?.type === "class_heritage") {
+          for (let j = 0; j < child.namedChildCount; j++) {
+            const h = child.namedChild(j);
+            if (h && (h.type === "extends_clause" || h.type === "implements_clause")) {
+              for (let k = 0; k < h.namedChildCount; k++) {
+                const typeNode = h.namedChild(k);
+                if (typeNode && typeNode.type !== "extends" && typeNode.type !== "implements") {
+                  unresolvedInheritance.push({
+                    classNodeId: nodeId,
+                    superclassName: typeNode.text,
+                    line: typeNode.startPosition.row + 1
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+      contextStack.push(classNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "interface_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const ifaceName = nameNode ? nameNode.text : "AnonymousInterface";
+      const nodeId = formatNodeId(filePath, ifaceName);
+      const scipUri = formatScipUri(lang, filePath, "", ifaceName, "interface");
+      const ifaceNode = {
+        id: nodeId,
+        name: ifaceName,
+        qualifiedName: formatQualifiedName(filePath, ifaceName),
+        entityType: "INTERFACE",
+        semanticRole: "MODEL",
+        filePath,
+        language: lang,
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(ifaceNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      return;
+    }
+    if (nodeType === "method_definition") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const methodName = nameNode ? nameNode.text : "anonymous_method";
+      const parentContainer = contextStack[contextStack.length - 1] || nodes[0];
+      const decorators = [];
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const child = cursorNode.namedChild(i2);
+        if (child?.type === "decorator") {
+          decorators.push(child.text);
+        }
+      }
+      let httpMethod;
+      let subRoute;
+      for (const dec of decorators) {
+        const mMatch = dec.match(/@(Get|Post|Put|Delete|Patch|Options|Head)\s*(?:\(\s*["']?([^"']*)["']?\s*\))?/i);
+        if (mMatch) {
+          httpMethod = mMatch[1].toUpperCase();
+          subRoute = mMatch[2] || "";
+        }
+      }
+      const isEndpoint = !!httpMethod;
+      const nodeId = formatNodeId(filePath, `${parentContainer.name}_${methodName}`);
+      const scipUri = formatScipUri(lang, filePath, parentContainer.name, methodName, "method");
+      const methodNode = {
+        id: nodeId,
+        name: methodName,
+        qualifiedName: formatQualifiedName(filePath, `${parentContainer.name}.${methodName}`),
+        entityType: isEndpoint ? "ENDPOINT" : "METHOD",
+        semanticRole: isEndpoint ? "ENTRY" : "UNKNOWN",
+        filePath,
+        language: lang,
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      if (isEndpoint && httpMethod) {
+        const baseRoute = parentContainer.metadata?.routePrefix || "";
+        const fullRoute = normalizeRoutePattern(`${baseRoute}/${subRoute || ""}`);
+        methodNode.endpointMeta = {
+          httpMethod,
+          routePath: fullRoute,
+          isClientCall: false
+        };
+      }
+      nodes.push(methodNode);
+      edges.push({
+        id: `contains_${parentContainer.id}_${nodeId}`,
+        source: parentContainer.id,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(methodNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    let funcName;
+    let funcBodyNode = null;
+    let isNextJsExport = false;
+    if (nodeType === "function_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      funcName = nameNode ? nameNode.text : "anonymous_func";
+      funcBodyNode = cursorNode.childForFieldName("body");
+    } else if (nodeType === "variable_declarator") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const valNode = cursorNode.childForFieldName("value");
+      if (valNode && (valNode.type === "arrow_function" || valNode.type === "function_expression")) {
+        funcName = nameNode ? nameNode.text : "anonymous_arrow";
+        funcBodyNode = valNode.childForFieldName("body");
+      }
+    }
+    if (funcName && funcBodyNode) {
+      let endpointMeta;
+      const upperName = funcName.toUpperCase();
+      if (isNextJsRouteFile(filePath) && ["GET", "POST", "PUT", "DELETE", "PATCH"].includes(upperName)) {
+        isNextJsExport = true;
+        endpointMeta = {
+          httpMethod: upperName,
+          routePath: deriveNextJsRoutePath(filePath),
+          isClientCall: false
+        };
+      }
+      const isEntry = isNextJsExport || /^(main|start|handler|run|bootstrap|init)$/i.test(funcName);
+      const entityType = endpointMeta ? "ENDPOINT" : "FUNCTION";
+      const semanticRole = isEntry ? "ENTRY" : "UNKNOWN";
+      const nodeId = formatNodeId(filePath, funcName);
+      const scipUri = formatScipUri(lang, filePath, "", funcName, "def");
+      const funcNode = {
+        id: nodeId,
+        name: funcName,
+        qualifiedName: formatQualifiedName(filePath, funcName),
+        entityType,
+        semanticRole,
+        filePath,
+        language: lang,
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        },
+        endpointMeta
+      };
+      nodes.push(funcNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(funcNode);
+      for (let i2 = 0; i2 < funcBodyNode.namedChildCount; i2++) {
+        const child = funcBodyNode.namedChild(i2);
+        if (child)
+          traverse(child);
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "call_expression") {
+      const fnNode = cursorNode.childForFieldName("function");
+      const caller = getCurrentCaller() || nodes[0];
+      const line = cursorNode.startPosition.row + 1;
+      if (fnNode && caller) {
+        const calleeText = fnNode.text;
+        const expressMatch = calleeText.match(/(?:app|router|server|api)\.(get|post|put|delete|patch)\b/i);
+        if (expressMatch) {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount > 0) {
+            const firstArg = argsNode.namedChild(0);
+            if (firstArg && (firstArg.type === "string" || firstArg.type === "template_string")) {
+              const routeRaw = firstArg.text.replace(/^[`'"]|[`'"]$/g, "");
+              const normRoute = normalizeRoutePattern(routeRaw);
+              const httpMethod = expressMatch[1].toUpperCase();
+              const endpointNodeId = formatNodeId(filePath, `route_${httpMethod}_${normRoute}`);
+              const endpointNode = {
+                id: endpointNodeId,
+                name: `${httpMethod} ${normRoute}`,
+                qualifiedName: formatQualifiedName(filePath, `route.${httpMethod}.${normRoute}`),
+                entityType: "ENDPOINT",
+                semanticRole: "ENTRY",
+                filePath,
+                language: lang,
+                scipUri: formatScipUri(lang, filePath, "", `${httpMethod}_${normRoute}`, "def"),
+                loc: {
+                  startLine: line,
+                  endLine: cursorNode.endPosition.row + 1
+                },
+                endpointMeta: {
+                  httpMethod,
+                  routePath: normRoute,
+                  isClientCall: false
+                }
+              };
+              nodes.push(endpointNode);
+              edges.push({
+                id: `contains_${fileNodeId}_${endpointNodeId}`,
+                source: fileNodeId,
+                target: endpointNodeId,
+                relation: "CONTAINS",
+                confidence: "EXTRACTED"
+              });
+            }
+          }
+        }
+        let apiCallMeta;
+        let topicMeta;
+        if (calleeText === "fetch") {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount > 0) {
+            const firstArg = argsNode.namedChild(0);
+            const urlRaw = firstArg?.text.replace(/^[`'"]|[`'"]$/g, "");
+            if (urlRaw && urlRaw.includes("/")) {
+              const pathPart = urlRaw.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+              if (pathPart) {
+                let httpMethod = "GET";
+                if (argsNode.namedChildCount > 1) {
+                  const opts = argsNode.namedChild(1)?.text;
+                  const mMatch = opts?.match(/method:\s*['"]([A-Z]+)['"]/i);
+                  if (mMatch)
+                    httpMethod = mMatch[1].toUpperCase();
+                }
+                apiCallMeta = {
+                  httpMethod,
+                  routePattern: normalizeRoutePattern(pathPart[1])
+                };
+              }
+            }
+          }
+        } else {
+          const clientMatch = calleeText.match(/(?:axios|api|client|request|http)\.(get|post|put|delete|patch)\b/i);
+          if (clientMatch) {
+            const argsNode = cursorNode.childForFieldName("arguments");
+            if (argsNode && argsNode.namedChildCount > 0) {
+              const firstArg = argsNode.namedChild(0);
+              const urlRaw = firstArg?.text.replace(/^[`'"]|[`'"]$/g, "");
+              if (urlRaw) {
+                const pathPart = urlRaw.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+                if (pathPart) {
+                  apiCallMeta = {
+                    httpMethod: clientMatch[1].toUpperCase(),
+                    routePattern: normalizeRoutePattern(pathPart[1])
+                  };
+                }
+              }
+            }
+          }
+        }
+        if (/\.emit\b/.test(calleeText)) {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount > 0) {
+            const firstArg = argsNode.namedChild(0);
+            if (firstArg && (firstArg.type === "string" || firstArg.type === "template_string")) {
+              topicMeta = {
+                topicName: firstArg.text.replace(/^[`'"]|[`'"]$/g, ""),
+                isPublish: true
+              };
+            }
+          }
+        }
+        unresolvedCalls.push({
+          callerNodeId: caller.id,
+          calleeExpression: calleeText,
+          line,
+          apiCallMeta,
+          topicMeta
+        });
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: lang,
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/go-extractor.js
+var GoExtractor = class {
+  language = "go";
+  fileExtensions = [".go"];
+  wasmGrammarName = "go";
+  extractFile(tree, filePath, sourceCode) {
+    return extractGoFile(tree, filePath, sourceCode);
+  }
+};
+function extractGoFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  let packageName = "main";
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("go", filePath, "", fileName, "def");
+  nodes.push({
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "go",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  });
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "package_clause") {
+      const pkgId = cursorNode.childForFieldName("package_name") || cursorNode.namedChild(0);
+      if (pkgId) {
+        packageName = pkgId.text;
+      }
+      return;
+    }
+    if (nodeType === "import_declaration") {
+      const line = cursorNode.startPosition.row + 1;
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const spec = cursorNode.namedChild(i2);
+        if (spec && spec.type === "import_spec") {
+          const pathNode = spec.childForFieldName("path");
+          const nameNode = spec.childForFieldName("name");
+          if (pathNode) {
+            const rawPath = pathNode.text.replace(/^"|"$/g, "");
+            const alias = nameNode ? nameNode.text : void 0;
+            const importedPkg = alias || rawPath.split("/").pop() || rawPath;
+            imports.push({
+              modulePath: rawPath,
+              importedNames: [{ name: importedPkg, alias }],
+              isFromImport: false,
+              line
+            });
+          }
+        }
+      }
+      return;
+    }
+    if (nodeType === "type_declaration") {
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const typeSpec = cursorNode.namedChild(i2);
+        if (typeSpec && typeSpec.type === "type_spec") {
+          const nameNode = typeSpec.childForFieldName("name");
+          const typeNode = typeSpec.childForFieldName("type");
+          if (!nameNode || !typeNode)
+            continue;
+          const typeName = nameNode.text;
+          const isInterface = typeNode.type === "interface_type";
+          const isStruct = typeNode.type === "struct_type";
+          const entityType = isInterface ? "INTERFACE" : "CLASS";
+          const semanticRole = isInterface ? "MODEL" : "UNKNOWN";
+          const nodeId = formatNodeId(filePath, typeName);
+          const scipUri = formatScipUri("go", filePath, packageName, typeName, isInterface ? "interface" : "class");
+          const typeCodeNode = {
+            id: nodeId,
+            name: typeName,
+            qualifiedName: formatQualifiedName(filePath, `${packageName}.${typeName}`),
+            entityType,
+            semanticRole,
+            filePath,
+            language: "go",
+            scipUri,
+            loc: {
+              startLine: typeSpec.startPosition.row + 1,
+              endLine: typeSpec.endPosition.row + 1
+            }
+          };
+          nodes.push(typeCodeNode);
+          edges.push({
+            id: `contains_${fileNodeId}_${nodeId}`,
+            source: fileNodeId,
+            target: nodeId,
+            relation: "CONTAINS",
+            confidence: "EXTRACTED"
+          });
+          if (isStruct) {
+            const fieldList = typeNode.childForFieldName("fields") || typeNode.namedChildren.find((c) => c.type === "field_declaration_list");
+            if (fieldList) {
+              for (let j = 0; j < fieldList.namedChildCount; j++) {
+                const fieldDecl = fieldList.namedChild(j);
+                if (fieldDecl && fieldDecl.namedChildCount === 1) {
+                  const embeddedType = fieldDecl.namedChild(0);
+                  if (embeddedType) {
+                    unresolvedInheritance.push({
+                      classNodeId: nodeId,
+                      superclassName: embeddedType.text.replace(/^\*/, ""),
+                      line: embeddedType.startPosition.row + 1
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return;
+    }
+    if (nodeType === "function_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const funcName = nameNode ? nameNode.text : "anonymous_func";
+      const isEntry = /^(main|init|run|start|serve)$/i.test(funcName);
+      const nodeId = formatNodeId(filePath, funcName);
+      const scipUri = formatScipUri("go", filePath, packageName, funcName, "def");
+      const funcNode = {
+        id: nodeId,
+        name: funcName,
+        qualifiedName: formatQualifiedName(filePath, `${packageName}.${funcName}`),
+        entityType: "FUNCTION",
+        semanticRole: isEntry ? "ENTRY" : "UNKNOWN",
+        filePath,
+        language: "go",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(funcNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(funcNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "method_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const methodName = nameNode ? nameNode.text : "anonymous_method";
+      const receiverNode = cursorNode.childForFieldName("receiver");
+      let receiverTypeName = "UnknownStruct";
+      if (receiverNode) {
+        const rMatch = receiverNode.text.match(/\*?([a-zA-Z0-9_]+)\s*\)?$/);
+        if (rMatch)
+          receiverTypeName = rMatch[1];
+      }
+      const parentStructNodeId = formatNodeId(filePath, receiverTypeName);
+      const parentContainer = nodes.find((n) => n.id === parentStructNodeId) || nodes[0];
+      const nodeId = formatNodeId(filePath, `${receiverTypeName}_${methodName}`);
+      const scipUri = formatScipUri("go", filePath, `${packageName}#${receiverTypeName}`, methodName, "method");
+      const methodNode = {
+        id: nodeId,
+        name: methodName,
+        qualifiedName: formatQualifiedName(filePath, `${packageName}.${receiverTypeName}.${methodName}`),
+        entityType: "METHOD",
+        semanticRole: "UNKNOWN",
+        filePath,
+        language: "go",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(methodNode);
+      edges.push({
+        id: `contains_${parentContainer.id}_${nodeId}`,
+        source: parentContainer.id,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(methodNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "call_expression") {
+      const fnNode = cursorNode.childForFieldName("function");
+      const caller = getCurrentCaller() || nodes[0];
+      const line = cursorNode.startPosition.row + 1;
+      if (fnNode && caller) {
+        const calleeText = fnNode.text;
+        const ginMatch = calleeText.match(/(?:r|router|e|app|group|api|v1|v2)\.(GET|POST|PUT|DELETE|PATCH|Any)\b/i);
+        if (ginMatch) {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount > 0) {
+            const firstArg = argsNode.namedChild(0);
+            if (firstArg && (firstArg.type === "interpreted_string_literal" || firstArg.type === "raw_string_literal")) {
+              const routeRaw = firstArg.text.replace(/^["`]|["`]$/g, "");
+              const normRoute = normalizeRoutePattern(routeRaw);
+              const httpMethod = ginMatch[1].toUpperCase();
+              const endpointNodeId = formatNodeId(filePath, `route_${httpMethod}_${normRoute}`);
+              const endpointNode = {
+                id: endpointNodeId,
+                name: `${httpMethod} ${normRoute}`,
+                qualifiedName: formatQualifiedName(filePath, `route.${httpMethod}.${normRoute}`),
+                entityType: "ENDPOINT",
+                semanticRole: "ENTRY",
+                filePath,
+                language: "go",
+                scipUri: formatScipUri("go", filePath, packageName, `${httpMethod}_${normRoute}`, "def"),
+                loc: {
+                  startLine: line,
+                  endLine: cursorNode.endPosition.row + 1
+                },
+                endpointMeta: {
+                  httpMethod,
+                  routePath: normRoute,
+                  isClientCall: false
+                }
+              };
+              nodes.push(endpointNode);
+              edges.push({
+                id: `contains_${fileNodeId}_${endpointNodeId}`,
+                source: fileNodeId,
+                target: endpointNodeId,
+                relation: "CONTAINS",
+                confidence: "EXTRACTED"
+              });
+            }
+          }
+        }
+        let apiCallMeta;
+        const httpCallMatch = calleeText.match(/(?:http|client)\.(Get|Post|Put|Delete)\b/i);
+        if (httpCallMatch) {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount > 0) {
+            const firstArg = argsNode.namedChild(0);
+            if (firstArg && (firstArg.type === "interpreted_string_literal" || firstArg.type === "raw_string_literal")) {
+              const url = firstArg.text.replace(/^["`]|["`]$/g, "");
+              const pathMatch = url.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+              if (pathMatch) {
+                apiCallMeta = {
+                  httpMethod: httpCallMatch[1].toUpperCase(),
+                  routePattern: normalizeRoutePattern(pathMatch[1])
+                };
+              }
+            }
+          }
+        }
+        unresolvedCalls.push({
+          callerNodeId: caller.id,
+          calleeExpression: calleeText,
+          line,
+          apiCallMeta
+        });
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "go",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/java-extractor.js
+var JavaExtractor = class {
+  language = "java";
+  fileExtensions = [".java"];
+  wasmGrammarName = "java";
+  extractFile(tree, filePath, sourceCode) {
+    return extractJavaFile(tree, filePath, sourceCode);
+  }
+};
+function extractJavaFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  let packageName = "";
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("java", filePath, "", fileName, "def");
+  nodes.push({
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "java",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  });
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function extractAnnotations(modifiersNode) {
+    if (!modifiersNode)
+      return [];
+    const annotations = [];
+    for (let i2 = 0; i2 < modifiersNode.namedChildCount; i2++) {
+      const child = modifiersNode.namedChild(i2);
+      if (child && (child.type === "marker_annotation" || child.type === "annotation")) {
+        annotations.push(child.text);
+      }
+    }
+    return annotations;
+  }
+  function parseSpringRoute(annotations) {
+    for (const ann of annotations) {
+      const mMatch = ann.match(/@(Get|Post|Put|Delete|Patch)Mapping\s*(?:\(\s*(?:(?:value|path)\s*=\s*)?["']([^"']*)["']\s*\))?/i);
+      if (mMatch) {
+        return {
+          isEndpoint: true,
+          method: mMatch[1].toUpperCase(),
+          routePath: mMatch[2] || ""
+        };
+      }
+      const reqMatch = ann.match(/@RequestMapping\s*(?:\(\s*(?:(?:value|path)\s*=\s*)?["']([^"']*)["'](?:[^)]*method\s*=\s*RequestMethod\.([A-Z]+))?\s*\))?/i);
+      if (reqMatch) {
+        return {
+          isEndpoint: true,
+          method: reqMatch[2] ? reqMatch[2].toUpperCase() : "GET",
+          routePath: reqMatch[1] || ""
+        };
+      }
+    }
+    return { isEndpoint: false };
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "package_declaration") {
+      const pkgIdent = cursorNode.namedChildren.find((c) => c.type === "scoped_identifier" || c.type === "identifier");
+      if (pkgIdent) {
+        packageName = pkgIdent.text;
+      }
+      return;
+    }
+    if (nodeType === "import_declaration") {
+      const line = cursorNode.startPosition.row + 1;
+      const ident = cursorNode.namedChildren.find((c) => c.type === "scoped_identifier" || c.type === "identifier");
+      if (ident) {
+        const fullImp = ident.text;
+        const shortName = fullImp.split(".").pop() || fullImp;
+        imports.push({
+          modulePath: fullImp,
+          importedNames: [{ name: shortName }],
+          isFromImport: true,
+          line
+        });
+      }
+      return;
+    }
+    if (nodeType === "class_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const className = nameNode ? nameNode.text : "AnonymousClass";
+      const modifiers = cursorNode.childForFieldName("modifiers");
+      const annotations = extractAnnotations(modifiers || void 0);
+      let classRoutePrefix = "";
+      let isController = false;
+      let isService = false;
+      let isRepo = false;
+      for (const ann of annotations) {
+        if (/@(RestController|Controller)\b/i.test(ann))
+          isController = true;
+        if (/@Service\b/i.test(ann))
+          isService = true;
+        if (/@(Repository|Mapper)\b/i.test(ann))
+          isRepo = true;
+        const reqMatch = ann.match(/@RequestMapping\s*(?:\(\s*(?:(?:value|path)\s*=\s*)?["']([^"']*)["']\s*\))?/i);
+        if (reqMatch) {
+          classRoutePrefix = reqMatch[1] || "";
+        }
+      }
+      const semanticRole = isController ? "ENTRY" : isService ? "SERVICE" : isRepo ? "REPOSITORY" : "UNKNOWN";
+      const nodeId = formatNodeId(filePath, className);
+      const qName = packageName ? `${packageName}.${className}` : className;
+      const scipUri = formatScipUri("java", filePath, packageName, className, "class");
+      const classNode = {
+        id: nodeId,
+        name: className,
+        qualifiedName: qName,
+        entityType: "CLASS",
+        semanticRole,
+        filePath,
+        language: "java",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        },
+        metadata: { annotations, classRoutePrefix }
+      };
+      nodes.push(classNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const superclassNode = cursorNode.childForFieldName("superclass");
+      if (superclassNode) {
+        const typeNode = superclassNode.namedChildren.find((c) => c.type === "type_identifier");
+        if (typeNode) {
+          unresolvedInheritance.push({
+            classNodeId: nodeId,
+            superclassName: typeNode.text,
+            line: typeNode.startPosition.row + 1
+          });
+        }
+      }
+      const interfacesNode = cursorNode.childForFieldName("interfaces");
+      if (interfacesNode) {
+        const typeList = interfacesNode.namedChildren.find((c) => c.type === "type_list");
+        if (typeList) {
+          for (let j = 0; j < typeList.namedChildCount; j++) {
+            const iface = typeList.namedChild(j);
+            if (iface) {
+              unresolvedInheritance.push({
+                classNodeId: nodeId,
+                superclassName: iface.text,
+                line: iface.startPosition.row + 1
+              });
+            }
+          }
+        }
+      }
+      contextStack.push(classNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "interface_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const ifaceName = nameNode ? nameNode.text : "AnonymousInterface";
+      const nodeId = formatNodeId(filePath, ifaceName);
+      const qName = packageName ? `${packageName}.${ifaceName}` : ifaceName;
+      const scipUri = formatScipUri("java", filePath, packageName, ifaceName, "interface");
+      const ifaceNode = {
+        id: nodeId,
+        name: ifaceName,
+        qualifiedName: qName,
+        entityType: "INTERFACE",
+        semanticRole: "MODEL",
+        filePath,
+        language: "java",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(ifaceNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      return;
+    }
+    if (nodeType === "method_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const methodName = nameNode ? nameNode.text : "anonymous_method";
+      const parentContainer = contextStack[contextStack.length - 1] || nodes[0];
+      const modifiers = cursorNode.childForFieldName("modifiers");
+      const annotations = extractAnnotations(modifiers || void 0);
+      const routeInfo = parseSpringRoute(annotations);
+      const isEndpoint = routeInfo.isEndpoint;
+      const nodeId = formatNodeId(filePath, `${parentContainer.name}_${methodName}`);
+      const qName = `${parentContainer.qualifiedName}.${methodName}`;
+      const scipUri = formatScipUri("java", filePath, `${packageName}#${parentContainer.name}`, methodName, "method");
+      const methodNode = {
+        id: nodeId,
+        name: methodName,
+        qualifiedName: qName,
+        entityType: isEndpoint ? "ENDPOINT" : "METHOD",
+        semanticRole: isEndpoint ? "ENTRY" : "UNKNOWN",
+        filePath,
+        language: "java",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      if (isEndpoint && routeInfo.method) {
+        const prefix = parentContainer.metadata?.classRoutePrefix || "";
+        const fullRoute = normalizeRoutePattern(`${prefix}/${routeInfo.routePath || ""}`);
+        methodNode.endpointMeta = {
+          httpMethod: routeInfo.method,
+          routePath: fullRoute,
+          isClientCall: false
+        };
+      }
+      nodes.push(methodNode);
+      edges.push({
+        id: `contains_${parentContainer.id}_${nodeId}`,
+        source: parentContainer.id,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(methodNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "method_invocation") {
+      const caller = getCurrentCaller() || nodes[0];
+      const line = cursorNode.startPosition.row + 1;
+      const nameNode = cursorNode.childForFieldName("name");
+      const methodName = nameNode ? nameNode.text : cursorNode.text;
+      let apiCallMeta;
+      const fullCallText = cursorNode.text;
+      const rtMatch = fullCallText.match(/(?:restTemplate|webClient)\.(get|post|put|delete)/i);
+      if (rtMatch) {
+        const argsNode = cursorNode.childForFieldName("arguments");
+        if (argsNode && argsNode.namedChildCount > 0) {
+          const firstArg = argsNode.namedChild(0);
+          if (firstArg && firstArg.type === "string_literal") {
+            const rawUrl = firstArg.text.replace(/^"|"$/g, "");
+            const pathMatch = rawUrl.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+            if (pathMatch) {
+              apiCallMeta = {
+                httpMethod: rtMatch[1].toUpperCase(),
+                routePattern: normalizeRoutePattern(pathMatch[1])
+              };
+            }
+          }
+        }
+      }
+      unresolvedCalls.push({
+        callerNodeId: caller.id,
+        calleeExpression: methodName,
+        line,
+        apiCallMeta
+      });
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "java",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/rust-extractor.js
+var RustExtractor = class {
+  language = "rust";
+  fileExtensions = [".rs"];
+  wasmGrammarName = "rust";
+  extractFile(tree, filePath, sourceCode) {
+    return extractRustFile(tree, filePath, sourceCode);
+  }
+};
+function extractRustFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("rust", filePath, "", fileName, "def");
+  nodes.push({
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "rust",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  });
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "use_declaration") {
+      const line = cursorNode.startPosition.row + 1;
+      const text = cursorNode.text.replace(/^use\s+|;$/g, "").trim();
+      const parts2 = text.split("::");
+      const lastPart = parts2.pop() || text;
+      const modPath = parts2.join("/");
+      imports.push({
+        modulePath: modPath,
+        importedNames: [{ name: lastPart }],
+        isFromImport: true,
+        line
+      });
+      return;
+    }
+    if (nodeType === "struct_item") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const structName = nameNode ? nameNode.text : "AnonymousStruct";
+      const nodeId = formatNodeId(filePath, structName);
+      const scipUri = formatScipUri("rust", filePath, "", structName, "class");
+      const structNode = {
+        id: nodeId,
+        name: structName,
+        qualifiedName: formatQualifiedName(filePath, structName),
+        entityType: "CLASS",
+        semanticRole: "UNKNOWN",
+        filePath,
+        language: "rust",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(structNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      return;
+    }
+    if (nodeType === "trait_item") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const traitName = nameNode ? nameNode.text : "AnonymousTrait";
+      const nodeId = formatNodeId(filePath, traitName);
+      const scipUri = formatScipUri("rust", filePath, "", traitName, "interface");
+      const traitNode = {
+        id: nodeId,
+        name: traitName,
+        qualifiedName: formatQualifiedName(filePath, traitName),
+        entityType: "INTERFACE",
+        semanticRole: "MODEL",
+        filePath,
+        language: "rust",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(traitNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      return;
+    }
+    if (nodeType === "impl_item") {
+      const typeNode = cursorNode.childForFieldName("type");
+      const traitNode = cursorNode.childForFieldName("trait");
+      const typeName = typeNode ? typeNode.text : "UnknownType";
+      const traitName = traitNode ? traitNode.text : void 0;
+      const structNodeId = formatNodeId(filePath, typeName);
+      const parentContainer = nodes.find((n) => n.id === structNodeId) || nodes[0];
+      if (traitName) {
+        unresolvedInheritance.push({
+          classNodeId: structNodeId,
+          superclassName: traitName,
+          line: cursorNode.startPosition.row + 1
+        });
+      }
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        contextStack.push(parentContainer);
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+        contextStack.pop();
+      }
+      return;
+    }
+    if (nodeType === "function_item") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const funcName = nameNode ? nameNode.text : "anonymous_func";
+      const isInsideImpl = contextStack.some((n) => n.entityType === "CLASS" || n.entityType === "INTERFACE");
+      const parentContainer = contextStack[contextStack.length - 1] || nodes[0];
+      let httpMethod;
+      let routePath;
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const child = cursorNode.namedChild(i2);
+        if (child?.type === "attribute_item") {
+          const actixMatch = child.text.match(/#\[(get|post|put|delete|patch)\s*\(\s*["']([^"']*)["']\s*\)\]/i);
+          if (actixMatch) {
+            httpMethod = actixMatch[1].toUpperCase();
+            routePath = actixMatch[2];
+          }
+        }
+      }
+      const isEntry = !!httpMethod || /^(main|start|run|serve)$/i.test(funcName);
+      const entityType = httpMethod ? "ENDPOINT" : isInsideImpl ? "METHOD" : "FUNCTION";
+      const semanticRole = isEntry ? "ENTRY" : "UNKNOWN";
+      const nodeId = formatNodeId(filePath, isInsideImpl ? `${parentContainer.name}_${funcName}` : funcName);
+      const scipUri = formatScipUri("rust", filePath, isInsideImpl ? parentContainer.name : "", funcName, isInsideImpl ? "method" : "def");
+      const funcNode = {
+        id: nodeId,
+        name: funcName,
+        qualifiedName: formatQualifiedName(filePath, isInsideImpl ? `${parentContainer.name}.${funcName}` : funcName),
+        entityType,
+        semanticRole,
+        filePath,
+        language: "rust",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      if (httpMethod && routePath) {
+        funcNode.endpointMeta = {
+          httpMethod,
+          routePath: normalizeRoutePattern(routePath),
+          isClientCall: false
+        };
+      }
+      nodes.push(funcNode);
+      edges.push({
+        id: `contains_${parentContainer.id}_${nodeId}`,
+        source: parentContainer.id,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(funcNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "call_expression") {
+      const fnNode = cursorNode.childForFieldName("function");
+      const caller = getCurrentCaller() || nodes[0];
+      const line = cursorNode.startPosition.row + 1;
+      if (fnNode && caller) {
+        const calleeText = fnNode.text;
+        if (/\.route\b/.test(calleeText)) {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount >= 2) {
+            const firstArg = argsNode.namedChild(0);
+            const secondArg = argsNode.namedChild(1);
+            if (firstArg && firstArg.type === "string_literal") {
+              const routeRaw = firstArg.text.replace(/^"|"$/g, "");
+              const normRoute = normalizeRoutePattern(routeRaw);
+              let m = "GET";
+              if (secondArg) {
+                const sText = secondArg.text;
+                const mMatch = sText.match(/\b(get|post|put|delete|patch)\b/i);
+                if (mMatch)
+                  m = mMatch[1].toUpperCase();
+              }
+              const endpointNodeId = formatNodeId(filePath, `route_${m}_${normRoute}`);
+              const endpointNode = {
+                id: endpointNodeId,
+                name: `${m} ${normRoute}`,
+                qualifiedName: formatQualifiedName(filePath, `route.${m}.${normRoute}`),
+                entityType: "ENDPOINT",
+                semanticRole: "ENTRY",
+                filePath,
+                language: "rust",
+                scipUri: formatScipUri("rust", filePath, "", `${m}_${normRoute}`, "def"),
+                loc: {
+                  startLine: line,
+                  endLine: cursorNode.endPosition.row + 1
+                },
+                endpointMeta: {
+                  httpMethod: m,
+                  routePath: normRoute,
+                  isClientCall: false
+                }
+              };
+              nodes.push(endpointNode);
+              edges.push({
+                id: `contains_${fileNodeId}_${endpointNodeId}`,
+                source: fileNodeId,
+                target: endpointNodeId,
+                relation: "CONTAINS",
+                confidence: "EXTRACTED"
+              });
+            }
+          }
+        }
+        let apiCallMeta;
+        const reqwestMatch = calleeText.match(/(?:reqwest|client)\.(get|post|put|delete)/i);
+        if (reqwestMatch) {
+          const argsNode = cursorNode.childForFieldName("arguments");
+          if (argsNode && argsNode.namedChildCount > 0) {
+            const firstArg = argsNode.namedChild(0);
+            if (firstArg && firstArg.type === "string_literal") {
+              const url = firstArg.text.replace(/^"|"$/g, "");
+              const pathMatch = url.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+              if (pathMatch) {
+                apiCallMeta = {
+                  httpMethod: reqwestMatch[1].toUpperCase(),
+                  routePattern: normalizeRoutePattern(pathMatch[1])
+                };
+              }
+            }
+          }
+        }
+        unresolvedCalls.push({
+          callerNodeId: caller.id,
+          calleeExpression: calleeText,
+          line,
+          apiCallMeta
+        });
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "rust",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/cpp-extractor.js
+var CppExtractor = class {
+  language = "cpp";
+  fileExtensions = [".cpp", ".cc", ".cxx", ".c", ".hpp", ".hxx", ".h"];
+  wasmGrammarName = "cpp";
+  extractFile(tree, filePath, sourceCode) {
+    return extractCppFile(tree, filePath, sourceCode);
+  }
+};
+function extractCppFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lang = filePath.endsWith(".c") || filePath.endsWith(".h") ? "c" : "cpp";
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri(lang, filePath, "", fileName, "def");
+  nodes.push({
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: lang,
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  });
+  const contextStack = [];
+  let currentNamespace = "";
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function extractDeclaratorName(declarator) {
+    if (!declarator)
+      return "anonymous_func";
+    if (declarator.type === "identifier" || declarator.type === "field_identifier") {
+      return declarator.text;
+    }
+    if (declarator.type === "function_declarator") {
+      const inner = declarator.childForFieldName("declarator");
+      return extractDeclaratorName(inner);
+    }
+    if (declarator.type === "qualified_identifier") {
+      const nameChild = declarator.childForFieldName("name");
+      return nameChild ? nameChild.text : declarator.text;
+    }
+    const nameNode = declarator.childForFieldName("declarator");
+    if (nameNode)
+      return extractDeclaratorName(nameNode);
+    return declarator.text.replace(/\(.*\)/, "").trim();
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "preproc_include") {
+      const pathNode = cursorNode.childForFieldName("path");
+      if (pathNode) {
+        const rawInc = pathNode.text.replace(/^[<"]|[>"]$/g, "");
+        imports.push({
+          modulePath: rawInc,
+          importedNames: [{ name: rawInc.split("/").pop() || rawInc }],
+          isFromImport: false,
+          line: cursorNode.startPosition.row + 1
+        });
+      }
+      return;
+    }
+    if (nodeType === "namespace_definition") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const prevNamespace = currentNamespace;
+      if (nameNode) {
+        currentNamespace = currentNamespace ? `${currentNamespace}::${nameNode.text}` : nameNode.text;
+      }
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      currentNamespace = prevNamespace;
+      return;
+    }
+    if (nodeType === "class_specifier" || nodeType === "struct_specifier") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const className = nameNode ? nameNode.text : "AnonymousType";
+      const nodeId = formatNodeId(filePath, className);
+      const qName = currentNamespace ? `${currentNamespace}::${className}` : className;
+      const scipUri = formatScipUri(lang, filePath, currentNamespace, className, "class");
+      const classNode = {
+        id: nodeId,
+        name: className,
+        qualifiedName: qName,
+        entityType: "CLASS",
+        semanticRole: "UNKNOWN",
+        filePath,
+        language: lang,
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(classNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const baseClause = cursorNode.namedChildren.find((c) => c.type === "base_class_clause");
+      if (baseClause) {
+        for (let i2 = 0; i2 < baseClause.namedChildCount; i2++) {
+          const baseSpec = baseClause.namedChild(i2);
+          if (baseSpec && (baseSpec.type === "type_identifier" || baseSpec.type === "qualified_identifier")) {
+            unresolvedInheritance.push({
+              classNodeId: nodeId,
+              superclassName: baseSpec.text,
+              line: baseSpec.startPosition.row + 1
+            });
+          }
+        }
+      }
+      contextStack.push(classNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "function_definition") {
+      const declaratorNode = cursorNode.childForFieldName("declarator");
+      const funcName = extractDeclaratorName(declaratorNode);
+      const isInsideClass = contextStack.some((n) => n.entityType === "CLASS");
+      const parentContainer = contextStack[contextStack.length - 1] || nodes[0];
+      const isEntry = !isInsideClass && /^(main|_tmain|WinMain|run|start)$/i.test(funcName);
+      const entityType = isInsideClass ? "METHOD" : "FUNCTION";
+      const semanticRole = isEntry ? "ENTRY" : "UNKNOWN";
+      const nodeId = formatNodeId(filePath, isInsideClass ? `${parentContainer.name}_${funcName}` : funcName);
+      const qName = isInsideClass ? `${parentContainer.qualifiedName}::${funcName}` : currentNamespace ? `${currentNamespace}::${funcName}` : funcName;
+      const scipUri = formatScipUri(lang, filePath, isInsideClass ? parentContainer.name : currentNamespace, funcName, isInsideClass ? "method" : "def");
+      const funcNode = {
+        id: nodeId,
+        name: funcName,
+        qualifiedName: qName,
+        entityType,
+        semanticRole,
+        filePath,
+        language: lang,
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(funcNode);
+      edges.push({
+        id: `contains_${parentContainer.id}_${nodeId}`,
+        source: parentContainer.id,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(funcNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "call_expression") {
+      const fnNode = cursorNode.childForFieldName("function");
+      const caller = getCurrentCaller() || nodes[0];
+      const line = cursorNode.startPosition.row + 1;
+      if (fnNode && caller) {
+        const calleeText = fnNode.text;
+        unresolvedCalls.push({
+          callerNodeId: caller.id,
+          calleeExpression: calleeText,
+          line
+        });
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: lang,
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/csharp-extractor.js
+var CSharpExtractor = class {
+  language = "csharp";
+  fileExtensions = [".cs"];
+  wasmGrammarName = "c_sharp";
+  extractFile(tree, filePath, sourceCode) {
+    return extractCSharpFile(tree, filePath, sourceCode);
+  }
+};
+function extractCSharpFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  let currentNamespace = "";
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("csharp", filePath, "", fileName, "def");
+  nodes.push({
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "csharp",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  });
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function extractAttributes(node) {
+    const attributes = [];
+    for (let i2 = 0; i2 < node.namedChildCount; i2++) {
+      const child = node.namedChild(i2);
+      if (child && child.type === "attribute_list") {
+        attributes.push(child.text);
+      }
+    }
+    return attributes;
+  }
+  function parseAspNetRoute(attributes) {
+    for (const attr of attributes) {
+      const httpMatch = attr.match(/\[\s*Http(Get|Post|Put|Delete|Patch)\s*(?:\(\s*["']([^"']*)["']\s*\))?\s*\]/i);
+      if (httpMatch) {
+        return {
+          isEndpoint: true,
+          method: httpMatch[1].toUpperCase(),
+          routePath: httpMatch[2] || ""
+        };
+      }
+    }
+    return { isEndpoint: false };
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "namespace_declaration" || nodeType === "file_scoped_namespace_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      if (nameNode) {
+        currentNamespace = nameNode.text;
+      }
+      if (nodeType === "file_scoped_namespace_declaration") {
+        return;
+      }
+    }
+    if (nodeType === "using_directive") {
+      const line = cursorNode.startPosition.row + 1;
+      const text = cursorNode.text.replace(/^using\s+|;$/g, "").trim();
+      const lastPart = text.split(".").pop() || text;
+      imports.push({
+        modulePath: text,
+        importedNames: [{ name: lastPart }],
+        isFromImport: false,
+        line
+      });
+      return;
+    }
+    if (nodeType === "class_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const className = nameNode ? nameNode.text : "AnonymousClass";
+      const attributes = extractAttributes(cursorNode);
+      let classRoutePrefix = "";
+      let isApiController = false;
+      for (const attr of attributes) {
+        if (/\[\s*ApiController\s*\]/i.test(attr))
+          isApiController = true;
+        const rMatch = attr.match(/\[\s*Route\s*\(\s*["']([^"']*)["']\s*\)\s*\]/i);
+        if (rMatch) {
+          classRoutePrefix = rMatch[1];
+        }
+      }
+      if (classRoutePrefix.includes("[controller]")) {
+        const cleanCtrlName = className.replace(/Controller$/i, "");
+        classRoutePrefix = classRoutePrefix.replace(/\[controller\]/gi, cleanCtrlName);
+      }
+      const nodeId = formatNodeId(filePath, className);
+      const qName = currentNamespace ? `${currentNamespace}.${className}` : className;
+      const scipUri = formatScipUri("csharp", filePath, currentNamespace, className, "class");
+      const classNode = {
+        id: nodeId,
+        name: className,
+        qualifiedName: qName,
+        entityType: "CLASS",
+        semanticRole: isApiController ? "ENTRY" : "UNKNOWN",
+        filePath,
+        language: "csharp",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        },
+        metadata: { attributes, classRoutePrefix }
+      };
+      nodes.push(classNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const baseList = cursorNode.namedChildren.find((c) => c.type === "base_list");
+      if (baseList) {
+        for (let j = 0; j < baseList.namedChildCount; j++) {
+          const baseType = baseList.namedChild(j);
+          if (baseType) {
+            unresolvedInheritance.push({
+              classNodeId: nodeId,
+              superclassName: baseType.text,
+              line: baseType.startPosition.row + 1
+            });
+          }
+        }
+      }
+      contextStack.push(classNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "interface_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const ifaceName = nameNode ? nameNode.text : "AnonymousInterface";
+      const nodeId = formatNodeId(filePath, ifaceName);
+      const qName = currentNamespace ? `${currentNamespace}.${ifaceName}` : ifaceName;
+      const scipUri = formatScipUri("csharp", filePath, currentNamespace, ifaceName, "interface");
+      const ifaceNode = {
+        id: nodeId,
+        name: ifaceName,
+        qualifiedName: qName,
+        entityType: "INTERFACE",
+        semanticRole: "MODEL",
+        filePath,
+        language: "csharp",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(ifaceNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${nodeId}`,
+        source: fileNodeId,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      return;
+    }
+    if (nodeType === "method_declaration") {
+      const nameNode = cursorNode.childForFieldName("name");
+      const methodName = nameNode ? nameNode.text : "anonymous_method";
+      const parentContainer = contextStack[contextStack.length - 1] || nodes[0];
+      const attributes = extractAttributes(cursorNode);
+      const routeInfo = parseAspNetRoute(attributes);
+      const isEndpoint = routeInfo.isEndpoint;
+      const nodeId = formatNodeId(filePath, `${parentContainer.name}_${methodName}`);
+      const qName = `${parentContainer.qualifiedName}.${methodName}`;
+      const scipUri = formatScipUri("csharp", filePath, `${currentNamespace}#${parentContainer.name}`, methodName, "method");
+      const methodNode = {
+        id: nodeId,
+        name: methodName,
+        qualifiedName: qName,
+        entityType: isEndpoint ? "ENDPOINT" : "METHOD",
+        semanticRole: isEndpoint ? "ENTRY" : "UNKNOWN",
+        filePath,
+        language: "csharp",
+        scipUri,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      if (isEndpoint && routeInfo.method) {
+        const prefix = parentContainer.metadata?.classRoutePrefix || "";
+        const fullRoute = normalizeRoutePattern(`${prefix}/${routeInfo.routePath || ""}`);
+        methodNode.endpointMeta = {
+          httpMethod: routeInfo.method,
+          routePath: fullRoute,
+          isClientCall: false
+        };
+      }
+      nodes.push(methodNode);
+      edges.push({
+        id: `contains_${parentContainer.id}_${nodeId}`,
+        source: parentContainer.id,
+        target: nodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(methodNode);
+      const bodyNode = cursorNode.childForFieldName("body");
+      if (bodyNode) {
+        for (let i2 = 0; i2 < bodyNode.namedChildCount; i2++) {
+          const child = bodyNode.namedChild(i2);
+          if (child)
+            traverse(child);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "invocation_expression") {
+      const caller = getCurrentCaller() || nodes[0];
+      const line = cursorNode.startPosition.row + 1;
+      const fullText = cursorNode.text;
+      let apiCallMeta;
+      const httpMatch = fullText.match(/(?:httpClient|_httpClient)\.(Get|Post|Put|Delete)Async/i);
+      if (httpMatch) {
+        const argsNode = cursorNode.childForFieldName("arguments");
+        if (argsNode && argsNode.namedChildCount > 0) {
+          const firstArg = argsNode.namedChild(0);
+          if (firstArg && firstArg.type === "string_literal") {
+            const rawUrl = firstArg.text.replace(/^"|"$/g, "");
+            const pathMatch = rawUrl.match(/^(?:https?:\/\/[^/]+)?(\/[^?#]*)/);
+            if (pathMatch) {
+              apiCallMeta = {
+                httpMethod: httpMatch[1].toUpperCase(),
+                routePattern: normalizeRoutePattern(pathMatch[1])
+              };
+            }
+          }
+        }
+      }
+      unresolvedCalls.push({
+        callerNodeId: caller.id,
+        calleeExpression: fullText.split("(")[0],
+        line,
+        apiCallMeta
+      });
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "csharp",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractor-registry.js
+var ExtractorRegistry = class {
+  static extractors = [
+    new PythonExtractor(),
+    new TypeScriptExtractor(),
+    new GoExtractor(),
+    new JavaExtractor(),
+    new RustExtractor(),
+    new CppExtractor(),
+    new CSharpExtractor()
+  ];
+  static extMap = /* @__PURE__ */ new Map();
+  static {
+    for (const extractor of this.extractors) {
+      for (const ext of extractor.fileExtensions) {
+        this.extMap.set(ext.toLowerCase(), extractor);
+      }
+    }
+  }
+  /**
+   * 根据文件路径查找适用的提取器
+   */
+  static getExtractorForFile(filePath) {
+    const ext = path2.extname(filePath).toLowerCase();
+    return this.extMap.get(ext);
+  }
+  /**
+   * 获取文件对应的 Tree-Sitter Wasm 语法模块名
+   */
+  static getWasmGrammarForFile(filePath) {
+    const ext = path2.extname(filePath).toLowerCase();
+    if (ext === ".tsx")
+      return "tsx";
+    if (ext === ".jsx" || ext === ".js" || ext === ".mjs" || ext === ".cjs")
+      return "javascript";
+    if (ext === ".c" || ext === ".h")
+      return "c";
+    if (ext === ".cpp" || ext === ".cc" || ext === ".cxx" || ext === ".hpp" || ext === ".hxx")
+      return "cpp";
+    if (ext === ".cs")
+      return "c_sharp";
+    if (ext === ".rs")
+      return "rust";
+    if (ext === ".go")
+      return "go";
+    if (ext === ".java")
+      return "java";
+    if (ext === ".py")
+      return "python";
+    if (ext === ".ts")
+      return "typescript";
+    const extractor = this.extMap.get(ext);
+    return extractor ? extractor.wasmGrammarName : void 0;
+  }
+  /**
+   * 获取所有支持的文件后缀列表 (包含点号)
+   */
+  static getAllSupportedExtensions() {
+    return Array.from(this.extMap.keys());
+  }
+  /**
+   * 获取 fast-glob 扫描模式串
+   */
+  static getGlobPatterns() {
+    const cleanExts = Array.from(this.extMap.keys()).map((e) => e.replace(/^\./, ""));
+    return [`**/*.{${cleanExts.join(",")}}`];
+  }
+  /**
+   * 获取当前支持的所有语言名称
+   */
+  static getSupportedLanguages() {
+    return this.extractors.map((e) => e.language);
+  }
+};
+
 // packages/core/dist/indexer/symbol-table.js
-import path2 from "path";
+import path3 from "path";
+
+// packages/core/dist/graph/contract-linker.js
+var ContractLinker = class {
+  static linkContracts(nodes, extractions) {
+    const contractNodesMap = /* @__PURE__ */ new Map();
+    const contractEdges = [];
+    const serverEndpointMap = /* @__PURE__ */ new Map();
+    for (const node of nodes.values()) {
+      if (node.endpointMeta && !node.endpointMeta.isClientCall) {
+        const method = (node.endpointMeta.httpMethod || "GET").toUpperCase();
+        const normRoute = normalizeRoutePattern(node.endpointMeta.routePath);
+        const contractId = formatContractEndpointId(method, normRoute);
+        const list = serverEndpointMap.get(contractId) || [];
+        list.push(node);
+        serverEndpointMap.set(contractId, list);
+        if (!contractNodesMap.has(contractId)) {
+          contractNodesMap.set(contractId, {
+            id: contractId,
+            name: `${method} ${normRoute}`,
+            qualifiedName: `contract.rest.${method.toLowerCase()}.${normRoute}`,
+            entityType: "CONTRACT_ENDPOINT",
+            semanticRole: "CONTRACT",
+            filePath: "contracts/rest-api",
+            language: "contract",
+            scipUri: `scip/contract/rest/${method}${normRoute}`,
+            loc: { startLine: 1, endLine: 1 },
+            endpointMeta: {
+              httpMethod: method,
+              routePath: normRoute
+            }
+          });
+        }
+      }
+      if (node.topicMeta && !node.topicMeta.isPublisher && node.topicMeta.topicName) {
+        const topicName = node.topicMeta.topicName;
+        const topicContractId = formatContractTopicId(topicName);
+        if (!contractNodesMap.has(topicContractId)) {
+          contractNodesMap.set(topicContractId, {
+            id: topicContractId,
+            name: `Topic: ${topicName}`,
+            qualifiedName: `contract.topic.${topicName}`,
+            entityType: "CONTRACT_TOPIC",
+            semanticRole: "CONTRACT",
+            filePath: "contracts/topics",
+            language: "contract",
+            scipUri: `scip/contract/topic/${topicName}`,
+            loc: { startLine: 1, endLine: 1 },
+            topicMeta: {
+              topicName
+            }
+          });
+        }
+        const edgeId = `contract_sub_${topicContractId}_${node.id}`;
+        contractEdges.push({
+          id: edgeId,
+          source: topicContractId,
+          target: node.id,
+          relation: "SUBSCRIBES",
+          confidence: "EXTRACTED",
+          weight: 3
+        });
+      }
+    }
+    for (const ext of extractions) {
+      for (const call of ext.unresolvedCalls) {
+        if (call.apiCallMeta && call.apiCallMeta.routePattern) {
+          const method = (call.apiCallMeta.httpMethod || "GET").toUpperCase();
+          const normRoute = normalizeRoutePattern(call.apiCallMeta.routePattern);
+          const contractId = formatContractEndpointId(method, normRoute);
+          if (!contractNodesMap.has(contractId)) {
+            contractNodesMap.set(contractId, {
+              id: contractId,
+              name: `${method} ${normRoute}`,
+              qualifiedName: `contract.rest.${method.toLowerCase()}.${normRoute}`,
+              entityType: "CONTRACT_ENDPOINT",
+              semanticRole: "CONTRACT",
+              filePath: "contracts/rest-api",
+              language: "contract",
+              scipUri: `scip/contract/rest/${method}${normRoute}`,
+              loc: { startLine: 1, endLine: 1 },
+              endpointMeta: {
+                httpMethod: method,
+                routePath: normRoute
+              }
+            });
+          }
+          const edgeId = `contract_call_${call.callerNodeId}_${contractId}_${call.line}`;
+          contractEdges.push({
+            id: edgeId,
+            source: call.callerNodeId,
+            target: contractId,
+            relation: "CALLS_CONTRACT",
+            confidence: "EXTRACTED",
+            sourceLine: call.line,
+            weight: 3
+          });
+        }
+        if (call.topicMeta && call.topicMeta.isPublish && call.topicMeta.topicName) {
+          const topicName = call.topicMeta.topicName;
+          const topicContractId = formatContractTopicId(topicName);
+          if (!contractNodesMap.has(topicContractId)) {
+            contractNodesMap.set(topicContractId, {
+              id: topicContractId,
+              name: `Topic: ${topicName}`,
+              qualifiedName: `contract.topic.${topicName}`,
+              entityType: "CONTRACT_TOPIC",
+              semanticRole: "CONTRACT",
+              filePath: "contracts/topics",
+              language: "contract",
+              scipUri: `scip/contract/topic/${topicName}`,
+              loc: { startLine: 1, endLine: 1 },
+              topicMeta: {
+                topicName
+              }
+            });
+          }
+          const edgeId = `contract_pub_${call.callerNodeId}_${topicContractId}_${call.line}`;
+          contractEdges.push({
+            id: edgeId,
+            source: call.callerNodeId,
+            target: topicContractId,
+            relation: "PUBLISHES",
+            confidence: "EXTRACTED",
+            sourceLine: call.line,
+            weight: 3
+          });
+        }
+      }
+    }
+    for (const [contractId, handlers] of serverEndpointMap.entries()) {
+      for (const handler of handlers) {
+        const edgeId = `contract_handled_${contractId}_${handler.id}`;
+        contractEdges.push({
+          id: edgeId,
+          source: contractId,
+          target: handler.id,
+          relation: "HANDLED_BY",
+          confidence: "EXTRACTED",
+          weight: 3
+        });
+      }
+    }
+    return {
+      contractNodes: Array.from(contractNodesMap.values()),
+      contractEdges
+    };
+  }
+};
+
+// packages/core/dist/indexer/symbol-table.js
 var SymbolTable = class {
   // 所有节点字典: nodeId -> CodeNode
   nodes = /* @__PURE__ */ new Map();
   // 所有确定关系边字典: edgeId -> CodeEdge
   edges = /* @__PURE__ */ new Map();
+  // 契约节点与边追踪集合 (用于幂等刷新)
+  contractNodeIds = /* @__PURE__ */ new Set();
+  contractEdgeIds = /* @__PURE__ */ new Set();
   // 按文件分组的节点索引: filePath -> Set<nodeId>
   fileNodeIndex = /* @__PURE__ */ new Map();
   // 按文件分组的未解决调用: filePath -> ExtractedFileResult
@@ -105879,6 +108184,14 @@ var SymbolTable = class {
    * 全局跨文件调用与依赖关系解析 (Symbol Linking & Architecture Dependency)
    */
   resolveCrossFileReferences() {
+    for (const cid of this.contractNodeIds) {
+      this.nodes.delete(cid);
+    }
+    this.contractNodeIds.clear();
+    for (const eid of this.contractEdgeIds) {
+      this.edges.delete(eid);
+    }
+    this.contractEdgeIds.clear();
     for (const [filePath, extracted] of this.fileExtractionCache.entries()) {
       const fileNodeId = formatNodeId(filePath, "file");
       for (const imp of extracted.imports) {
@@ -106090,13 +108403,24 @@ var SymbolTable = class {
         }
       }
     }
+    const contractResult = ContractLinker.linkContracts(this.nodes, this.fileExtractionCache.values());
+    for (const cNode of contractResult.contractNodes) {
+      this.nodes.set(cNode.id, cNode);
+      this.contractNodeIds.add(cNode.id);
+    }
+    for (const cEdge of contractResult.contractEdges) {
+      this.edges.set(cEdge.id, cEdge);
+      this.contractEdgeIds.add(cEdge.id);
+    }
   }
   /**
-   * 辅助方法：将 Python 导入模块路径 (如 .service, ..utils, src.services.user) 解析为工作区实际文件相对路径
+   * 辅助方法：将多语言导入模块路径解析为工作区实际文件相对路径
    */
   resolveModuleToFilePath(sourceFilePath, modulePath, importedName) {
     const normSource = sourceFilePath.replace(/\\/g, "/");
-    const sourceDir = path2.posix.dirname(normSource);
+    const sourceDir = path3.posix.dirname(normSource);
+    const sourceExt = path3.posix.extname(normSource).toLowerCase();
+    const exts = sourceExt === ".py" ? [".py"] : [".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rs", ".cpp", ".c", ".h", ".hpp", ".cs", ".py"];
     if (modulePath.startsWith(".")) {
       const match = modulePath.match(/^(\.+)(.*)$/);
       if (match) {
@@ -106104,23 +108428,29 @@ var SymbolTable = class {
         const subPath = match[2];
         let targetDir = sourceDir;
         for (let i2 = 1; i2 < dots; i2++) {
-          targetDir = path2.posix.dirname(targetDir);
+          targetDir = path3.posix.dirname(targetDir);
         }
         const candidates = [];
         if (subPath) {
-          const rel = subPath.replace(/\./g, "/");
-          candidates.push(path2.posix.join(targetDir, `${rel}.py`));
-          candidates.push(path2.posix.join(targetDir, rel, "__init__.py"));
+          const rel = subPath.replace(/\./g, "/").replace(/^\//, "");
+          for (const ext of exts) {
+            candidates.push(path3.posix.join(targetDir, `${rel}${ext}`));
+            candidates.push(path3.posix.join(targetDir, rel, `index${ext}`));
+            candidates.push(path3.posix.join(targetDir, rel, `__init__${ext}`));
+            candidates.push(path3.posix.join(targetDir, rel, `mod${ext}`));
+          }
         }
         if (importedName && importedName !== "*") {
           const nameRel = importedName.replace(/\./g, "/");
           if (subPath) {
-            const rel = subPath.replace(/\./g, "/");
-            candidates.push(path2.posix.join(targetDir, rel, `${nameRel}.py`));
-            candidates.push(path2.posix.join(targetDir, rel, nameRel, "__init__.py"));
+            const rel = subPath.replace(/\./g, "/").replace(/^\//, "");
+            for (const ext of exts) {
+              candidates.push(path3.posix.join(targetDir, rel, `${nameRel}${ext}`));
+            }
           } else {
-            candidates.push(path2.posix.join(targetDir, `${nameRel}.py`));
-            candidates.push(path2.posix.join(targetDir, nameRel, "__init__.py"));
+            for (const ext of exts) {
+              candidates.push(path3.posix.join(targetDir, `${nameRel}${ext}`));
+            }
           }
         }
         for (const cand of candidates) {
@@ -106131,14 +108461,22 @@ var SymbolTable = class {
       }
     }
     if (modulePath) {
-      const relPath = modulePath.replace(/\./g, "/");
-      const candidates = [
-        `${relPath}.py`,
-        `${relPath}/__init__.py`
-      ];
+      let cleanMod = modulePath;
+      if (cleanMod.startsWith("@/") || cleanMod.startsWith("~/")) {
+        cleanMod = cleanMod.slice(2);
+      }
+      const relPath = cleanMod.replace(/\./g, "/");
+      const candidates = [];
+      for (const ext of exts) {
+        candidates.push(`${relPath}${ext}`);
+        candidates.push(`${relPath}/index${ext}`);
+        candidates.push(`${relPath}/__init__${ext}`);
+        candidates.push(`${relPath}/mod${ext}`);
+      }
       if (importedName && importedName !== "*") {
-        candidates.push(`${relPath}/${importedName}.py`);
-        candidates.push(`${relPath}/${importedName}/__init__.py`);
+        for (const ext of exts) {
+          candidates.push(`${relPath}/${importedName}${ext}`);
+        }
       }
       for (const cand of candidates) {
         const matched = this.matchRegisteredFile(cand);
@@ -106191,7 +108529,7 @@ var SymbolTable = class {
 // packages/core/dist/watcher/hash-watcher.js
 var import_fast_glob = __toESM(require_out4(), 1);
 import fs3 from "fs";
-import path3 from "path";
+import path4 from "path";
 import crypto from "crypto";
 import { execSync } from "child_process";
 var DualTrackWatcher = class _DualTrackWatcher {
@@ -106201,12 +108539,12 @@ var DualTrackWatcher = class _DualTrackWatcher {
   // relativePath -> sha256
   isGitRepo = false;
   constructor(workspaceRoot, scopePath = ".") {
-    this.workspaceRoot = path3.resolve(workspaceRoot);
+    this.workspaceRoot = path4.resolve(workspaceRoot);
     this.scopePath = scopePath;
     this.checkGitAvailability();
   }
   checkGitAvailability() {
-    const gitDir = path3.join(this.workspaceRoot, ".git");
+    const gitDir = path4.join(this.workspaceRoot, ".git");
     this.isGitRepo = fs3.existsSync(gitDir);
   }
   /**
@@ -106220,7 +108558,7 @@ var DualTrackWatcher = class _DualTrackWatcher {
    * 扫描指定范围目录下的所有代码文件并构建初始哈希基准表
    */
   async buildBaseline(patterns = ["**/*.py"]) {
-    const searchRoot = path3.resolve(this.workspaceRoot, this.scopePath);
+    const searchRoot = path4.resolve(this.workspaceRoot, this.scopePath);
     const files = await (0, import_fast_glob.default)(patterns, {
       cwd: searchRoot,
       absolute: false,
@@ -106228,8 +108566,8 @@ var DualTrackWatcher = class _DualTrackWatcher {
     });
     this.hashMap.clear();
     for (const relFile of files) {
-      const workspaceRelPath = path3.relative(this.workspaceRoot, path3.join(searchRoot, relFile)).replace(/\\/g, "/");
-      const fullPath = path3.join(this.workspaceRoot, workspaceRelPath);
+      const workspaceRelPath = path4.relative(this.workspaceRoot, path4.join(searchRoot, relFile)).replace(/\\/g, "/");
+      const fullPath = path4.join(this.workspaceRoot, workspaceRelPath);
       try {
         const hash = _DualTrackWatcher.computeFileHash(fullPath);
         this.hashMap.set(workspaceRelPath, hash);
@@ -106282,7 +108620,7 @@ var DualTrackWatcher = class _DualTrackWatcher {
     return { added, modified, deleted, isGitAccelerated: true };
   }
   async detectViaHash(patterns) {
-    const searchRoot = path3.resolve(this.workspaceRoot, this.scopePath);
+    const searchRoot = path4.resolve(this.workspaceRoot, this.scopePath);
     const currentFiles = await (0, import_fast_glob.default)(patterns, {
       cwd: searchRoot,
       absolute: false,
@@ -106290,8 +108628,8 @@ var DualTrackWatcher = class _DualTrackWatcher {
     });
     const currentMap = /* @__PURE__ */ new Map();
     for (const relFile of currentFiles) {
-      const workspaceRelPath = path3.relative(this.workspaceRoot, path3.join(searchRoot, relFile)).replace(/\\/g, "/");
-      const fullPath = path3.join(this.workspaceRoot, workspaceRelPath);
+      const workspaceRelPath = path4.relative(this.workspaceRoot, path4.join(searchRoot, relFile)).replace(/\\/g, "/");
+      const fullPath = path4.join(this.workspaceRoot, workspaceRelPath);
       try {
         const hash = _DualTrackWatcher.computeFileHash(fullPath);
         currentMap.set(workspaceRelPath, hash);
@@ -106320,7 +108658,7 @@ var DualTrackWatcher = class _DualTrackWatcher {
       this.hashMap.delete(del);
     }
     for (const addOrMod of [...changes.added, ...changes.modified]) {
-      const fullPath = path3.join(this.workspaceRoot, addOrMod);
+      const fullPath = path4.join(this.workspaceRoot, addOrMod);
       if (fs3.existsSync(fullPath)) {
         this.hashMap.set(addOrMod, _DualTrackWatcher.computeFileHash(fullPath));
       }
@@ -106346,29 +108684,44 @@ var DualTrackWatcher = class _DualTrackWatcher {
 
 // packages/core/dist/archetype/detector.js
 import fs4 from "fs";
-import path4 from "path";
+import path5 from "path";
 var ArchetypeEngine = class {
   /**
    * 基于目录模式与依赖声明初步侦测架构原型
    */
   static detectArchetype(workspaceRoot, fileList) {
-    const root = path4.resolve(workspaceRoot);
+    const root = path5.resolve(workspaceRoot);
     const matchedRules = [];
     let dependencyText = "";
-    const depFiles = ["requirements.txt", "pyproject.toml", "Pipfile", "setup.py"];
+    const depFiles = [
+      "requirements.txt",
+      "pyproject.toml",
+      "Pipfile",
+      "setup.py",
+      "package.json",
+      "go.mod",
+      "pom.xml",
+      "build.gradle",
+      "build.gradle.kts",
+      "Cargo.toml",
+      "CMakeLists.txt"
+    ];
     for (const df of depFiles) {
-      const fullPath = path4.join(root, df);
+      const fullPath = path5.join(root, df);
       if (fs4.existsSync(fullPath)) {
-        dependencyText += fs4.readFileSync(fullPath, "utf-8").toLowerCase() + "\n";
+        try {
+          dependencyText += fs4.readFileSync(fullPath, "utf-8").toLowerCase() + "\n";
+        } catch {
+        }
       }
     }
     const normFiles = fileList.map((f) => f.toLowerCase().replace(/\\/g, "/"));
     let webScore = 0;
-    if (/(fastapi|flask|django|tornado|aiohttp)/i.test(dependencyText)) {
+    if (/(fastapi|flask|django|tornado|aiohttp|express|koa|fastify|nestjs|next|nuxt|hono|gin-gonic|labstack\/echo|spring-boot|spring-web|axum|actix-web|aspnetcore|fastendpoints)/i.test(dependencyText)) {
       webScore += 0.45;
       matchedRules.push("\u4F9D\u8D56\u58F0\u660E\u4E2D\u5305\u542B\u4E3B\u6D41 Web \u6846\u67B6");
     }
-    const hasRouters = normFiles.some((f) => /(router|controller|api|views)/.test(f));
+    const hasRouters = normFiles.some((f) => /(router|controller|api|views|endpoints?)/.test(f));
     const hasServices = normFiles.some((f) => /(service|usecase|domain|biz)/.test(f));
     const hasData = normFiles.some((f) => /(model|schema|dao|repo|entity)/.test(f));
     if (hasRouters)
@@ -106378,7 +108731,7 @@ var ArchetypeEngine = class {
     if (hasData)
       webScore += 0.15;
     let workerScore = 0;
-    if (/(celery|kafka|pika|redis|rq|dramatiq)/i.test(dependencyText)) {
+    if (/(celery|kafka|pika|redis|rq|dramatiq|bull|bullmq|kafkajs|amqplib|asynq|rocketmq|rdkafka|lapin)/i.test(dependencyText)) {
       workerScore += 0.45;
       matchedRules.push("\u4F9D\u8D56\u58F0\u660E\u4E2D\u5305\u542B\u4EFB\u52A1\u961F\u5217\u6216\u6D88\u606F\u4E2D\u95F4\u4EF6");
     }
@@ -106386,12 +108739,12 @@ var ArchetypeEngine = class {
     if (hasTasks)
       workerScore += 0.35;
     let cliScore = 0;
-    if (/(click|typer|fire|prompt_toolkit)/i.test(dependencyText)) {
+    if (/(click|typer|fire|prompt_toolkit|commander|yargs|oclif|cobra|urfave\/cli|clap)/i.test(dependencyText)) {
       cliScore += 0.45;
       matchedRules.push("\u4F9D\u8D56\u58F0\u660E\u4E2D\u5305\u542B CLI \u6846\u67B6");
     }
     const hasCliDir = normFiles.some((f) => /(cli|command|pipeline|cmd)/.test(f));
-    const hasMain = normFiles.some((f) => /(__main__\.py|main\.py)/.test(f));
+    const hasMain = normFiles.some((f) => /(__main__\.py|main\.py|main\.go|main\.rs|index\.ts|app\.ts)/.test(f));
     if (hasCliDir)
       cliScore += 0.3;
     if (hasMain)
@@ -106514,8 +108867,12 @@ var DualModelCompiler = class {
     const architectureView = this.buildArchitectureView(fileList, nodes, edges, currentArchetype);
     const processFlows = this.buildProcessFlows(nodes, edges);
     const allNodesMap = {};
+    const languages = {};
     for (const n of nodes) {
       allNodesMap[n.id] = n;
+      if (n.language && n.language !== "contract") {
+        languages[n.language] = (languages[n.language] || 0) + 1;
+      }
     }
     return {
       meta: {
@@ -106527,7 +108884,8 @@ var DualModelCompiler = class {
         isAutoCorrected,
         fileCount: fileList.length,
         nodeCount: nodes.length,
-        edgeCount: edges.length
+        edgeCount: edges.length,
+        languages
       },
       architectureView,
       processFlows,
@@ -106573,7 +108931,7 @@ var DualModelCompiler = class {
         if (e.relation === "CALLS" || e.relation === "IMPORTS" || e.relation === "EXTENDS" || e.relation === "IMPLEMENTS") {
           const srcFile = nodeToFileMap.get(e.source);
           const tgtFile = nodeToFileMap.get(e.target);
-          if (srcFile && tgtFile && srcFile !== tgtFile) {
+          if (srcFile && tgtFile && srcFile !== tgtFile && g.hasNode(srcFile) && g.hasNode(tgtFile)) {
             const relWeight = e.relation === "EXTENDS" ? 3 : e.relation === "CALLS" ? 2 : 1;
             if (g.hasEdge(srcFile, tgtFile)) {
               const prevW = g.getEdgeAttribute(srcFile, tgtFile, "weight") || 1;
@@ -106643,6 +109001,19 @@ var DualModelCompiler = class {
         }
       }
     }
+    const hasContractNodes = nodes.some((n) => n.semanticRole === "CONTRACT");
+    if (hasContractNodes) {
+      fileToModuleMap.set("contracts/rest-api", "mod_contracts");
+      fileToModuleMap.set("contracts/topics", "mod_contracts");
+      modules.push({
+        id: "mod_contracts",
+        name: "API Contracts & Hubs",
+        files: ["contracts/rest-api", "contracts/topics"],
+        inPorts: [],
+        outPorts: [],
+        archetypeRole: "Contract Hub"
+      });
+    }
     const nodeToFile = /* @__PURE__ */ new Map();
     const nodeNameMap = /* @__PURE__ */ new Map();
     for (const n of nodes) {
@@ -106655,7 +109026,7 @@ var DualModelCompiler = class {
       moduleObjMap.set(m.id, m);
     }
     for (const e of edges) {
-      if (e.relation === "CALLS" || e.relation === "IMPORTS" || e.relation === "EXTENDS" || e.relation === "IMPLEMENTS") {
+      if (e.relation === "CALLS" || e.relation === "IMPORTS" || e.relation === "EXTENDS" || e.relation === "IMPLEMENTS" || e.relation === "CALLS_CONTRACT" || e.relation === "HANDLED_BY" || e.relation === "PUBLISHES" || e.relation === "SUBSCRIBES") {
         const srcFile = nodeToFile.get(e.source);
         const tgtFile = nodeToFile.get(e.target);
         if (!srcFile || !tgtFile)
@@ -106707,7 +109078,7 @@ var DualModelCompiler = class {
     const adj = /* @__PURE__ */ new Map();
     const inDegreeMap = /* @__PURE__ */ new Map();
     for (const e of edges) {
-      if (e.relation === "CALLS") {
+      if (e.relation === "CALLS" || e.relation === "CALLS_CONTRACT" || e.relation === "HANDLED_BY" || e.relation === "PUBLISHES" || e.relation === "SUBSCRIBES") {
         const list = adj.get(e.source) || [];
         list.push(e.target);
         adj.set(e.source, list);
@@ -106901,14 +109272,14 @@ var DualModelCompiler = class {
 
 // packages/core/dist/persistence/cache-store.js
 import fs5 from "fs";
-import path5 from "path";
+import path6 from "path";
 var CACHE_DIR_NAME = ".codegraph";
 var CACHE_FILE_NAME = "graph-cache.json";
 function getCacheDir(workspaceRoot) {
-  return path5.join(path5.resolve(workspaceRoot), CACHE_DIR_NAME);
+  return path6.join(path6.resolve(workspaceRoot), CACHE_DIR_NAME);
 }
 function getCacheFilePath(workspaceRoot) {
-  return path5.join(getCacheDir(workspaceRoot), CACHE_FILE_NAME);
+  return path6.join(getCacheDir(workspaceRoot), CACHE_FILE_NAME);
 }
 function hasCache(workspaceRoot) {
   try {
@@ -106937,7 +109308,7 @@ function loadCache(workspaceRoot) {
 }
 function saveCache(workspaceRoot, data) {
   try {
-    const resolvedRoot = path5.resolve(workspaceRoot);
+    const resolvedRoot = path6.resolve(workspaceRoot);
     const cacheDir = getCacheDir(resolvedRoot);
     if (!fs5.existsSync(cacheDir)) {
       fs5.mkdirSync(cacheDir, { recursive: true });
@@ -106971,11 +109342,11 @@ function saveCache(workspaceRoot, data) {
 }
 function ensureGitignore(workspaceRoot) {
   try {
-    const gitDir = path5.join(workspaceRoot, ".git");
+    const gitDir = path6.join(workspaceRoot, ".git");
     if (!fs5.existsSync(gitDir)) {
       return;
     }
-    const gitignorePath = path5.join(workspaceRoot, ".gitignore");
+    const gitignorePath = path6.join(workspaceRoot, ".gitignore");
     if (!fs5.existsSync(gitignorePath)) {
       const content2 = "# CodeGraph local cache\n.codegraph/\n";
       fs5.writeFileSync(gitignorePath, content2, "utf-8");
@@ -107152,7 +109523,7 @@ var ElkLayoutEngine = class {
 // packages/core/dist/server.js
 import http from "http";
 import fs6 from "fs";
-import path6 from "path";
+import path7 from "path";
 import { URL as URL2, fileURLToPath as fileURLToPath2 } from "url";
 var CodeGraphServer = class {
   server;
@@ -107163,13 +109534,13 @@ var CodeGraphServer = class {
   isScanning = false;
   constructor(options) {
     this.port = options.port || 3333;
-    this.workspaceRoot = path6.resolve(options.workspaceRoot);
+    this.workspaceRoot = path7.resolve(options.workspaceRoot);
     this.staticDir = options.staticDir;
     if (!this.staticDir) {
       try {
         const __filename2 = fileURLToPath2(import.meta.url);
-        const __dirname3 = path6.dirname(__filename2);
-        const candidate = path6.resolve(__dirname3, "../../webview/dist");
+        const __dirname3 = path7.dirname(__filename2);
+        const candidate = path7.resolve(__dirname3, "../../webview/dist");
         if (fs6.existsSync(candidate)) {
           this.staticDir = candidate;
         }
@@ -107213,7 +109584,7 @@ var CodeGraphServer = class {
     });
   }
   setWorkspace(workspaceRoot, scopePath) {
-    const resolved = path6.resolve(workspaceRoot);
+    const resolved = path7.resolve(workspaceRoot);
     if (this.workspaceRoot !== resolved) {
       this.workspaceRoot = resolved;
       this.core.setWorkspaceRoot(this.workspaceRoot, scopePath || ".");
@@ -107248,12 +109619,12 @@ var CodeGraphServer = class {
       return;
     }
     if (this.staticDir && fs6.existsSync(this.staticDir)) {
-      let filePath = path6.join(this.staticDir, pathname === "/" ? "index.html" : pathname);
+      let filePath = path7.join(this.staticDir, pathname === "/" ? "index.html" : pathname);
       if (!fs6.existsSync(filePath)) {
-        filePath = path6.join(this.staticDir, "index.html");
+        filePath = path7.join(this.staticDir, "index.html");
       }
       if (fs6.existsSync(filePath)) {
-        const ext = path6.extname(filePath);
+        const ext = path7.extname(filePath);
         const mimeTypes = {
           ".html": "text/html",
           ".js": "application/javascript",
@@ -107429,7 +109800,7 @@ var CodeGraphServer = class {
         res.end(JSON.stringify({ error: "\u7F3A\u5C11 path \u53C2\u6570" }));
         return;
       }
-      const fullPath = path6.resolve(this.workspaceRoot, filePath);
+      const fullPath = path7.resolve(this.workspaceRoot, filePath);
       if (!fs6.existsSync(fullPath)) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "\u6587\u4EF6\u4E0D\u5B58\u5728" }));
@@ -107455,7 +109826,7 @@ var CodeGraphCore = class {
   lastLayout;
   forceArchetype;
   constructor(options) {
-    this.workspaceRoot = path7.resolve(options.workspaceRoot);
+    this.workspaceRoot = path8.resolve(options.workspaceRoot);
     this.scopePath = options.scopePath || ".";
     this.symbolTable = new SymbolTable();
     this.watcher = new DualTrackWatcher(this.workspaceRoot, this.scopePath);
@@ -107465,7 +109836,7 @@ var CodeGraphCore = class {
    * 动态切换/更新工作区根目录与扫描作用域
    */
   setWorkspaceRoot(newRoot, newScope = ".") {
-    const resolvedRoot = path7.resolve(newRoot);
+    const resolvedRoot = path8.resolve(newRoot);
     if (this.workspaceRoot !== resolvedRoot || this.scopePath !== newScope) {
       this.workspaceRoot = resolvedRoot;
       this.scopePath = newScope || ".";
@@ -107489,33 +109860,51 @@ var CodeGraphCore = class {
     this.watcher = new DualTrackWatcher(this.workspaceRoot, this.scopePath);
   }
   /**
-   * 执行全量代码解析与双模型图谱编译 (0-Token 本地运行)
+   * 执行跨语言多语法全量代码解析与双模型图谱编译 (0-Token 本地运行)
    */
   async scan(forceFull = false) {
     const startTime = Date.now();
-    const searchRoot = path7.resolve(this.workspaceRoot, this.scopePath);
-    const pyFiles = await (0, import_fast_glob2.default)(["**/*.py"], {
+    const searchRoot = path8.resolve(this.workspaceRoot, this.scopePath);
+    const globPatterns = ExtractorRegistry.getGlobPatterns();
+    const sourceFiles = await (0, import_fast_glob2.default)(globPatterns, {
       cwd: searchRoot,
       absolute: false,
-      ignore: ["**/node_modules/**", "**/.git/**", "**/venv/**", "**/__pycache__/**", "**/dist/**", "**/build/**"]
+      ignore: [
+        "**/node_modules/**",
+        "**/.git/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/__pycache__/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/target/**",
+        "**/bin/**",
+        "**/obj/**",
+        "**/.next/**",
+        "**/.turbo/**"
+      ]
     });
-    const normalizedFiles = pyFiles.map((f) => path7.relative(this.workspaceRoot, path7.join(searchRoot, f)).replace(/\\/g, "/"));
-    await this.watcher.buildBaseline(["**/*.py"]);
+    const normalizedFiles = sourceFiles.map((f) => path8.relative(this.workspaceRoot, path8.join(searchRoot, f)).replace(/\\/g, "/"));
+    await this.watcher.buildBaseline(globPatterns);
     const archetypeMatch = this.forceArchetype ? { archetype: this.forceArchetype, confidence: 1, matchedRules: ["\u7528\u6237\u624B\u52A8\u5F3A\u5236\u6307\u5B9A"] } : ArchetypeEngine.detectArchetype(this.workspaceRoot, normalizedFiles);
-    const parser = await getParserForLanguage("python");
     for (const relPath of normalizedFiles) {
-      const fullPath = path7.join(this.workspaceRoot, relPath);
+      const fullPath = path8.join(this.workspaceRoot, relPath);
+      const extractor = ExtractorRegistry.getExtractorForFile(relPath);
+      if (!extractor)
+        continue;
       try {
         const sourceCode = fs7.readFileSync(fullPath, "utf-8");
+        const grammarName = ExtractorRegistry.getWasmGrammarForFile(relPath) || extractor.wasmGrammarName;
+        const parser = await getParserForLanguage(grammarName);
         const tree = parser.parse(sourceCode);
-        const extraction = extractPythonFile(tree, relPath, sourceCode);
+        const extraction = extractor.extractFile(tree, relPath, sourceCode);
         this.symbolTable.registerFileExtraction(extraction);
       } catch (err2) {
         console.warn(`[CodeGraph] \u89E3\u6790\u6587\u4EF6\u5931\u8D25: ${relPath}`, err2);
       }
     }
     this.symbolTable.resolveCrossFileReferences();
-    const projectName = path7.basename(this.workspaceRoot);
+    const projectName = path8.basename(this.workspaceRoot);
     const result = DualModelCompiler.compile(projectName, this.scopePath, normalizedFiles, this.symbolTable.getAllNodes(), this.symbolTable.getAllEdges(), archetypeMatch.archetype);
     this.lastGraphResult = result;
     const duration = Date.now() - startTime;
@@ -107527,22 +109916,25 @@ var CodeGraphCore = class {
    */
   async updateIncremental() {
     const startTime = Date.now();
-    const changes = await this.watcher.detectChanges(["**/*.py"]);
+    const globPatterns = ExtractorRegistry.getGlobPatterns();
+    const changes = await this.watcher.detectChanges(globPatterns);
     const totalChanged = changes.added.length + changes.modified.length + changes.deleted.length;
     if (totalChanged === 0 && this.lastGraphResult) {
       return this.lastGraphResult;
     }
-    const parser = await getParserForLanguage("python");
     for (const del of changes.deleted) {
       this.symbolTable.invalidateFile(del);
     }
     for (const changedFile of [...changes.added, ...changes.modified]) {
-      const fullPath = path7.join(this.workspaceRoot, changedFile);
-      if (fs7.existsSync(fullPath)) {
+      const fullPath = path8.join(this.workspaceRoot, changedFile);
+      const extractor = ExtractorRegistry.getExtractorForFile(changedFile);
+      if (fs7.existsSync(fullPath) && extractor) {
         try {
           const sourceCode = fs7.readFileSync(fullPath, "utf-8");
+          const grammarName = ExtractorRegistry.getWasmGrammarForFile(changedFile) || extractor.wasmGrammarName;
+          const parser = await getParserForLanguage(grammarName);
           const tree = parser.parse(sourceCode);
-          const extraction = extractPythonFile(tree, changedFile, sourceCode);
+          const extraction = extractor.extractFile(tree, changedFile, sourceCode);
           this.symbolTable.registerFileExtraction(extraction);
         } catch (err2) {
           console.warn(`[CodeGraph] \u589E\u91CF\u66F4\u65B0\u6587\u4EF6\u5931\u8D25: ${changedFile}`, err2);
@@ -107550,8 +109942,8 @@ var CodeGraphCore = class {
       }
     }
     this.symbolTable.resolveCrossFileReferences();
-    const allFiles = Array.from(new Set(this.symbolTable.getAllNodes().map((n) => n.filePath).filter((f) => f.endsWith(".py"))));
-    const projectName = path7.basename(this.workspaceRoot);
+    const allFiles = Array.from(new Set(this.symbolTable.getAllNodes().map((n) => n.filePath).filter((f) => !f.startsWith("contracts/"))));
+    const projectName = path8.basename(this.workspaceRoot);
     const result = DualModelCompiler.compile(projectName, this.scopePath, allFiles, this.symbolTable.getAllNodes(), this.symbolTable.getAllEdges(), this.lastGraphResult?.meta.archetype || "UNIVERSAL");
     this.lastGraphResult = result;
     const duration = Date.now() - startTime;
@@ -107643,15 +110035,15 @@ function apply(ctx, config = {}) {
     let staticDir;
     try {
       const __filename2 = fileURLToPath3(import.meta.url);
-      const __dirname3 = path8.dirname(__filename2);
+      const __dirname3 = path9.dirname(__filename2);
       const candidates = [
-        path8.resolve(__dirname3, "webview"),
-        path8.resolve(__dirname3, "../webview"),
-        path8.resolve(__dirname3, "../../webview/dist"),
-        path8.resolve(__dirname3, "../packages/webview/dist")
+        path9.resolve(__dirname3, "webview"),
+        path9.resolve(__dirname3, "../webview"),
+        path9.resolve(__dirname3, "../../webview/dist"),
+        path9.resolve(__dirname3, "../packages/webview/dist")
       ];
       for (const dir of candidates) {
-        if (fs8.existsSync(dir) && fs8.existsSync(path8.join(dir, "index.html"))) {
+        if (fs8.existsSync(dir) && fs8.existsSync(path9.join(dir, "index.html"))) {
           staticDir = dir;
           break;
         }

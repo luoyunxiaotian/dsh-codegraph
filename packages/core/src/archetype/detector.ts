@@ -13,25 +13,31 @@ export class ArchetypeEngine {
     const root = path.resolve(workspaceRoot);
     const matchedRules: string[] = [];
 
-    // 1. 读取依赖声明文件内容 (如 requirements.txt, pyproject.toml, Pipfile)
+    // 1. 读取依赖声明文件内容 (跨语言支持)
     let dependencyText = '';
-    const depFiles = ['requirements.txt', 'pyproject.toml', 'Pipfile', 'setup.py'];
+    const depFiles = [
+      'requirements.txt', 'pyproject.toml', 'Pipfile', 'setup.py',
+      'package.json', 'go.mod', 'pom.xml', 'build.gradle', 'build.gradle.kts',
+      'Cargo.toml', 'CMakeLists.txt'
+    ];
     for (const df of depFiles) {
       const fullPath = path.join(root, df);
       if (fs.existsSync(fullPath)) {
-        dependencyText += fs.readFileSync(fullPath, 'utf-8').toLowerCase() + '\n';
+        try {
+          dependencyText += fs.readFileSync(fullPath, 'utf-8').toLowerCase() + '\n';
+        } catch {}
       }
     }
 
     const normFiles = fileList.map((f) => f.toLowerCase().replace(/\\/g, '/'));
 
-    // 2. 规则集检测：Web 分层架构 (FastAPI, Flask, Django)
+    // 2. 规则集检测：Web 分层架构 (FastAPI, Express, Nest, Next, Gin, Spring, Axum, ASP.NET)
     let webScore = 0;
-    if (/(fastapi|flask|django|tornado|aiohttp)/i.test(dependencyText)) {
+    if (/(fastapi|flask|django|tornado|aiohttp|express|koa|fastify|nestjs|next|nuxt|hono|gin-gonic|labstack\/echo|spring-boot|spring-web|axum|actix-web|aspnetcore|fastendpoints)/i.test(dependencyText)) {
       webScore += 0.45;
       matchedRules.push('依赖声明中包含主流 Web 框架');
     }
-    const hasRouters = normFiles.some((f) => /(router|controller|api|views)/.test(f));
+    const hasRouters = normFiles.some((f) => /(router|controller|api|views|endpoints?)/.test(f));
     const hasServices = normFiles.some((f) => /(service|usecase|domain|biz)/.test(f));
     const hasData = normFiles.some((f) => /(model|schema|dao|repo|entity)/.test(f));
 
@@ -39,23 +45,23 @@ export class ArchetypeEngine {
     if (hasServices) webScore += 0.20;
     if (hasData) webScore += 0.15;
 
-    // 3. 规则集检测：异步任务与事件管道 (Celery, Kafka, Redis)
+    // 3. 规则集检测：异步任务与事件管道 (Celery, Kafka, Redis, RabbitMQ, BullMQ)
     let workerScore = 0;
-    if (/(celery|kafka|pika|redis|rq|dramatiq)/i.test(dependencyText)) {
+    if (/(celery|kafka|pika|redis|rq|dramatiq|bull|bullmq|kafkajs|amqplib|asynq|rocketmq|rdkafka|lapin)/i.test(dependencyText)) {
       workerScore += 0.45;
       matchedRules.push('依赖声明中包含任务队列或消息中间件');
     }
     const hasTasks = normFiles.some((f) => /(task|worker|queue|consumer|event|job)/.test(f));
     if (hasTasks) workerScore += 0.35;
 
-    // 4. 规则集检测：CLI 命令行管道 (Click, Typer, Argparse)
+    // 4. 规则集检测：CLI 命令行管道 (Click, Typer, Commander, Cobra, Clap)
     let cliScore = 0;
-    if (/(click|typer|fire|prompt_toolkit)/i.test(dependencyText)) {
+    if (/(click|typer|fire|prompt_toolkit|commander|yargs|oclif|cobra|urfave\/cli|clap)/i.test(dependencyText)) {
       cliScore += 0.45;
       matchedRules.push('依赖声明中包含 CLI 框架');
     }
     const hasCliDir = normFiles.some((f) => /(cli|command|pipeline|cmd)/.test(f));
-    const hasMain = normFiles.some((f) => /(__main__\.py|main\.py)/.test(f));
+    const hasMain = normFiles.some((f) => /(__main__\.py|main\.py|main\.go|main\.rs|index\.ts|app\.ts)/.test(f));
     if (hasCliDir) cliScore += 0.30;
     if (hasMain) cliScore += 0.15;
 

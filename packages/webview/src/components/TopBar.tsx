@@ -31,6 +31,7 @@ interface TopBarProps {
   isUpdating: boolean;
   selectedModuleName?: string | null;
   cacheTime?: string | null;
+  languages?: Record<string, number>;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -48,6 +49,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   isUpdating,
   selectedModuleName,
   cacheTime,
+  languages,
 }) => {
   const { theme, toggleTheme } = useTheme();
 
@@ -75,6 +77,35 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-dsh-blue inline-block"></span>
                 <span>本地缓存 {cacheTime}</span>
               </span>
+            )}
+            {languages && Object.keys(languages).length > 0 && (
+              <div className="flex items-center gap-1 ml-1">
+                {Object.entries(languages).map(([lang, count]) => {
+                  const getLangBadgeColor = (l: string) => {
+                    switch (l) {
+                      case 'python': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30';
+                      case 'typescript': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+                      case 'javascript': return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+                      case 'go': return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30';
+                      case 'java': return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
+                      case 'rust': return 'bg-red-500/10 text-red-400 border-red-500/30';
+                      case 'cpp':
+                      case 'c': return 'bg-sky-500/10 text-sky-400 border-sky-500/30';
+                      case 'csharp': return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+                      default: return 'bg-dsh-layer2 text-dsh-tertiary border-dsh-border1';
+                    }
+                  };
+                  return (
+                    <span
+                      key={lang}
+                      className={`text-[10px] px-1.5 py-0.2 rounded border font-mono font-medium ${getLangBadgeColor(lang)}`}
+                      title={`${lang}: ${count} 个符号`}
+                    >
+                      {lang.toUpperCase()} {count}
+                    </span>
+                  );
+                })}
+              </div>
             )}
           </div>
 

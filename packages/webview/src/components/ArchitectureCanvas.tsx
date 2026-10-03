@@ -30,6 +30,7 @@ import {
   Copy,
   LayoutGrid,
   Maximize2,
+  Globe,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard, showToast } from '../utils/chatBridge.js';
@@ -46,11 +47,16 @@ interface ArchitectureCanvasProps {
 const ModuleCardNode = ({ data }: NodeProps) => {
   const mod = data.module as ModuleContainer;
   const onDrillDown = data.onDrillDown as (id: string) => void;
+  const isContract = mod.id === 'mod_contracts' || mod.archetypeRole === 'Contract Hub';
 
   return (
     <div
       onDoubleClick={() => onDrillDown(mod.id)}
-      className="w-[270px] bg-dsh-layer1 border border-dsh-border2 hover:border-dsh-blue/80 active:border-dsh-blue rounded-md shadow-lg p-3.5 transition-all hover:shadow-black/40 cursor-grab active:cursor-grabbing group select-none"
+      className={`w-[270px] bg-dsh-layer1 border ${
+        isContract
+          ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
+          : 'border-dsh-border2 hover:border-dsh-blue/80'
+      } active:border-dsh-blue rounded-md shadow-lg p-3.5 transition-all hover:shadow-black/40 cursor-grab active:cursor-grabbing group select-none`}
     >
       {/* 桩点 */}
       <Handle type="target" position={Position.Left} className="opacity-0" />
@@ -59,15 +65,27 @@ const ModuleCardNode = ({ data }: NodeProps) => {
       {/* 标题栏 */}
       <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-dsh-border1">
         <div className="flex items-center gap-2 truncate">
-          <div className="w-5 h-5 rounded bg-dsh-blue-tint border border-dsh-blue-border flex items-center justify-center text-dsh-blue shrink-0">
-            <Box className="w-3.5 h-3.5" />
+          <div
+            className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
+              isContract
+                ? 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400'
+                : 'bg-dsh-blue-tint border border-dsh-blue-border text-dsh-blue'
+            }`}
+          >
+            {isContract ? <Globe className="w-3.5 h-3.5" /> : <Box className="w-3.5 h-3.5" />}
           </div>
           <span className="text-[13px] font-semibold text-dsh-primary truncate" title={mod.name}>
             {mod.name}
           </span>
         </div>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-dsh-layer2 text-dsh-secondary border border-dsh-border2 font-mono shrink-0 ml-1">
-          {mod.files.length} 文件
+        <span
+          className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 ml-1 border ${
+            isContract
+              ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+              : 'bg-dsh-layer2 text-dsh-secondary border-dsh-border2'
+          }`}
+        >
+          {isContract ? '契约中枢' : `${mod.files.length} 文件`}
         </span>
       </div>
 

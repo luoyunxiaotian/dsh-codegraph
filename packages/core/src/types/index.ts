@@ -9,7 +9,10 @@ export type EntityType =
   | 'INTERFACE' 
   | 'FUNCTION' 
   | 'METHOD' 
-  | 'ENDPOINT';
+  | 'ENDPOINT'
+  | 'CONTRACT_ENDPOINT' // 跨语言 REST API 契约中枢 (如 GET /api/v1/users/{id})
+  | 'CONTRACT_RPC'      // 跨语言 RPC/Protobuf 契约中枢 (如 pb.UserService/GetUser)
+  | 'CONTRACT_TOPIC';   // 跨语言事件/队列主题中枢 (如 order.created)
 
 export type SemanticRole = 
   | 'ENTRY'       // 外部入口 (Web路由/CLI/事件)
@@ -18,16 +21,21 @@ export type SemanticRole =
   | 'MODEL'       // 数据模型/DTO
   | 'INFRA'       // 基础设施/第三方存储/中间件
   | 'UTIL'        // 通用辅助工具
+  | 'CONTRACT'    // 跨语言契约中枢
   | 'UNKNOWN';
 
 export type RelationType = 
-  | 'CONTAINS'    // 层次包含 (Module -> File -> Class -> Function)
-  | 'CALLS'       // 函数调用
-  | 'IMPORTS'     // 模块/文件导入
-  | 'EXTENDS'     // 类继承
-  | 'IMPLEMENTS'  // 接口实现
-  | 'READS_WRITES'// 读写共享状态
-  | 'FLOWS_TO';   // 业务时序指向
+  | 'CONTAINS'       // 层次包含 (Module -> File -> Class -> Function)
+  | 'CALLS'          // 函数内部调用
+  | 'CALLS_CONTRACT' // 客户端打向契约中枢 (Frontend -> Contract Hub)
+  | 'HANDLED_BY'     // 契约由对应后端函数承接 (Contract Hub -> Handler)
+  | 'PUBLISHES'      // 发布事件到消息主题 (Publisher -> Topic)
+  | 'SUBSCRIBES'     // 订阅消息主题 (Subscriber <- Topic)
+  | 'IMPORTS'        // 模块/文件导入
+  | 'EXTENDS'        // 类继承
+  | 'IMPLEMENTS'     // 接口实现
+  | 'READS_WRITES'   // 读写共享状态
+  | 'FLOWS_TO';      // 业务时序指向
 
 export interface SourceLocation {
   startLine: number;
@@ -44,9 +52,25 @@ export interface CodeNode {
   semanticRole: SemanticRole;
   filePath: string;                // 相对工作区路径
   loc: SourceLocation;
+  language?: string;               // 编程语言标识 (如: 'python', 'typescript', 'go', 'java', 'rust', 'cpp', 'csharp')
+  scipUri?: string;                // 工业级 SCIP 唯一定位 URI (如: scip/python/app/routers/auth.py#login().)
   signature?: string;              // 函数或类签名 (如: def login(dto: LoginDTO))
   docstring?: string;              // 提取的文档注释
-  metadata?: Record<string, any>;  // 额外元数据 (如 HTTP 方法, 路由路径)
+  endpointMeta?: {
+    httpMethod: string;            // 'GET', 'POST', 'PUT', 'DELETE', etc.
+    routePath: string;             // 规范化路由路径 (如: '/api/v1/users/{id}')
+    isClientCall?: boolean;        // true: 客户端前端/SDK请求调用; false: 服务端路由实现
+  };
+  rpcMeta?: {
+    serviceName: string;           // RPC 服务名 (如: 'UserService')
+    methodName: string;            // RPC 方法名 (如: 'GetUser')
+    isClientCall?: boolean;
+  };
+  topicMeta?: {
+    topicName: string;             // 消息队列主题或任务名 (如: 'order.created')
+    isPublisher?: boolean;
+  };
+  metadata?: Record<string, any>;  // 额外元数据 (自由扩展)
 }
 
 export interface CodeEdge {
@@ -130,6 +154,7 @@ export interface FullGraphResult {
     fileCount: number;
     nodeCount: number;
     edgeCount: number;
+    languages?: Record<string, number>; // 语言分布 (如: { python: 15, typescript: 32, go: 8 })
   };
   architectureView: {
     modules: ModuleContainer[];
@@ -139,3 +164,52 @@ export interface FullGraphResult {
   allNodes: Record<string, CodeNode>;
   allEdges: CodeEdge[];
 }
+
+export interface FileImportInfo {
+  modulePath: string;     // 例如 "fastapi" 或 "src.services.user" 或 "./auth"
+  importedNames: Array<{ name: string; alias?: string }>;
+  isFromImport?: boolean;
+  line: number;
+}
+
+export interface UnresolvedCall {
+  callerNodeId: string;
+  calleeExpression: string; // 调用的函数名或表达式 (如 "query_users" 或 "self.db.fetch")
+  line: number;
+  apiCallMeta?: {
+    httpMethod?: string;
+    routePattern?: string;
+  };
+  rpcCallMeta?: {
+    serviceName?: string;
+    methodName?: string;
+  };
+  topicMeta?: {
+    topicName?: string;
+    isPublish?: boolean;
+  };
+}
+
+export interface UnresolvedInheritance {
+  classNodeId: string;
+  superclassName: string;
+  line: number;
+}
+
+export interface ExtractedFileResult {
+  filePath: string;
+  language: string;
+  nodes: CodeNode[];
+  edges: CodeEdge[];
+  imports: FileImportInfo[];
+  unresolvedCalls: UnresolvedCall[];
+  unresolvedInheritance: UnresolvedInheritance[];
+}
+
+export interface LanguageExtractor {
+  readonly language: string;
+  readonly fileExtensions: string[];
+  readonly wasmGrammarName: string;
+  extractFile(tree: any, filePath: string, sourceCode: string): ExtractedFileResult;
+}
+

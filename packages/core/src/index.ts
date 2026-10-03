@@ -3,7 +3,7 @@ import path from 'path';
 import fg from 'fast-glob';
 import { FullGraphResult, ArchetypeType } from './types/index.js';
 import { getParserForLanguage } from './parser/tree-sitter-loader.js';
-import { extractPythonFile } from './parser/python-extractor.js';
+import { ExtractorRegistry } from './parser/extractor-registry.js';
 import { SymbolTable } from './indexer/symbol-table.js';
 import { DualTrackWatcher } from './watcher/hash-watcher.js';
 import { ArchetypeEngine } from './archetype/detector.js';
@@ -16,7 +16,17 @@ import {
 } from './persistence/cache-store.js';
 
 export * from './types/index.js';
-export * from './parser/python-extractor.js';
+export * from './parser/tree-sitter-loader.js';
+export * from './parser/scip-utils.js';
+export * from './parser/extractor-registry.js';
+export * from './parser/extractors/python-extractor.js';
+export * from './parser/extractors/typescript-extractor.js';
+export * from './parser/extractors/go-extractor.js';
+export * from './parser/extractors/java-extractor.js';
+export * from './parser/extractors/rust-extractor.js';
+export * from './parser/extractors/cpp-extractor.js';
+export * from './parser/extractors/csharp-extractor.js';
+export * from './graph/contract-linker.js';
 export * from './indexer/symbol-table.js';
 export * from './watcher/hash-watcher.js';
 export * from './archetype/detector.js';
@@ -80,52 +90,68 @@ export class CodeGraphCore {
   }
 
   /**
-   * 执行全量代码解析与双模型图谱编译 (0-Token 本地运行)
+   * 执行跨语言多语法全量代码解析与双模型图谱编译 (0-Token 本地运行)
    */
   public async scan(forceFull: boolean = false): Promise<FullGraphResult> {
     const startTime = Date.now();
     const searchRoot = path.resolve(this.workspaceRoot, this.scopePath);
+    const globPatterns = ExtractorRegistry.getGlobPatterns();
 
-    // 1. 扫描匹配 Python 源码文件
-    const pyFiles = await fg(['**/*.py'], {
+    // 1. 扫描匹配多语言源码文件 (Python, TS, JS, Go, Java, Rust, C/C++, C#)
+    const sourceFiles = await fg(globPatterns, {
       cwd: searchRoot,
       absolute: false,
-      ignore: ['**/node_modules/**', '**/.git/**', '**/venv/**', '**/__pycache__/**', '**/dist/**', '**/build/**'],
+      ignore: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/venv/**',
+        '**/.venv/**',
+        '**/__pycache__/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/target/**',
+        '**/bin/**',
+        '**/obj/**',
+        '**/.next/**',
+        '**/.turbo/**',
+      ],
     });
 
     // 规范化文件相对路径 (相对于 workspaceRoot)
-    const normalizedFiles = pyFiles.map((f) =>
+    const normalizedFiles = sourceFiles.map((f) =>
       path.relative(this.workspaceRoot, path.join(searchRoot, f)).replace(/\\/g, '/')
     );
 
     // 2. 建立哈希基准
-    await this.watcher.buildBaseline(['**/*.py']);
+    await this.watcher.buildBaseline(globPatterns);
 
     // 3. 架构原型初判 (Fast-Path / Universal)
     const archetypeMatch = this.forceArchetype
       ? { archetype: this.forceArchetype, confidence: 1.0, matchedRules: ['用户手动强制指定'] }
       : ArchetypeEngine.detectArchetype(this.workspaceRoot, normalizedFiles);
 
-    // 4. 初始化 WebTreeSitter Python 语法解析器
-    const parser = await getParserForLanguage('python');
-
-    // 5. 遍历解析所有 Python 文件的 AST
+    // 4. 遍历解析所有源码文件的 AST
     for (const relPath of normalizedFiles) {
       const fullPath = path.join(this.workspaceRoot, relPath);
+      const extractor = ExtractorRegistry.getExtractorForFile(relPath);
+      if (!extractor) continue;
+
       try {
         const sourceCode = fs.readFileSync(fullPath, 'utf-8');
+        const grammarName = ExtractorRegistry.getWasmGrammarForFile(relPath) || extractor.wasmGrammarName;
+        const parser = await getParserForLanguage(grammarName);
         const tree = parser.parse(sourceCode);
-        const extraction = extractPythonFile(tree, relPath, sourceCode);
+        const extraction = extractor.extractFile(tree, relPath, sourceCode);
         this.symbolTable.registerFileExtraction(extraction);
       } catch (err) {
         console.warn(`[CodeGraph] 解析文件失败: ${relPath}`, err);
       }
     }
 
-    // 6. 全局跨文件调用与依赖关系解析 (Symbol Linking)
+    // 5. 全局跨文件调用与依赖关系解析 + 跨语言契约中枢自动链接
     this.symbolTable.resolveCrossFileReferences();
 
-    // 7. 双模型编译 (含一致性校验与自动纠错回滚)
+    // 6. 双模型编译 (含一致性校验与自动纠错回滚)
     const projectName = path.basename(this.workspaceRoot);
     const result = DualModelCompiler.compile(
       projectName,
@@ -138,7 +164,9 @@ export class CodeGraphCore {
 
     this.lastGraphResult = result;
     const duration = Date.now() - startTime;
-    console.log(`[CodeGraph] 全量扫描完成: ${normalizedFiles.length} 个文件, ${result.meta.nodeCount} 节点, ${result.meta.edgeCount} 关系 (耗时 ${duration}ms)`);
+    console.log(
+      `[CodeGraph] 全量扫描完成: ${normalizedFiles.length} 个文件, ${result.meta.nodeCount} 节点, ${result.meta.edgeCount} 关系 (耗时 ${duration}ms)`
+    );
     return result;
   }
 
@@ -147,14 +175,13 @@ export class CodeGraphCore {
    */
   public async updateIncremental(): Promise<FullGraphResult> {
     const startTime = Date.now();
-    const changes = await this.watcher.detectChanges(['**/*.py']);
+    const globPatterns = ExtractorRegistry.getGlobPatterns();
+    const changes = await this.watcher.detectChanges(globPatterns);
 
     const totalChanged = changes.added.length + changes.modified.length + changes.deleted.length;
     if (totalChanged === 0 && this.lastGraphResult) {
       return this.lastGraphResult;
     }
-
-    const parser = await getParserForLanguage('python');
 
     // 1. 处理被删除的文件
     for (const del of changes.deleted) {
@@ -164,11 +191,14 @@ export class CodeGraphCore {
     // 2. 局部重新解析新增与修改的文件
     for (const changedFile of [...changes.added, ...changes.modified]) {
       const fullPath = path.join(this.workspaceRoot, changedFile);
-      if (fs.existsSync(fullPath)) {
+      const extractor = ExtractorRegistry.getExtractorForFile(changedFile);
+      if (fs.existsSync(fullPath) && extractor) {
         try {
           const sourceCode = fs.readFileSync(fullPath, 'utf-8');
+          const grammarName = ExtractorRegistry.getWasmGrammarForFile(changedFile) || extractor.wasmGrammarName;
+          const parser = await getParserForLanguage(grammarName);
           const tree = parser.parse(sourceCode);
-          const extraction = extractPythonFile(tree, changedFile, sourceCode);
+          const extraction = extractor.extractFile(tree, changedFile, sourceCode);
           this.symbolTable.registerFileExtraction(extraction);
         } catch (err) {
           console.warn(`[CodeGraph] 增量更新文件失败: ${changedFile}`, err);
@@ -176,12 +206,17 @@ export class CodeGraphCore {
       }
     }
 
-    // 3. 重新建立跨文件调用依赖关系
+    // 3. 重新建立跨文件调用依赖关系与契约链接
     this.symbolTable.resolveCrossFileReferences();
 
     // 4. 重新编译图谱
     const allFiles = Array.from(
-      new Set(this.symbolTable.getAllNodes().map((n) => n.filePath).filter((f) => f.endsWith('.py')))
+      new Set(
+        this.symbolTable
+          .getAllNodes()
+          .map((n) => n.filePath)
+          .filter((f) => !f.startsWith('contracts/'))
+      )
     );
 
     const projectName = path.basename(this.workspaceRoot);

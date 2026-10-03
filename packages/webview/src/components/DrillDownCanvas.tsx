@@ -25,6 +25,7 @@ import {
   Copy,
   FileCode,
   Maximize2,
+  Globe,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard } from '../utils/chatBridge.js';
@@ -44,30 +45,50 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
   const onSelectNode = data.onSelectNode as (id: string, path: string, line: number) => void;
 
   const isClass = node.entityType === 'CLASS';
+  const isContract = node.entityType === 'CONTRACT_ENDPOINT' || node.entityType === 'CONTRACT_TOPIC';
 
   return (
     <div
       onClick={() => onSelectNode(node.id, node.filePath, node.loc.startLine)}
-      className="w-[220px] bg-dsh-layer1 border border-dsh-border2 hover:border-dsh-blue rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none"
+      className={`w-[220px] bg-dsh-layer1 border ${
+        isContract
+          ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
+          : 'border-dsh-border2 hover:border-dsh-blue'
+      } rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none`}
     >
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
 
       <div className="flex items-center justify-between mb-1.5">
-        <span
-          className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
-            isClass
-              ? 'bg-dsh-amber-tint text-dsh-amber border border-dsh-amber-border'
-              : 'bg-dsh-blue-tint text-dsh-blue border border-dsh-blue-border'
-          }`}
-        >
-          {node.entityType}
-        </span>
+        <div className="flex items-center gap-1">
+          <span
+            className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
+              isContract
+                ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
+                : isClass
+                ? 'bg-dsh-amber-tint text-dsh-amber border border-dsh-amber-border'
+                : 'bg-dsh-blue-tint text-dsh-blue border border-dsh-blue-border'
+            }`}
+          >
+            {isContract ? (node.entityType === 'CONTRACT_ENDPOINT' ? 'REST API' : 'TOPIC') : node.entityType}
+          </span>
+          {node.language && node.language !== 'contract' && (
+            <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-dsh-layer2 text-dsh-tertiary border border-dsh-border1 uppercase">
+              {node.language}
+            </span>
+          )}
+        </div>
         <span className="text-[10px] text-dsh-dimmed font-mono">L{node.loc.startLine}</span>
       </div>
 
       <div className="flex items-center gap-1.5 mb-1">
-        {isClass ? <Box className="w-3.5 h-3.5 text-dsh-amber" /> : <Code className="w-3.5 h-3.5 text-dsh-blue" />}
+        {isContract ? (
+          <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+        ) : isClass ? (
+          <Box className="w-3.5 h-3.5 text-dsh-amber shrink-0" />
+        ) : (
+          <Code className="w-3.5 h-3.5 text-dsh-blue shrink-0" />
+        )}
         <span className="text-[12px] font-semibold text-dsh-primary truncate" title={node.name}>
           {node.name}
         </span>

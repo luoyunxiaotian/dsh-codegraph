@@ -49,8 +49,12 @@ export class DualModelCompiler {
     const processFlows = this.buildProcessFlows(nodes, edges);
 
     const allNodesMap: Record<string, CodeNode> = {};
+    const languages: Record<string, number> = {};
     for (const n of nodes) {
       allNodesMap[n.id] = n;
+      if (n.language && n.language !== 'contract') {
+        languages[n.language] = (languages[n.language] || 0) + 1;
+      }
     }
 
     return {
@@ -64,6 +68,7 @@ export class DualModelCompiler {
         fileCount: fileList.length,
         nodeCount: nodes.length,
         edgeCount: edges.length,
+        languages,
       },
       architectureView,
       processFlows,
@@ -121,7 +126,7 @@ export class DualModelCompiler {
         if (e.relation === 'CALLS' || e.relation === 'IMPORTS' || e.relation === 'EXTENDS' || e.relation === 'IMPLEMENTS') {
           const srcFile = nodeToFileMap.get(e.source);
           const tgtFile = nodeToFileMap.get(e.target);
-          if (srcFile && tgtFile && srcFile !== tgtFile) {
+          if (srcFile && tgtFile && srcFile !== tgtFile && g.hasNode(srcFile) && g.hasNode(tgtFile)) {
             const relWeight = e.relation === 'EXTENDS' ? 3 : e.relation === 'CALLS' ? 2 : 1;
             if (g.hasEdge(srcFile, tgtFile)) {
               const prevW = g.getEdgeAttribute(srcFile, tgtFile, 'weight') || 1;
@@ -197,6 +202,21 @@ export class DualModelCompiler {
       }
     }
 
+    // 统计跨语言契约中枢模块 (Contract Hub Module)
+    const hasContractNodes = nodes.some((n) => n.semanticRole === 'CONTRACT');
+    if (hasContractNodes) {
+      fileToModuleMap.set('contracts/rest-api', 'mod_contracts');
+      fileToModuleMap.set('contracts/topics', 'mod_contracts');
+      modules.push({
+        id: 'mod_contracts',
+        name: 'API Contracts & Hubs',
+        files: ['contracts/rest-api', 'contracts/topics'],
+        inPorts: [],
+        outPorts: [],
+        archetypeRole: 'Contract Hub',
+      });
+    }
+
     // 统计跨模块调用总线 (Buses) 与虚拟端口 (In/Out Ports)
     const nodeToFile = new Map<string, string>();
     const nodeNameMap = new Map<string, string>();
@@ -212,7 +232,16 @@ export class DualModelCompiler {
     }
 
     for (const e of edges) {
-      if (e.relation === 'CALLS' || e.relation === 'IMPORTS' || e.relation === 'EXTENDS' || e.relation === 'IMPLEMENTS') {
+      if (
+        e.relation === 'CALLS' ||
+        e.relation === 'IMPORTS' ||
+        e.relation === 'EXTENDS' ||
+        e.relation === 'IMPLEMENTS' ||
+        e.relation === 'CALLS_CONTRACT' ||
+        e.relation === 'HANDLED_BY' ||
+        e.relation === 'PUBLISHES' ||
+        e.relation === 'SUBSCRIBES'
+      ) {
         const srcFile = nodeToFile.get(e.source);
         const tgtFile = nodeToFile.get(e.target);
         if (!srcFile || !tgtFile) continue;
@@ -274,7 +303,13 @@ export class DualModelCompiler {
     const inDegreeMap = new Map<string, number>();
 
     for (const e of edges) {
-      if (e.relation === 'CALLS') {
+      if (
+        e.relation === 'CALLS' ||
+        e.relation === 'CALLS_CONTRACT' ||
+        e.relation === 'HANDLED_BY' ||
+        e.relation === 'PUBLISHES' ||
+        e.relation === 'SUBSCRIBES'
+      ) {
         const list = adj.get(e.source) || [];
         list.push(e.target);
         adj.set(e.source, list);
