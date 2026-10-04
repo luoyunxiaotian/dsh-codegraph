@@ -427,7 +427,7 @@ export class CodeGraphServer {
       // 3. 多策略寻找物理文件路径 (兼容绝对路径、相对路径、Windows 反斜杠与跨子工程定位)
       const candidates: string[] = [];
 
-      // 策略 A: 若传参本就是现有绝对路径 (如 H:\直播插件\...)
+      // 策略 A: 若传参本就是现有绝对路径 (如 D:\Projects\...)
       if (path.isAbsolute(filePath) || /^[a-zA-Z]:[/\\]/.test(filePath)) {
         candidates.push(filePath);
       }

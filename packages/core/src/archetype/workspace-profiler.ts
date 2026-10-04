@@ -47,7 +47,7 @@ export class WorkspaceProfiler {
       }
     }
 
-    // 1.3 用户系统主目录拦截 (如 C:\Users\Administrator)
+    // 1.3 用户系统主目录拦截 (如 C:\Users\Username)
     // 检查是否直接包含了 Desktop, AppData, Documents 等顶级系统文件夹且根部没有任何项目描述文件
     if (/^[a-zA-Z]:\/users\/[^/]+$/i.test(normalized)) {
       try {
