@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,7 +9,6 @@ import {
   NodeProps,
   useNodesState,
   useEdgesState,
-  ReactFlowInstance,
   Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -39,6 +38,7 @@ import { useTheme } from '../context/ThemeContext.js';
 
 interface DrillDownCanvasProps {
   module: ModuleContainer;
+  workspaceRoot?: string;
   allNodes: Record<string, CodeNode>;
   allEdges: CodeEdge[];
   onSelectNode: (nodeId: string, filePath: string, line: number) => void;
@@ -316,11 +316,39 @@ function calculateClientTopologicalLayout(
   return positions;
 }
 
-// 模块级下钻内存缓存 (避免切出切进重新耗时排版)
-const moduleLayoutMemoryCache = new Map<string, { positions: Record<string, { x: number; y: number }>; portEdges: Array<{ source: string; target: string }> }>();
+// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储)
+interface PersistedDrillLayout {
+  positions: Record<string, { x: number; y: number }>;
+  portEdges: Array<{ source: string; target: string }>;
+}
+
+const moduleLayoutMemoryCache = new Map<string, PersistedDrillLayout>();
+
+function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string): PersistedDrillLayout | null {
+  try {
+    const key = `dsh_cg_drill_${workspaceRoot || 'default'}_${moduleId}`;
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Failed to read drilldown layout from localStorage', e);
+  }
+  return null;
+}
+
+function savePersistedLayout(workspaceRoot: string | undefined, moduleId: string, data: PersistedDrillLayout) {
+  try {
+    const key = `dsh_cg_drill_${workspaceRoot || 'default'}_${moduleId}`;
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to save drilldown layout to localStorage', e);
+  }
+}
 
 export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   module,
+  workspaceRoot,
   allNodes,
   allEdges,
   onSelectNode,
@@ -336,7 +364,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     []
   );
 
-  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
+  const rfInstanceRef = useRef<any>(null);
+  const [rfInstance, setRfInstance] = useState<any>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
 
@@ -346,8 +375,29 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isUntangling, setIsUntangling] = useState<boolean>(false);
-  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [serverPortEdges, setServerPortEdges] = useState<Array<{ source: string; target: string }>>([]);
+
+  // 首帧立即根据内存/LocalStorage/极速Kahn拓扑排版初始化坐标，杜绝首帧白屏与跳动
+  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>(() => {
+    const mem = moduleLayoutMemoryCache.get(module.id);
+    if (mem && Object.keys(mem.positions).length > 0) return mem.positions;
+    const stored = getPersistedLayout(workspaceRoot, module.id);
+    if (stored && stored.positions && Object.keys(stored.positions).length > 0) {
+      moduleLayoutMemoryCache.set(module.id, stored);
+      return stored.positions;
+    }
+    const moduleFiles = new Set(module.files);
+    const iNodes = Object.values(allNodes).filter(
+      (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+    );
+    return calculateClientTopologicalLayout(module, iNodes, allEdges);
+  });
+  const [serverPortEdges, setServerPortEdges] = useState<Array<{ source: string; target: string }>>(() => {
+    const mem = moduleLayoutMemoryCache.get(module.id);
+    if (mem?.portEdges) return mem.portEdges;
+    const stored = getPersistedLayout(workspaceRoot, module.id);
+    if (stored?.portEdges) return stored.portEdges;
+    return [];
+  });
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -405,7 +455,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     return list;
   }, [module.inPorts, module.outPorts, internalNodes, internalNodeIds, allEdges, allNodes, serverPortEdges]);
 
-  // 执行自动理线与最优分层布局 (附带本地内存缓存与性能降级)
+  // 执行自动理线与最优分层布局 (支持双层持久化与自动适屏)
   const performUntangleLayout = useCallback(
     async (showFeedback = true, forceRefresh = false) => {
       // 0. 优先检测客户端内存缓存
@@ -413,17 +463,35 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         const cached = moduleLayoutMemoryCache.get(module.id)!;
         setNodePositions(cached.positions);
         if (cached.portEdges) setServerPortEdges(cached.portEdges);
-        setTimeout(() => rfInstance?.fitView({ duration: 300 }), 30);
+        setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
         return;
+      }
+
+      // 0.1 优先检测本地持久化缓存 (LocalStorage)
+      if (!forceRefresh) {
+        const persisted = getPersistedLayout(workspaceRoot, module.id);
+        if (persisted && persisted.positions && Object.keys(persisted.positions).length > 0) {
+          setNodePositions(persisted.positions);
+          if (persisted.portEdges) setServerPortEdges(persisted.portEdges);
+          moduleLayoutMemoryCache.set(module.id, persisted);
+          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
+          return;
+        }
       }
 
       setIsUntangling(true);
 
-      // 若卡片较多 (> 60 节点)，先行极速应用客户端拓扑排版，实现 0 延迟首帧展示
+      // 若卡片较多 (> 60 节点)，直接使用客户端极速拓扑分层网格排版 (5ms 内完成，天然避免超高纵向堆叠并支持缩略图全景导航)
       if (internalNodes.length > 60) {
-        const quickPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
-        setNodePositions(quickPos);
-        setTimeout(() => rfInstance?.fitView({ duration: 300 }), 20);
+        const clientPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
+        setNodePositions(clientPos);
+        const layoutData: PersistedDrillLayout = { positions: clientPos, portEdges: [] };
+        moduleLayoutMemoryCache.set(module.id, layoutData);
+        savePersistedLayout(workspaceRoot, module.id, layoutData);
+        setIsUntangling(false);
+        if (showFeedback) showToast('✓ 已完成智能拓扑分层理线并自动保存');
+        setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 40);
+        return;
       }
 
       try {
@@ -441,10 +509,12 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           setNodePositions(posMap);
           const portEdges = data.portEdges || [];
           setServerPortEdges(portEdges);
-          moduleLayoutMemoryCache.set(module.id, { positions: posMap, portEdges });
+          const layoutData: PersistedDrillLayout = { positions: posMap, portEdges };
+          moduleLayoutMemoryCache.set(module.id, layoutData);
+          savePersistedLayout(workspaceRoot, module.id, layoutData);
 
-          if (showFeedback) showToast('✓ 已使用 ELK Sugiyama 正交分层完成智能理线');
-          setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
+          if (showFeedback) showToast('✓ 已重新理线并自动保存');
+          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 50);
           return;
         }
       } catch {
@@ -455,17 +525,36 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
       const clientPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
       setNodePositions(clientPos);
-      moduleLayoutMemoryCache.set(module.id, { positions: clientPos, portEdges: [] });
-      if (showFeedback) showToast('✓ 已完成客户端拓扑分层理线');
-      setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
+      const clientData: PersistedDrillLayout = { positions: clientPos, portEdges: [] };
+      moduleLayoutMemoryCache.set(module.id, clientData);
+      savePersistedLayout(workspaceRoot, module.id, clientData);
+      if (showFeedback) showToast('✓ 已完成客户端拓扑分层理线并保存');
+      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 50);
     },
-    [module, internalNodes, allEdges, rfInstance]
+    [module, workspaceRoot, internalNodes, allEdges, rfInstance]
   );
 
-  // 初始化加载自动理线
+  // 模块切换或首次载入时，优先应用缓存或触发自动理线
   useEffect(() => {
+    const mem = moduleLayoutMemoryCache.get(module.id);
+    if (mem && Object.keys(mem.positions).length > 0) {
+      setNodePositions(mem.positions);
+      if (mem.portEdges) setServerPortEdges(mem.portEdges);
+      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 40);
+      return;
+    }
+
+    const stored = getPersistedLayout(workspaceRoot, module.id);
+    if (stored && stored.positions && Object.keys(stored.positions).length > 0) {
+      setNodePositions(stored.positions);
+      if (stored.portEdges) setServerPortEdges(stored.portEdges);
+      moduleLayoutMemoryCache.set(module.id, stored);
+      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 40);
+      return;
+    }
+
     performUntangleLayout(false, false);
-  }, [module.id]);
+  }, [module.id, workspaceRoot, performUntangleLayout]);
 
   // 基础原始边集合 (不受 hover 抖动影响)
   const rawEdges = useMemo(() => {
@@ -526,6 +615,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         id,
         type: 'inPort',
         position: pos,
+        width: 170,
+        height: 52,
         data: { name: port, portType: 'IN', isFocused, isConnected, isDimmed },
       });
     });
@@ -541,6 +632,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         id: n.id,
         type: 'internalSymbol',
         position: pos,
+        width: 220,
+        height: 85,
         data: { node: n, onSelectNode, isFocused, isConnected, isDimmed },
       });
     });
@@ -557,6 +650,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         id,
         type: 'outPort',
         position: pos,
+        width: 170,
+        height: 52,
         data: { name: port, portType: 'OUT', isFocused, isConnected, isDimmed },
       });
     });
@@ -842,7 +937,13 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        onInit={setRfInstance}
+        onInit={(instance) => {
+          setRfInstance(instance);
+          rfInstanceRef.current = instance;
+          setTimeout(() => {
+            instance.fitView({ padding: 0.15, duration: 250 });
+          }, 30);
+        }}
         onNodeMouseEnter={(_, node) => {
           if (!selectedNodeId) {
             setHoveredNodeId(node.id);
@@ -861,15 +962,31 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView
-        minZoom={0.3}
+        fitViewOptions={{ padding: 0.15 }}
+        minZoom={0.05}
         maxZoom={2.0}
       >
         <Background color={isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'} gap={24} size={1} />
         <Controls />
         <MiniMap
-          nodeColor="#4176e6"
+          pannable={true}
+          zoomable={true}
+          onClick={(_, position) => {
+            const inst = rfInstanceRef.current || rfInstance;
+            if (inst) {
+              inst.setCenter(position.x, position.y, { zoom: inst.getZoom(), duration: 250 });
+            }
+          }}
+          nodeColor={(n) => {
+            if (n.type === 'inPort') return '#10b981';
+            if (n.type === 'outPort') return '#3b82f6';
+            const node = (n.data as any)?.node;
+            if (node?.entityType === 'CLASS') return '#f59e0b';
+            if (node?.entityType === 'CONTRACT_ENDPOINT' || node?.entityType === 'CONTRACT_TOPIC') return '#818cf8';
+            return '#3b82f6';
+          }}
           maskColor={isDark ? 'rgba(21, 21, 23, 0.85)' : 'rgba(240, 242, 245, 0.85)'}
-          className="bg-dsh-platform border border-dsh-border2 rounded-md"
+          className="bg-dsh-platform border border-dsh-border2 rounded-md shadow-lg cursor-grab active:cursor-grabbing"
         />
       </ReactFlow>
 

@@ -385,18 +385,18 @@ export class CodeGraphCore {
     return this.lastGraphResult;
   }
 
-  public getLastLayout(): { architecture?: any } | undefined {
+  public getLastLayout(): { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[] }> } | undefined {
     return this.lastLayout;
   }
 
-  public setLastLayout(layout: { architecture?: any }): void {
+  public setLastLayout(layout: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[] }> }): void {
     this.lastLayout = layout;
   }
 
   /**
    * 将当前图谱及布局缓存至本地 .codegraph/graph-cache.json
    */
-  public saveToCache(layout?: { architecture?: any }): void {
+  public saveToCache(layout?: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[] }> }): void {
     if (layout) {
       this.lastLayout = layout;
     }

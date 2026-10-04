@@ -11,6 +11,7 @@ export interface PersistentCacheData {
   graph: FullGraphResult;
   layout?: {
     architecture?: LayoutResult;
+    drilldowns?: Record<string, { layout: LayoutResult; portEdges: any[] }>;
   };
   baselineHashes: Record<string, string>;
   extractions?: Record<string, any>;

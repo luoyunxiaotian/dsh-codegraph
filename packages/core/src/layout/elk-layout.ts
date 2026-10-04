@@ -235,13 +235,67 @@ export class ElkLayoutEngine {
 
     const layouted = await elk.layout(rootGraph);
 
-    const layoutedNodes: LayoutedNode[] = (layouted.children || []).map((c: any) => ({
-      id: c.id,
-      x: c.x || 0,
-      y: c.y || 0,
-      width: c.width || (c.id.startsWith('inport_') || c.id.startsWith('outport_') ? 170 : 230),
-      height: c.height || (c.id.startsWith('inport_') || c.id.startsWith('outport_') ? 52 : 85),
-    }));
+    // 5. 层级折叠与多列网格规整 (规避超高纵向堆叠，单列超过 10 个节点时自动折叠成多列网格)
+    const rawChildren: any[] = layouted.children || [];
+    
+    // 找出所有唯一的层级 X 坐标 (容差 35px)
+    const sortedByX = [...rawChildren].sort((a, b) => (a.x || 0) - (b.x || 0));
+    const layers: Array<{ baseX: number; nodes: any[] }> = [];
+
+    sortedByX.forEach((child) => {
+      const x = child.x || 0;
+      const matchedLayer = layers.find((l) => Math.abs(l.baseX - x) <= 35);
+      if (matchedLayer) {
+        matchedLayer.nodes.push(child);
+      } else {
+        layers.push({ baseX: x, nodes: [child] });
+      }
+    });
+
+    const maxPerCol = 10;
+    let accumulatedExtraX = 0;
+    let maxOverallX = 1000;
+    let maxOverallY = 600;
+
+    const layoutedNodes: LayoutedNode[] = [];
+
+    layers.forEach((layer) => {
+      // 保持 ELK 计算出的 Y 排序（保留其交叉最小化优化）
+      layer.nodes.sort((a, b) => (a.y || 0) - (b.y || 0));
+
+      const isPortLayer = layer.nodes.every((n) => n.id.startsWith('inport_') || n.id.startsWith('outport_'));
+      const effectiveMaxPerCol = isPortLayer ? 12 : maxPerCol;
+      const layerBaseX = layer.baseX + accumulatedExtraX;
+
+      layer.nodes.forEach((n, idx) => {
+        const colIdx = Math.floor(idx / effectiveMaxPerCol);
+        const rowIdx = idx % effectiveMaxPerCol;
+        const w = n.width || (n.id.startsWith('inport_') || n.id.startsWith('outport_') ? 170 : 230);
+        const h = n.height || (n.id.startsWith('inport_') || n.id.startsWith('outport_') ? 52 : 85);
+        const colSpacing = w + 40;
+        const rowSpacing = h + 30;
+
+        const posX = layerBaseX + colIdx * colSpacing;
+        const posY = 40 + rowIdx * rowSpacing;
+
+        layoutedNodes.push({
+          id: n.id,
+          x: posX,
+          y: posY,
+          width: w,
+          height: h,
+        });
+
+        if (posX + w > maxOverallX) maxOverallX = posX + w;
+        if (posY + h > maxOverallY) maxOverallY = posY + h;
+      });
+
+      const totalColsInLayer = Math.ceil(layer.nodes.length / effectiveMaxPerCol);
+      if (totalColsInLayer > 1) {
+        const sampleW = layer.nodes[0]?.width || 230;
+        accumulatedExtraX += (totalColsInLayer - 1) * (sampleW + 40);
+      }
+    });
 
     const layoutedEdges: LayoutedEdge[] = (layouted.edges || []).map((e: any) => ({
       id: e.id,
@@ -253,8 +307,8 @@ export class ElkLayoutEngine {
     return {
       nodes: layoutedNodes,
       edges: layoutedEdges,
-      width: layouted.width || 1000,
-      height: layouted.height || 600,
+      width: Math.max(layouted.width || 1000, maxOverallX + 100),
+      height: Math.max(maxOverallY + 100, 600),
     };
   }
 }

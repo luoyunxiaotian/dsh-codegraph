@@ -319,6 +319,7 @@ export const App: React.FC = () => {
         {currentView === 'drilldown' && selectedModule && (
           <DrillDownCanvas
             module={selectedModule}
+            workspaceRoot={workspaceRoot}
             allNodes={graphData.allNodes}
             allEdges={graphData.allEdges}
             onSelectNode={handleSelectNode}

@@ -110496,13 +110496,55 @@ var ElkLayoutEngine = class {
       edges
     };
     const layouted = await elk.layout(rootGraph);
-    const layoutedNodes = (layouted.children || []).map((c) => ({
-      id: c.id,
-      x: c.x || 0,
-      y: c.y || 0,
-      width: c.width || (c.id.startsWith("inport_") || c.id.startsWith("outport_") ? 170 : 230),
-      height: c.height || (c.id.startsWith("inport_") || c.id.startsWith("outport_") ? 52 : 85)
-    }));
+    const rawChildren = layouted.children || [];
+    const sortedByX = [...rawChildren].sort((a, b) => (a.x || 0) - (b.x || 0));
+    const layers = [];
+    sortedByX.forEach((child) => {
+      const x = child.x || 0;
+      const matchedLayer = layers.find((l) => Math.abs(l.baseX - x) <= 35);
+      if (matchedLayer) {
+        matchedLayer.nodes.push(child);
+      } else {
+        layers.push({ baseX: x, nodes: [child] });
+      }
+    });
+    const maxPerCol = 10;
+    let accumulatedExtraX = 0;
+    let maxOverallX = 1e3;
+    let maxOverallY = 600;
+    const layoutedNodes = [];
+    layers.forEach((layer) => {
+      layer.nodes.sort((a, b) => (a.y || 0) - (b.y || 0));
+      const isPortLayer = layer.nodes.every((n) => n.id.startsWith("inport_") || n.id.startsWith("outport_"));
+      const effectiveMaxPerCol = isPortLayer ? 12 : maxPerCol;
+      const layerBaseX = layer.baseX + accumulatedExtraX;
+      layer.nodes.forEach((n, idx) => {
+        const colIdx = Math.floor(idx / effectiveMaxPerCol);
+        const rowIdx = idx % effectiveMaxPerCol;
+        const w = n.width || (n.id.startsWith("inport_") || n.id.startsWith("outport_") ? 170 : 230);
+        const h = n.height || (n.id.startsWith("inport_") || n.id.startsWith("outport_") ? 52 : 85);
+        const colSpacing = w + 40;
+        const rowSpacing = h + 30;
+        const posX = layerBaseX + colIdx * colSpacing;
+        const posY = 40 + rowIdx * rowSpacing;
+        layoutedNodes.push({
+          id: n.id,
+          x: posX,
+          y: posY,
+          width: w,
+          height: h
+        });
+        if (posX + w > maxOverallX)
+          maxOverallX = posX + w;
+        if (posY + h > maxOverallY)
+          maxOverallY = posY + h;
+      });
+      const totalColsInLayer = Math.ceil(layer.nodes.length / effectiveMaxPerCol);
+      if (totalColsInLayer > 1) {
+        const sampleW = layer.nodes[0]?.width || 230;
+        accumulatedExtraX += (totalColsInLayer - 1) * (sampleW + 40);
+      }
+    });
     const layoutedEdges = (layouted.edges || []).map((e) => ({
       id: e.id,
       source: e.sources[0],
@@ -110512,8 +110554,8 @@ var ElkLayoutEngine = class {
     return {
       nodes: layoutedNodes,
       edges: layoutedEdges,
-      width: layouted.width || 1e3,
-      height: layouted.height || 600
+      width: Math.max(layouted.width || 1e3, maxOverallX + 100),
+      height: Math.max(maxOverallY + 100, 600)
     };
   }
 };
@@ -110731,16 +110773,30 @@ var CodeGraphServer = class {
         res.end(JSON.stringify({ error: "\u7F3A\u5C11 moduleId \u53C2\u6570" }));
         return;
       }
-      if (!body2?.forceRefresh && this.drilldownCache.has(moduleId)) {
-        const cached = this.drilldownCache.get(moduleId);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          success: true,
-          layout: cached.layout,
-          portEdges: cached.portEdges,
-          fromCache: true
-        }));
-        return;
+      if (!body2?.forceRefresh) {
+        if (this.drilldownCache.has(moduleId)) {
+          const cached = this.drilldownCache.get(moduleId);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            success: true,
+            layout: cached.layout,
+            portEdges: cached.portEdges,
+            fromCache: true
+          }));
+          return;
+        }
+        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        if (diskCache) {
+          this.drilldownCache.set(moduleId, diskCache);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            success: true,
+            layout: diskCache.layout,
+            portEdges: diskCache.portEdges,
+            fromCache: true
+          }));
+          return;
+        }
       }
       let last = this.core.getLastResult();
       if (!last) {
@@ -110798,6 +110854,15 @@ var CodeGraphServer = class {
         portEdges
       });
       this.drilldownCache.set(moduleId, { layout, portEdges });
+      try {
+        const currentLayout = this.core.getLastLayout() || {};
+        const drilldowns = currentLayout.drilldowns || {};
+        drilldowns[moduleId] = { layout, portEdges };
+        this.core.setLastLayout({ ...currentLayout, drilldowns });
+        this.core.saveToCache({ ...currentLayout, drilldowns });
+      } catch (err2) {
+        console.warn("[CodeGraph] \u4FDD\u5B58\u4E0B\u94BB\u6392\u7248\u81F3\u6301\u4E45\u5316\u7F13\u5B58\u5931\u8D25:", err2);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         success: true,
