@@ -201,8 +201,8 @@ const OutPortNode = ({ data }: NodeProps) => {
 };
 
 /**
- * 客户端拓扑排版算法 (Topological DAG Layering & Crossing Minimization)
- * 复杂度 O(V + E)，耗时 < 15ms，超大工程秒级排版
+ * 客户端拓扑排版算法 (Kahn Topological DAG Layering & Cycle Breaking)
+ * 复杂度 O(V + E)，耗时 < 15ms，彻底杜绝环路依赖无限循环卡死！
  */
 function calculateClientTopologicalLayout(
   module: ModuleContainer,
@@ -217,7 +217,7 @@ function calculateClientTopologicalLayout(
     positions[`inport_${port}`] = { x: 50, y: 100 + idx * 75 };
   });
 
-  // 2. 构建内部有向图 (Adjacency & in-degrees)
+  // 2. 构建内部有向图 (Adjacency & in-degrees，自动过滤自环)
   const adj: Record<string, string[]> = {};
   const inDegree: Record<string, number> = {};
   internalNodes.forEach((n) => {
@@ -232,36 +232,51 @@ function calculateClientTopologicalLayout(
     }
   });
 
-  // 3. 计算每个内部节点的分层 (Layer / Rank)
+  // 3. 安全分层：采用 Kahn 拓扑分层 + 环路安全截断 (绝对杜绝无限循环死锁)
   const rank: Record<string, number> = {};
-  const queue: string[] = [];
+  const inDegreeWork = { ...inDegree };
+  let currentLayer: string[] = [];
+
+  // 入度为 0 的节点作为第 0 层 (Entry/Root)
   internalNodes.forEach((n) => {
-    if ((inDegree[n.id] || 0) === 0) {
+    if ((inDegreeWork[n.id] || 0) === 0) {
       rank[n.id] = 0;
-      queue.push(n.id);
+      currentLayer.push(n.id);
     }
   });
 
-  if (queue.length === 0 && internalNodes.length > 0) {
-    rank[internalNodes[0].id] = 0;
-    queue.push(internalNodes[0].id);
+  // 若无入度为 0 的节点（全图成环），选取第一个节点作为起点，打破死锁
+  if (currentLayer.length === 0 && internalNodes.length > 0) {
+    const firstId = internalNodes[0].id;
+    rank[firstId] = 0;
+    currentLayer.push(firstId);
   }
 
-  while (queue.length > 0) {
-    const u = queue.shift()!;
-    const uRank = rank[u] || 0;
-    (adj[u] || []).forEach((v) => {
-      if (rank[v] === undefined || rank[v] < uRank + 1) {
-        rank[v] = uRank + 1;
-        queue.push(v);
-      }
+  let layerIndex = 0;
+  const maxSafeDepth = Math.min(internalNodes.length, 50); // 安全深度上限
+
+  while (currentLayer.length > 0 && layerIndex < maxSafeDepth) {
+    const nextLayer: string[] = [];
+    currentLayer.forEach((u) => {
+      (adj[u] || []).forEach((v) => {
+        inDegreeWork[v] = (inDegreeWork[v] || 1) - 1;
+        // 当入度降为 0 且尚未分配层级时，加入下一层
+        if (inDegreeWork[v] <= 0 && rank[v] === undefined) {
+          rank[v] = layerIndex + 1;
+          nextLayer.push(v);
+        }
+      });
     });
+    currentLayer = nextLayer;
+    layerIndex++;
   }
 
-  // 补充未遍历到的孤立节点
+  // 对处于环路中未被拓扑遍历到的剩余节点，平滑分派到后置层，保证 100% 覆盖
+  let unassignedCount = 0;
   internalNodes.forEach((n) => {
     if (rank[n.id] === undefined) {
-      rank[n.id] = 0;
+      rank[n.id] = layerIndex + Math.floor(unassignedCount / 10);
+      unassignedCount++;
     }
   });
 
@@ -269,29 +284,33 @@ function calculateClientTopologicalLayout(
   const layers: Record<number, CodeNode[]> = {};
   let maxRank = 0;
   internalNodes.forEach((n) => {
-    const r = rank[n.id];
+    const r = rank[n.id] || 0;
     if (r > maxRank) maxRank = r;
     if (!layers[r]) layers[r] = [];
     layers[r].push(n);
   });
 
-  // 5. 排布各层内部节点 (Barycenter 交叉最小化启发式排序)
+  // 5. 排布各层内部节点 (规避超高纵向堆叠，每层超过 10 个时自动双列折叠)
   Object.keys(layers).forEach((rKey) => {
     const r = Number(rKey);
-    const nodesInLayer = layers[r];
+    const nodesInLayer = layers[r] || [];
     nodesInLayer.sort((a, b) => a.name.localeCompare(b.name));
+
+    const maxPerCol = 10;
     nodesInLayer.forEach((n, idx) => {
+      const colOffset = Math.floor(idx / maxPerCol);
+      const rowIdx = idx % maxPerCol;
       positions[n.id] = {
-        x: 300 + r * 280,
-        y: 80 + idx * 115,
+        x: 300 + (r * 320) + (colOffset * 250),
+        y: 80 + rowIdx * 115,
       };
     });
   });
 
   // 6. Out-Ports 固定排布在最右列
-  const rightX = 350 + (maxRank + 1) * 280;
+  const rightX = 350 + (maxRank + 2) * 320;
   module.outPorts.forEach((port, idx) => {
-    positions[`outport_${port}`] = { x: Math.max(rightX, 600), y: 100 + idx * 75 };
+    positions[`outport_${port}`] = { x: Math.max(rightX, 800), y: 100 + idx * 75 };
   });
 
   return positions;

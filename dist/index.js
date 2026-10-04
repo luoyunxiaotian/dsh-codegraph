@@ -110476,8 +110476,8 @@ var ElkLayoutEngine = class {
       targets: [c.target]
     }));
     const totalNodes = children.length;
-    const crossingStrategy = totalNodes > 50 ? "MEDIAN" : "LAYER_SWEEP";
-    const maxIterations = totalNodes > 50 ? "2" : "4";
+    const crossingStrategy = totalNodes > 200 ? "INTERACTIVE" : totalNodes > 50 ? "MEDIAN" : "LAYER_SWEEP";
+    const maxIterations = totalNodes > 200 ? "1" : totalNodes > 50 ? "2" : "4";
     const rootGraph = {
       id: "module_detail_root",
       layoutOptions: {

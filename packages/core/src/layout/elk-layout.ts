@@ -212,9 +212,9 @@ export class ElkLayoutEngine {
     }));
 
     const totalNodes = children.length;
-    // 自适应分级：小型模块精细扫层，中大型模块采用启发式极速排序，大幅缩短布局延迟
-    const crossingStrategy = totalNodes > 50 ? 'MEDIAN' : 'LAYER_SWEEP';
-    const maxIterations = totalNodes > 50 ? '2' : '4';
+    // 自适应分级：超大模块(>200)极速交互排序，中型模块(>50)启发式中位数排序，小型模块精细扫层
+    const crossingStrategy = totalNodes > 200 ? 'INTERACTIVE' : totalNodes > 50 ? 'MEDIAN' : 'LAYER_SWEEP';
+    const maxIterations = totalNodes > 200 ? '1' : totalNodes > 50 ? '2' : '4';
 
     const rootGraph: ElkNode = {
       id: 'module_detail_root',
