@@ -112,6 +112,16 @@ const ModuleCardNode = ({ data }: NodeProps) => {
         </div>
       </div>
 
+      {/* 模块交互职责人话简述 */}
+      {(mod as any).story?.purposeDescription && (
+        <div
+          className="text-[10px] text-dsh-secondary bg-dsh-base/60 p-1.5 rounded border border-dsh-border1/60 mb-2 leading-relaxed"
+          title={(mod as any).story.purposeDescription}
+        >
+          {(mod as any).story.purposeDescription}
+        </div>
+      )}
+
       {/* 文件列表摘要 */}
       <div className="space-y-1 mb-2.5">
         {mod.files.slice(0, 3).map((f, i) => (

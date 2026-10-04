@@ -270,6 +270,52 @@ func main() {
     throw new Error('单工程聚焦切换失败');
   }
 
+  // ==========================================
+  // 测试 8: 验证 0-Token 本地拓扑交互解说与故事生成
+  // ==========================================
+  console.log('\n[测试 8] 验证 0-Token 本地交互叙事引擎 (InteractionNarrator)...');
+  const loginNode = Object.values(result1.allNodes).find((n) => n.name === 'login');
+  const verifyNode = Object.values(result1.allNodes).find((n) => n.name === 'verify_credentials');
+  
+  if (!loginNode || !loginNode.metadata?.story) {
+    throw new Error('login 节点的 interactionStory 缺失');
+  }
+  const loginStory = loginNode.metadata.story;
+  console.log(`  ✓ 节点 [login] 角色识别: 【${loginStory.roleTitle}】 (入站=${loginStory.inDegree}, 出站=${loginStory.outDegree})`);
+  console.log(`    - 功能小结: "${loginStory.summaryText}"`);
+  console.log(`    - 下游依赖 (${loginStory.callees.length} 个): ${loginStory.callees.map((c: any) => c.name).join(', ')}`);
+  
+  if (loginStory.outDegree === 0) {
+    throw new Error('login 入口节点的出度推导不符合预期');
+  }
+  if (!loginStory.roleTitle.includes('入口')) {
+    throw new Error('login 未正确判定为入口角色');
+  }
+
+  if (!verifyNode || !verifyNode.metadata?.story) {
+    throw new Error('verify_credentials 节点的 interactionStory 缺失');
+  }
+  const verifyStory = verifyNode.metadata.story;
+  console.log(`  ✓ 节点 [verify_credentials] 角色识别: 【${verifyStory.roleTitle}】 (上游来源=${verifyStory.callers.map((c: any) => c.name).join(', ')})`);
+  if (verifyStory.callers.length === 0) {
+    throw new Error('verify_credentials 未提取到调用者');
+  }
+
+  const testFlow = result1.processFlows[0];
+  const flowStory = (testFlow as any)?.story;
+  if (!flowStory || flowStory.stepNarratives.length === 0) {
+    throw new Error('processFlow 时序叙事故事缺失');
+  }
+  console.log(`  ✓ 业务时序故事提取完成: ${flowStory.stepNarratives.length} 个步骤分解`);
+  console.log(`    - 步骤 1: "${flowStory.stepNarratives[0].actionDescription}"`);
+
+  const testModule = result1.architectureView.modules[0];
+  const modStory = (testModule as any)?.story;
+  if (!modStory || !modStory.purposeDescription) {
+    throw new Error('模块概览交互说明缺失');
+  }
+  console.log(`  ✓ 模块 [${testModule.name}] 交互描述: "${modStory.purposeDescription}"`);
+
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });
   console.log('\n🎉 所有核心测试全部通过！\n');

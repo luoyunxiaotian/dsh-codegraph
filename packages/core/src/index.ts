@@ -32,6 +32,7 @@ export * from './watcher/hash-watcher.js';
 export * from './archetype/detector.js';
 export * from './archetype/workspace-profiler.js';
 export * from './graph/dual-compiler.js';
+export * from './graph/interaction-narrator.js';
 export * from './layout/elk-layout.js';
 export * from './persistence/cache-store.js';
 export * from './server.js';

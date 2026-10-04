@@ -252,3 +252,63 @@ export interface LanguageExtractor {
   extractFile(tree: any, filePath: string, sourceCode: string): ExtractedFileResult;
 }
 
+export interface InteractionCaller {
+  nodeId: string;
+  name: string;
+  filePath: string;
+  line?: number;
+  relation: RelationType;
+  relationText: string;
+}
+
+export interface InteractionCallee {
+  nodeId: string;
+  name: string;
+  filePath: string;
+  line?: number;
+  relation: RelationType;
+  relationText: string;
+}
+
+export interface InteractionContract {
+  contractId: string;
+  name: string;
+  type: 'REST' | 'RPC' | 'TOPIC';
+  direction: 'INBOUND' | 'OUTBOUND';
+  description: string;
+}
+
+export interface NodeInteractionStory {
+  roleTitle: string;             // 角色定位标题 (如: "外部请求触发入口", "核心业务调度枢纽", "底层持久化终端")
+  roleDescription: string;       // 通俗职责说明
+  summaryText: string;           // 萃取自原生代码注释或 AST 语义的人话功能小结
+  inDegree: number;              // 入站调用数
+  outDegree: number;             // 出站依赖数
+  callers: InteractionCaller[];  // 谁在调用它 (输入/触发来源)
+  callees: InteractionCallee[];  // 它在操作谁 (输出/下游依赖)
+  contracts: InteractionContract[]; // 跨端/契约协同
+  architectureAdvice?: string;   // 架构影响面与建议提示
+}
+
+export interface FlowInteractionStory {
+  flowId: string;
+  title: string;
+  narrativeText: string;         // 业务流程通俗整体概述
+  stepNarratives: Array<{
+    stepIndex: number;
+    name: string;
+    stepType: string;
+    actionDescription: string;   // 步骤分解人话解说
+  }>;
+}
+
+export interface ModuleInteractionStory {
+  moduleId: string;
+  name: string;
+  roleTitle: string;             // 如 "Presentation Layer (接入层)"
+  purposeDescription: string;    // "聚合了 4 个路由文件，负责对外接收 HTTP 请求..."
+  inboundModuleNames: string[];  // 调用本模块的上游模块列表
+  outboundModuleNames: string[]; // 本模块依赖的下游模块列表
+}
+
+

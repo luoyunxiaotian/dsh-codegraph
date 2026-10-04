@@ -30,6 +30,7 @@ import {
   FileCode,
   Maximize2,
   Workflow,
+  BookOpen,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard } from '../utils/chatBridge.js';
@@ -63,6 +64,7 @@ const FlowStepNode = ({ data }: NodeProps) => {
   return (
     <div
       onClick={() => onSelectNode(step.nodeId, step.filePath, step.line)}
+      title={`${step.name}(): 点击查看业务交互解析与源码`}
       className="w-[230px] bg-dsh-layer1 border border-dsh-border2 hover:border-dsh-blue rounded-md shadow p-3 cursor-grab active:cursor-grabbing group transition-all select-none"
     >
       <Handle type="target" position={Position.Top} className="opacity-0" />
@@ -232,6 +234,11 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
             const text = `请帮我审查从入口【${currentFlow.title}】出发的时序执行链，分析以下步骤是否存在未捕获异常、性能瓶颈、缺少权限校验或潜在逻辑死锁问题：\n${chain}`;
             insertIntoChat(text, { title: `审查链路: ${currentFlow.title}` });
           },
+        },
+        {
+          label: '交互透视与说明 (0-Token)',
+          icon: <BookOpen className="w-3.5 h-3.5 text-dsh-blue" />,
+          onClick: () => onSelectNode(step.nodeId, step.filePath, step.line),
         },
         {
           label: '查看源码定义',

@@ -108881,6 +108881,343 @@ var ArchetypeEngine = class {
 // packages/core/dist/graph/dual-compiler.js
 var import_graphology = __toESM(require_graphology_cjs(), 1);
 var import_graphology_communities_louvain = __toESM(require_graphology_communities_louvain(), 1);
+
+// packages/core/dist/graph/interaction-narrator.js
+var InteractionNarrator = class {
+  /**
+   * 清洗并提取原生代码注释中的首句/核心摘要 (Python docstring, JSDoc, C# XML 等)
+   */
+  static cleanDocstring(raw) {
+    if (!raw)
+      return void 0;
+    let text = raw.trim();
+    text = text.replace(/<\/?summary>/gi, "");
+    text = text.replace(/<\/?param[^>]*>/gi, "");
+    text = text.replace(/<\/?returns[^>]*>/gi, "");
+    text = text.replace(/^\/\/\/\s*/gm, "");
+    text = text.replace(/^\/\*\*|\*\/$/g, "");
+    text = text.replace(/^\s*\*\s?/gm, "");
+    text = text.replace(/@param.*$/gm, "");
+    text = text.replace(/@return.*$/gm, "");
+    text = text.replace(/^["']{3}|["']{3}$/g, "");
+    text = text.split("\n").map((l) => l.trim()).filter(Boolean).join(" ");
+    if (!text)
+      return void 0;
+    const match = text.match(/^(.*?[。！？.!?])/);
+    const summary = match ? match[1].trim() : text.slice(0, 120).trim();
+    return summary.length > 0 ? summary : void 0;
+  }
+  /**
+   * 基于命名语义与架构角色生成兜底的中文功能说明
+   */
+  static generateHeuristicSummary(node) {
+    const name3 = node.name;
+    const lowerName = name3.toLowerCase();
+    if (node.entityType === "CONTRACT_ENDPOINT" || node.endpointMeta) {
+      const m = (node.endpointMeta?.httpMethod || "GET").toUpperCase();
+      const p = node.endpointMeta?.routePath || name3;
+      return `\u5BF9\u5916\u66B4\u9732\u89C4\u8303\u7684 ${m} ${p} RESTful HTTP \u63A5\u53E3\u5951\u7EA6\u3002`;
+    }
+    if (node.entityType === "CONTRACT_TOPIC" || node.topicMeta) {
+      return `\u4F5C\u4E3A\u4E8B\u4EF6\u6D88\u606F\u4E3B\u9898\u4E2D\u67A2\uFF0C\u627F\u8F7D\u3010${node.topicMeta?.topicName || name3}\u3011\u7684\u5F02\u6B65\u53D1\u5E03\u4E0E\u6D88\u8D39\u5E7F\u64AD\u3002`;
+    }
+    if (node.entityType === "CONTRACT_RPC" || node.rpcMeta) {
+      return `\u5B9A\u4E49\u8DE8\u8BED\u8A00 RPC \u670D\u52A1\u65B9\u6CD5\u3010${node.rpcMeta?.serviceName || ""}/${node.rpcMeta?.methodName || name3}\u3011\u3002`;
+    }
+    if (node.semanticRole === "ENTRY") {
+      if (/(login|auth|token|jwt)/i.test(lowerName)) {
+        return "\u4F5C\u4E3A\u7528\u6237\u8EAB\u4EFD\u8BA4\u8BC1\u5165\u53E3\uFF0C\u63A5\u6536\u767B\u5F55\u6216\u9274\u6743\u8BF7\u6C42\u5E76\u5F00\u542F\u5B89\u5168\u4F1A\u8BDD\u3002";
+      }
+      return `\u4F5C\u4E3A\u5916\u90E8\u4EA4\u4E92\u5165\u53E3\uFF0C\u63A5\u6536\u4E0A\u6E38\u8BF7\u6C42\u5E76\u8C03\u5EA6\u540E\u7EED\u9886\u57DF\u4E1A\u52A1\u903B\u8F91\u3002`;
+    }
+    if (node.semanticRole === "REPOSITORY") {
+      return `\u8D1F\u8D23\u3010${name3}\u3011\u5E95\u5C42\u6570\u636E\u7684\u6301\u4E45\u5316\u8BFB\u53D6\u3001\u5199\u5165\u4E0E\u6570\u636E\u6A21\u578B\u6620\u5C04\u3002`;
+    }
+    if (/(verify|validate|check|auth|guard)/i.test(lowerName)) {
+      return `\u6267\u884C\u4E1A\u52A1\u524D\u7F6E\u6821\u9A8C\u4E0E\u5408\u89C4\u65AD\u8A00\uFF0C\u786E\u4FDD\u5165\u53C2\u6709\u6548\u4E0E\u72B6\u6001\u5B89\u5168\u3002`;
+    }
+    if (/(create|insert|add|save)/i.test(lowerName)) {
+      return `\u6267\u884C\u5B9E\u4F53\u65B0\u5EFA\u4E0E\u6301\u4E45\u5316\u5165\u5E93\u64CD\u4F5C\u3002`;
+    }
+    if (/(query|get|find|fetch|search|select)/i.test(lowerName)) {
+      return `\u8D1F\u8D23\u67E5\u8BE2\u4E0E\u68C0\u7D22\u4E1A\u52A1\u76EE\u6807\u6570\u636E\u3002`;
+    }
+    if (/(update|modify|edit|patch)/i.test(lowerName)) {
+      return `\u8D1F\u8D23\u6839\u636E\u4E1A\u52A1\u4E0A\u4E0B\u6587\u53D8\u66F4\u4E0E\u540C\u6B65\u5B9E\u4F53\u72B6\u6001\u3002`;
+    }
+    if (/(delete|remove|clear)/i.test(lowerName)) {
+      return `\u8D1F\u8D23\u6E05\u7406\u6216\u7269\u7406/\u903B\u8F91\u5220\u9664\u6307\u5B9A\u4E1A\u52A1\u5B9E\u4F53\u3002`;
+    }
+    if (node.entityType === "CLASS") {
+      return `\u5B9A\u4E49\u3010${name3}\u3011\u9886\u57DF\u6A21\u578B\u6216\u7EC4\u4EF6\u7C7B\uFF0C\u5C01\u88C5\u76F8\u5173\u72B6\u6001\u4E0E\u4E1A\u52A1\u884C\u4E3A\u3002`;
+    }
+    return `\u5B9E\u73B0\u3010${name3}\u3011\u6838\u5FC3\u903B\u8F91\u8BA1\u7B97\u4E0E\u72B6\u6001\u5904\u7406\u3002`;
+  }
+  /**
+   * 翻译边关系为通俗人类易懂的交互词汇
+   */
+  static formatRelationText(relation, isIncoming) {
+    if (isIncoming) {
+      switch (relation) {
+        case "CALLS_CONTRACT":
+          return "\u524D\u7AEF/\u5BA2\u6237\u7AEF\u53D1\u8D77\u7F51\u7EDC\u8BF7\u6C42\u6253\u5165";
+        case "HANDLED_BY":
+          return "\u5951\u7EA6\u4E2D\u67A2\u59D4\u6258\u7ED9\u6B64\u51FD\u6570\u627F\u63A5\u5B9E\u73B0";
+        case "SUBSCRIBES":
+          return "\u4ECE\u5F02\u6B65\u6D88\u606F\u4E3B\u9898\u8BA2\u9605\u5E76\u63A5\u6536\u4E8B\u4EF6";
+        case "CALLS":
+          return "\u4E0A\u6E38\u7EC4\u4EF6\u540C\u6B65\u65B9\u6CD5\u8C03\u7528";
+        case "EXTENDS":
+          return "\u4F5C\u4E3A\u57FA\u7C7B\u88AB\u5B50\u7C7B\u7EE7\u627F";
+        case "IMPLEMENTS":
+          return "\u4F5C\u4E3A\u62BD\u8C61\u89C4\u8303\u88AB\u4E0B\u7EA7\u5B9E\u73B0";
+        case "IMPORTS":
+          return "\u88AB\u5916\u90E8\u6A21\u5757\u4F5C\u4E3A\u4F9D\u8D56\u5BFC\u5165";
+        case "READS_WRITES":
+          return "\u88AB\u4E0A\u6E38\u4E1A\u52A1\u8BFB\u5199";
+        default:
+          return "\u88AB\u4E0A\u6E38\u7EC4\u4EF6\u4F9D\u8D56\u5173\u8054";
+      }
+    } else {
+      switch (relation) {
+        case "CALLS_CONTRACT":
+          return "\u5411\u7F51\u7EDC\u5951\u7EA6\u4E2D\u67A2\u53D1\u8D77\u8FDC\u7A0B\u8BF7\u6C42";
+        case "PUBLISHES":
+          return "\u5411\u6D88\u606F\u603B\u7EBF\u5E7F\u64AD\u4E8B\u4EF6\u6D88\u606F";
+        case "READS_WRITES":
+          return "\u8BBF\u95EE\u5E76\u66F4\u65B0\u5E95\u5C42\u6301\u4E45\u5316\u72B6\u6001";
+        case "CALLS":
+          return "\u8C03\u5EA6\u8C03\u7528\u4E0B\u6E38\u4E1A\u52A1\u5904\u7406\u903B\u8F91";
+        case "EXTENDS":
+          return "\u7EE7\u627F\u7236\u7C7B\u6838\u5FC3\u80FD\u529B\u4E0E\u72B6\u6001";
+        case "IMPLEMENTS":
+          return "\u5B9E\u73B0\u76EE\u6807\u63A5\u53E3\u6807\u51C6\u5951\u7EA6";
+        case "IMPORTS":
+          return "\u5F15\u7528\u5BFC\u5165\u5916\u90E8\u6A21\u5757\u652F\u6301\u5305";
+        default:
+          return "\u4F9D\u8D56\u4E0B\u6E38\u5173\u8054\u5BF9\u8C61";
+      }
+    }
+  }
+  /**
+   * 为单个符号节点生成交互透视故事 (NodeInteractionStory)
+   */
+  static generateNodeStory(node, allNodesMap, edges) {
+    const getNode = (id) => {
+      if (allNodesMap instanceof Map)
+        return allNodesMap.get(id);
+      return allNodesMap[id];
+    };
+    const incomingEdges = edges.filter((e) => e.target === node.id);
+    const outgoingEdges = edges.filter((e) => e.source === node.id);
+    const inDegree = incomingEdges.length;
+    const outDegree = outgoingEdges.length;
+    const callers = [];
+    for (const e of incomingEdges) {
+      const srcNode = getNode(e.source);
+      if (srcNode) {
+        callers.push({
+          nodeId: srcNode.id,
+          name: srcNode.name,
+          filePath: srcNode.filePath,
+          line: e.sourceLine || srcNode.loc.startLine,
+          relation: e.relation,
+          relationText: this.formatRelationText(e.relation, true)
+        });
+      }
+    }
+    const callees = [];
+    for (const e of outgoingEdges) {
+      const tgtNode = getNode(e.target);
+      if (tgtNode) {
+        callees.push({
+          nodeId: tgtNode.id,
+          name: tgtNode.name,
+          filePath: tgtNode.filePath,
+          line: e.sourceLine || tgtNode.loc.startLine,
+          relation: e.relation,
+          relationText: this.formatRelationText(e.relation, false)
+        });
+      }
+    }
+    const contracts = [];
+    for (const caller of callers) {
+      const src = getNode(caller.nodeId);
+      if (src && (src.semanticRole === "CONTRACT" || src.entityType.startsWith("CONTRACT_"))) {
+        contracts.push({
+          contractId: src.id,
+          name: src.name,
+          type: src.entityType === "CONTRACT_TOPIC" ? "TOPIC" : src.entityType === "CONTRACT_RPC" ? "RPC" : "REST",
+          direction: "INBOUND",
+          description: `\u627F\u63A5\u5916\u90E8\u5BA2\u6237\u7AEF\u5BF9\u5951\u7EA6\u3010${src.name}\u3011\u7684\u5177\u4F53\u6267\u884C`
+        });
+      }
+    }
+    for (const callee of callees) {
+      const tgt = getNode(callee.nodeId);
+      if (tgt && (tgt.semanticRole === "CONTRACT" || tgt.entityType.startsWith("CONTRACT_"))) {
+        contracts.push({
+          contractId: tgt.id,
+          name: tgt.name,
+          type: tgt.entityType === "CONTRACT_TOPIC" ? "TOPIC" : tgt.entityType === "CONTRACT_RPC" ? "RPC" : "REST",
+          direction: "OUTBOUND",
+          description: `\u4F5C\u4E3A\u8C03\u7528\u5BA2\u6237\u7AEF\u6253\u5411\u5951\u7EA6\u3010${tgt.name}\u3011`
+        });
+      }
+    }
+    let roleTitle = "\u4E1A\u52A1\u670D\u52A1\u7EC4\u4EF6 (Service)";
+    let roleDescription = "\u627F\u63A5\u4E0A\u6E38\u4E1A\u52A1\u6307\u4EE4\uFF0C\u6267\u884C\u9886\u57DF\u8BA1\u7B97\u5E76\u5411\u4E0B\u4F9D\u8D56\u6570\u636E\u6216\u8F85\u52A9\u670D\u52A1\u3002";
+    if (node.semanticRole === "CONTRACT" || node.entityType.startsWith("CONTRACT_")) {
+      roleTitle = "\u8DE8\u8BED\u8A00\u5951\u7EA6\u4E2D\u67A2 (Contract Hub)";
+      roleDescription = "\u4F5C\u4E3A\u591A\u7AEF\u901A\u4FE1\u7684\u67B6\u6784\u4E2D\u67A2\uFF0C\u5C06\u524D\u7AEF\u8BF7\u6C42\u3001\u79FB\u52A8\u7AEF\u4E0E\u540E\u7AEF\u5FAE\u670D\u52A1\u8DEF\u7531\u6216\u6D88\u606F\u603B\u7EBF\u8FDB\u884C\u89C4\u8303\u5BF9\u9F50\u3002";
+    } else if (node.semanticRole === "ENTRY" || inDegree === 0 && outDegree > 0) {
+      roleTitle = "\u5916\u90E8\u9A71\u52A8\u5165\u53E3 (Entry Source)";
+      roleDescription = "\u5904\u4E8E\u7CFB\u7EDF\u8C03\u7528\u94FE\u8DEF\u7684\u6700\u4E0A\u6E38\u89E6\u53D1\u70B9\uFF0C\u63A5\u6536\u6765\u81EA\u5916\u90E8\u8BF7\u6C42\u3001\u5B9A\u65F6\u4E8B\u4EF6\u6216\u8DEF\u7531\uFF0C\u8C03\u5EA6\u4E0B\u6E38\u4E1A\u52A1\u5904\u7406\u3002";
+    } else if (node.semanticRole === "REPOSITORY" || inDegree > 0 && outDegree === 0) {
+      roleTitle = "\u5E95\u5C42\u6301\u4E45\u5316\u7EC8\u7AEF (Data Sink)";
+      roleDescription = "\u5904\u4E8E\u4E1A\u52A1\u6D41\u7684\u6700\u672B\u7AEF\uFF0C\u4E13\u6CE8\u4E0E\u6570\u636E\u5E93\u3001\u7F13\u5B58\u6216\u5B58\u50A8\u4ECB\u8D28\u76F4\u63A5\u6253\u4EA4\u9053\uFF0C\u8D1F\u8D23\u72B6\u6001\u6301\u4E45\u843D\u5730\u3002";
+    } else if (inDegree >= 2 && outDegree >= 2) {
+      roleTitle = "\u6838\u5FC3\u4E1A\u52A1\u67A2\u7EBD (Core Hub)";
+      roleDescription = "\u5904\u4E8E\u7CFB\u7EDF\u4EA4\u4E92\u7684\u5173\u952E\u5341\u5B57\u8DEF\u53E3\uFF0C\u88AB\u591A\u4E2A\u4E0A\u6E38\u8C03\u7528\uFF0C\u540C\u65F6\u534F\u8C03\u591A\u4E2A\u4E0B\u6E38\u5B50\u7CFB\u7EDF\uFF0C\u5C5E\u4E8E\u91CD\u8981\u4E1A\u52A1\u8C03\u5EA6\u4E2D\u67A2\u3002";
+    } else if (inDegree === 0 && outDegree === 0) {
+      roleTitle = "\u72EC\u7ACB\u8F85\u52A9\u5355\u5143 (Isolated Util)";
+      roleDescription = "\u529F\u80FD\u76F8\u5BF9\u81EA\u5305\u542B\u7684\u5DE5\u5177\u65B9\u6CD5\u6216\u5E38\u91CF\u6A21\u578B\uFF0C\u4E0D\u4E0E\u4E3B\u4E1A\u52A1\u6D41\u7A0B\u5F3A\u7ED1\u5B9A\uFF0C\u53EF\u968F\u65F6\u72EC\u7ACB\u590D\u7528\u3002";
+    }
+    const cleaned = this.cleanDocstring(node.docstring);
+    const summaryText = cleaned || this.generateHeuristicSummary(node);
+    let architectureAdvice;
+    if (inDegree >= 3) {
+      architectureAdvice = `\u26A0\uFE0F \u9AD8\u654F\u611F\u6838\u5FC3\u7EC4\u4EF6\uFF1A\u5F53\u524D\u88AB ${inDegree} \u4E2A\u4E0A\u6E38\u903B\u8F91\u76F4\u63A5\u4F9D\u8D56\u3002\u4EFB\u4F55\u51FD\u6570\u7B7E\u540D\u4FEE\u6539\u6216\u8FD4\u56DE\u503C\u8C03\u6574\u5747\u53EF\u80FD\u9020\u6210\u591A\u5904\u7F16\u8BD1\u6216\u8FD0\u884C\u65F6\u7834\u574F\uFF0C\u5EFA\u8BAE\u6539\u52A8\u524D\u91CD\u70B9\u6392\u67E5\u5173\u8054\u8C03\u7528\u65B9\u3002`;
+    } else if (outDegree >= 3) {
+      architectureAdvice = `\u2139\uFE0F \u9AD8\u4F9D\u8D56\u5EA6\u7EC4\u4EF6\uFF1A\u5355\u8282\u70B9\u5411\u5916\u8C03\u7528\u4E86 ${outDegree} \u4E2A\u4E0B\u6E38\u7EC4\u4EF6\u3002\u9700\u5173\u6CE8\u94FE\u8DEF\u4E0A\u7684\u5F02\u5E38\u6355\u83B7\u5BB9\u9519\uFF0C\u907F\u514D\u4EFB\u4E00\u4E0B\u6E38\u8D85\u65F6\u5F15\u53D1\u96EA\u5D29\u3002`;
+    } else if (inDegree >= 2 && outDegree >= 2) {
+      architectureAdvice = `\u{1F525} \u627F\u4E0A\u542F\u4E0B\u67A2\u7EBD\uFF1A\u4F5C\u4E3A\u4E1A\u52A1\u603B\u63A7\uFF0C\u5EFA\u8BAE\u4FDD\u6301\u8BE5\u51FD\u6570\u4EE3\u7801\u7CBE\u7B80\uFF0C\u4E13\u6CE8\u4E8E\u5DE5\u4F5C\u6D41\u7F16\u6392\uFF0C\u907F\u514D\u5806\u780C\u8FC7\u591A\u5E95\u5C42\u5B9E\u73B0\u7EC6\u8282\u3002`;
+    } else if (inDegree <= 1 && outDegree <= 1) {
+      architectureAdvice = `\u2713 \u4F4E\u8026\u5408\u5C40\u90E8\u8282\u70B9\uFF1A\u4E0A\u4E0B\u6E38\u5173\u7CFB\u7B80\u6D01\u5355\u4E00\uFF0C\u91CD\u6784\u6216\u5C40\u90E8\u4F18\u5316\u7684\u5F71\u54CD\u9762\u6781\u6613\u6536\u655B\u3002`;
+    }
+    return {
+      roleTitle,
+      roleDescription,
+      summaryText,
+      inDegree,
+      outDegree,
+      callers,
+      callees,
+      contracts,
+      architectureAdvice
+    };
+  }
+  /**
+   * 为时序执行流程 (ProcessFlow) 生成叙事故事 (FlowInteractionStory)
+   */
+  static generateFlowStory(flow) {
+    const total = flow.steps.length;
+    const narrativeText = `\u672C\u4E1A\u52A1\u6D41\u7A0B\u5171\u5305\u542B ${total} \u4E2A\u534F\u540C\u6B65\u9AA4\uFF0C\u4EE5\u3010${flow.title}\u3011\u4E3A\u8D77\u70B9\uFF0C\u5F62\u6210\u4E86\u5B8C\u6574\u7684\u65F6\u5E8F\u6D41\u8F6C\u95ED\u73AF\u3002`;
+    const stepNarratives = flow.steps.map((step, idx) => {
+      const stepIndex = idx + 1;
+      let actionDescription = "";
+      switch (step.stepType) {
+        case "ENTRY":
+          actionDescription = `\u7B2C ${stepIndex} \u6B65\u3010\u521D\u59CB\u63A5\u5165\u3011\uFF1A\u5916\u90E8\u4E8B\u4EF6\u6216\u7F51\u7EDC\u8BF7\u6C42\u8FDB\u5165\u7CFB\u7EDF\uFF0C\u7531 \`${step.name}()\` \u8D1F\u8D23\u63A5\u6536\u5E76\u5F00\u542F\u94FE\u8DEF\u4E0A\u4E0B\u6587\u3002`;
+          break;
+        case "DECISION":
+          actionDescription = `\u7B2C ${stepIndex} \u6B65\u3010\u62E6\u622A\u5224\u5B9A\u3011\uFF1A\u8C03\u7528 \`${step.name}()\` \u8FDB\u884C\u5173\u952E\u53C2\u6570\u6821\u9A8C\u6216\u4E1A\u52A1\u5B88\u536B\u5224\u5B9A\uFF0C\u672A\u901A\u8FC7\u65F6\u5C06\u7194\u65AD\u4E2D\u65AD\u94FE\u8DEF\u3002`;
+          break;
+        case "STORE":
+          actionDescription = `\u7B2C ${stepIndex} \u6B65\u3010\u6570\u636E\u6301\u4E45\u3011\uFF1A\u8C03\u5EA6\u5E95\u5C42 \`${step.name}()\` \u6267\u884C\u6570\u636E\u5E93\u4EA4\u4E92\u6216\u72B6\u6001\u843D\u5730\u66F4\u65B0\u3002`;
+          break;
+        case "OUTPUT":
+          actionDescription = `\u7B2C ${stepIndex} \u6B65\u3010\u7EC8\u6001\u54CD\u5E94\u3011\uFF1A\u6267\u884C \`${step.name}()\` \u5C01\u88C5\u6267\u884C\u7ED3\u679C\uFF0C\u5411\u5BA2\u6237\u7AEF\u751F\u6210\u54CD\u5E94\u6216\u5E7F\u64AD\u5916\u90E8\u901A\u77E5\u3002`;
+          break;
+        default:
+          actionDescription = `\u7B2C ${stepIndex} \u6B65\u3010\u4E1A\u52A1\u8BA1\u7B97\u3011\uFF1A\u5185\u90E8\u8C03\u7528 \`${step.name}()\` \u5904\u7406\u5177\u4F53\u9886\u57DF\u89C4\u5219\u8BA1\u7B97\u6216\u4E2D\u7EE7\u6D41\u8F6C\u3002`;
+          break;
+      }
+      return {
+        stepIndex,
+        name: step.name,
+        stepType: step.stepType,
+        actionDescription
+      };
+    });
+    return {
+      flowId: flow.flowId,
+      title: flow.title,
+      narrativeText,
+      stepNarratives
+    };
+  }
+  /**
+   * 为宏观模块生成交互概览叙事 (ModuleInteractionStory)
+   */
+  static generateModuleStory(mod, allModules, buses) {
+    const modMap = /* @__PURE__ */ new Map();
+    for (const m of allModules)
+      modMap.set(m.id, m);
+    const inboundModuleNames = [];
+    const outboundModuleNames = [];
+    for (const bus of buses) {
+      if (bus.targetModule === mod.id) {
+        const src = modMap.get(bus.sourceModule);
+        if (src && !inboundModuleNames.includes(src.name)) {
+          inboundModuleNames.push(src.name);
+        }
+      }
+      if (bus.sourceModule === mod.id) {
+        const tgt = modMap.get(bus.targetModule);
+        if (tgt && !outboundModuleNames.includes(tgt.name)) {
+          outboundModuleNames.push(tgt.name);
+        }
+      }
+    }
+    const inCount = mod.inPorts.length;
+    const outCount = mod.outPorts.length;
+    const fileCount = mod.files.length;
+    let roleTitle = mod.archetypeRole || "\u4E1A\u52A1\u529F\u80FD\u6A21\u5757";
+    let purposeDescription = `\u805A\u5408\u4E86 ${fileCount} \u4E2A\u6E90\u7801\u6587\u4EF6\u3002`;
+    if (inCount > 0 && outCount > 0) {
+      purposeDescription += ` \u5BF9\u5916\u66B4\u9732 ${inCount} \u4E2A\u5165\u53E3\u63A5\u53E3\uFF0C\u540C\u65F6\u5411\u5916\u534F\u540C\u4F9D\u8D56 ${outCount} \u4E2A\u51FA\u53E3\u7AEF\u53E3\u3002`;
+    } else if (inCount > 0) {
+      purposeDescription += ` \u5BF9\u5916\u63D0\u4F9B ${inCount} \u4E2A\u6838\u5FC3\u80FD\u529B\u5165\u53E3\uFF0C\u5C5E\u4E8E\u5E95\u5C42\u81EA\u7ED9\u81EA\u8DB3\u7684\u670D\u52A1\u6C47\u805A\u5C42\u3002`;
+    } else if (outCount > 0) {
+      purposeDescription += ` \u4F5C\u4E3A\u4E3B\u52A8\u53D1\u8D77\u65B9\uFF0C\u5411\u4E0B\u8C03\u5EA6 ${outCount} \u4E2A\u5916\u90E8\u4F9D\u8D56\uFF0C\u8D1F\u8D23\u524D\u7F6E\u9A71\u52A8\u3002`;
+    } else {
+      purposeDescription += ` \u6A21\u5757\u5185\u90E8\u9AD8\u5EA6\u81EA\u95ED\u73AF\uFF0C\u4E0E\u5916\u90E8\u65E0\u76F4\u63A5\u5F3A\u8026\u5408\u4EA4\u4E92\u3002`;
+    }
+    return {
+      moduleId: mod.id,
+      name: mod.name,
+      roleTitle,
+      purposeDescription,
+      inboundModuleNames,
+      outboundModuleNames
+    };
+  }
+  /**
+   * 全量为编译后的图谱注入交互透视故事
+   */
+  static enrichGraphResult(result) {
+    const allNodesMap = result.allNodes;
+    const edges = result.allEdges;
+    for (const node of Object.values(allNodesMap)) {
+      if (!node.metadata) {
+        node.metadata = {};
+      }
+      node.metadata.story = this.generateNodeStory(node, allNodesMap, edges);
+    }
+    for (const flow of result.processFlows) {
+      const flowStory = this.generateFlowStory(flow);
+      flow.story = flowStory;
+    }
+    for (const mod of result.architectureView.modules) {
+      const modStory = this.generateModuleStory(mod, result.architectureView.modules, result.architectureView.buses);
+      mod.story = modStory;
+    }
+    return result;
+  }
+};
+
+// packages/core/dist/graph/dual-compiler.js
 var Graph = import_graphology.default.default || import_graphology.default;
 var louvain = import_graphology_communities_louvain.default.default || import_graphology_communities_louvain.default;
 var DualModelCompiler = class {
@@ -108937,7 +109274,7 @@ var DualModelCompiler = class {
       }
     }
     const isMultiProject = Boolean(options?.projects && options.projects.length > 1);
-    return {
+    const result = {
       meta: {
         projectName,
         scopePath,
@@ -108958,6 +109295,7 @@ var DualModelCompiler = class {
       allNodes: allNodesMap,
       allEdges: targetEdges
     };
+    return InteractionNarrator.enrichGraphResult(result);
   }
   /**
    * 根据原型规则为节点打上语义角色标签

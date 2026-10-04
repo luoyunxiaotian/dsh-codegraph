@@ -298,11 +298,14 @@ export const App: React.FC = () => {
           />
         )}
 
-        {/* 源码预览抽屉 */}
+        {/* 源码预览与交互透视抽屉 */}
         <CodeDrawer
           node={activeCodeNode}
           workspaceRoot={workspaceRoot}
+          allNodes={graphData.allNodes}
+          allEdges={graphData.allEdges}
           onClose={() => setActiveCodeNode(null)}
+          onNavigateToNode={handleSelectNode}
         />
 
         {/* 多端与版本范围管理抽屉 */}

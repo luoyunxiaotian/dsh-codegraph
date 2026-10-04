@@ -15,6 +15,7 @@ import {
   ProjectPlatform,
 } from '../types/index.js';
 import { ArchetypeEngine } from '../archetype/detector.js';
+import { InteractionNarrator } from './interaction-narrator.js';
 
 export interface CompileOptions {
   projects?: DetectedProjectProfile[];
@@ -113,7 +114,7 @@ export class DualModelCompiler {
 
     const isMultiProject = Boolean(options?.projects && options.projects.length > 1);
 
-    return {
+    const result: FullGraphResult = {
       meta: {
         projectName,
         scopePath,
@@ -134,6 +135,9 @@ export class DualModelCompiler {
       allNodes: allNodesMap,
       allEdges: targetEdges,
     };
+
+    // 注入 0-Token 本地交互透视故事与架构解释说明
+    return InteractionNarrator.enrichGraphResult(result);
   }
 
   /**

@@ -26,6 +26,7 @@ import {
   FileCode,
   Maximize2,
   Globe,
+  BookOpen,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard } from '../utils/chatBridge.js';
@@ -50,6 +51,7 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
   return (
     <div
       onClick={() => onSelectNode(node.id, node.filePath, node.loc.startLine)}
+      title={node.metadata?.story?.summaryText || `${node.name}: 点击打开交互透视与源码`}
       className={`w-[220px] bg-dsh-layer1 border ${
         isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
@@ -247,6 +249,11 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
               const text = `请查看文件 \`${codeNode.filePath}\` 第 ${codeNode.loc.startLine} 行的【${codeNode.name}】(${codeNode.entityType})，帮我深入解释其实现逻辑并给出重构与性能优化建议。完整限定名: \`${codeNode.qualifiedName}\``;
               insertIntoChat(text, { title: `优化符号: ${codeNode.name}` });
             },
+          },
+          {
+            label: '交互透视与说明 (0-Token)',
+            icon: <BookOpen className="w-3.5 h-3.5 text-dsh-blue" />,
+            onClick: () => onSelectNode(codeNode.id, codeNode.filePath, codeNode.loc.startLine),
           },
           {
             label: '抽屉查看源码',
