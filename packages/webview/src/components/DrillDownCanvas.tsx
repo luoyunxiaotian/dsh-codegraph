@@ -201,7 +201,7 @@ const OutPortNode = ({ data }: NodeProps) => {
 };
 
 /**
- * 客户端拓扑排版算法 (Kahn Topological DAG Layering & Cycle Breaking)
+ * 客户端拓扑排版算法 (Kahn Topological DAG Layering + Barycenter Crossing Minimization)
  * 复杂度 O(V + E)，耗时 < 15ms，彻底杜绝环路依赖无限循环卡死！
  */
 function calculateClientTopologicalLayout(
@@ -210,24 +210,29 @@ function calculateClientTopologicalLayout(
   allEdges: CodeEdge[]
 ): Record<string, { x: number; y: number }> {
   const positions: Record<string, { x: number; y: number }> = {};
+  if (internalNodes.length === 0) return positions;
+
   const internalIds = new Set(internalNodes.map((n) => n.id));
 
-  // 1. In-Ports 固定排布在最左列
+  // 1. In-Ports 固定排布在最左列 X=50
   module.inPorts.forEach((port, idx) => {
-    positions[`inport_${port}`] = { x: 50, y: 100 + idx * 75 };
+    positions[`inport_${port}`] = { x: 50, y: 80 + idx * 70 };
   });
 
   // 2. 构建内部有向图 (Adjacency & in-degrees，自动过滤自环)
   const adj: Record<string, string[]> = {};
+  const revAdj: Record<string, string[]> = {};
   const inDegree: Record<string, number> = {};
   internalNodes.forEach((n) => {
     adj[n.id] = [];
+    revAdj[n.id] = [];
     inDegree[n.id] = 0;
   });
 
   allEdges.forEach((e) => {
     if (internalIds.has(e.source) && internalIds.has(e.target) && e.source !== e.target) {
       adj[e.source]?.push(e.target);
+      revAdj[e.target]?.push(e.source);
       inDegree[e.target] = (inDegree[e.target] || 0) + 1;
     }
   });
@@ -253,14 +258,13 @@ function calculateClientTopologicalLayout(
   }
 
   let layerIndex = 0;
-  const maxSafeDepth = Math.min(internalNodes.length, 50); // 安全深度上限
+  const maxSafeDepth = Math.min(internalNodes.length, 30);
 
   while (currentLayer.length > 0 && layerIndex < maxSafeDepth) {
     const nextLayer: string[] = [];
     currentLayer.forEach((u) => {
       (adj[u] || []).forEach((v) => {
         inDegreeWork[v] = (inDegreeWork[v] || 1) - 1;
-        // 当入度降为 0 且尚未分配层级时，加入下一层
         if (inDegreeWork[v] <= 0 && rank[v] === undefined) {
           rank[v] = layerIndex + 1;
           nextLayer.push(v);
@@ -275,42 +279,92 @@ function calculateClientTopologicalLayout(
   let unassignedCount = 0;
   internalNodes.forEach((n) => {
     if (rank[n.id] === undefined) {
-      rank[n.id] = layerIndex + Math.floor(unassignedCount / 10);
+      rank[n.id] = layerIndex + Math.floor(unassignedCount / 8);
       unassignedCount++;
     }
   });
 
   // 4. 按层分组
   const layers: Record<number, CodeNode[]> = {};
-  let maxRank = 0;
   internalNodes.forEach((n) => {
     const r = rank[n.id] || 0;
-    if (r > maxRank) maxRank = r;
     if (!layers[r]) layers[r] = [];
     layers[r].push(n);
   });
 
-  // 5. 排布各层内部节点 (规避超高纵向堆叠，每层超过 10 个时自动双列折叠)
-  Object.keys(layers).forEach((rKey) => {
-    const r = Number(rKey);
-    const nodesInLayer = layers[r] || [];
-    nodesInLayer.sort((a, b) => a.name.localeCompare(b.name));
+  const sortedLayerRanks = Object.keys(layers).map(Number).sort((a, b) => a - b);
 
-    const maxPerCol = 10;
+  // 5. 跨层重心启发式排序 (Barycenter Crossing Minimization)
+  const nodeYIndex = new Map<string, number>();
+  sortedLayerRanks.forEach((r) => {
+    layers[r].sort((a, b) => {
+      const fComp = (a.filePath || '').localeCompare(b.filePath || '');
+      if (fComp !== 0) return fComp;
+      return a.name.localeCompare(b.name);
+    });
+    layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+  });
+
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 1; i < sortedLayerRanks.length; i++) {
+      const r = sortedLayerRanks[i];
+      layers[r].sort((a, b) => {
+        const getBary = (nId: string) => {
+          const preds = revAdj[nId] || [];
+          if (preds.length === 0) return nodeYIndex.get(nId) ?? 0;
+          let sum = 0;
+          preds.forEach((p) => { sum += (nodeYIndex.get(p) ?? 0); });
+          return sum / preds.length;
+        };
+        return getBary(a.id) - getBary(b.id);
+      });
+      layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+    }
+
+    for (let i = sortedLayerRanks.length - 2; i >= 0; i--) {
+      const r = sortedLayerRanks[i];
+      layers[r].sort((a, b) => {
+        const getBary = (nId: string) => {
+          const succs = adj[nId] || [];
+          if (succs.length === 0) return nodeYIndex.get(nId) ?? 0;
+          let sum = 0;
+          succs.forEach((s) => { sum += (nodeYIndex.get(s) ?? 0); });
+          return sum / succs.length;
+        };
+        return getBary(a.id) - getBary(b.id);
+      });
+      layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+    }
+  }
+
+  // 6. 排布各层内部节点 (规避超高纵向堆叠，根据节点总数自适应列容量)
+  const maxPerCol = internalNodes.length > 100 ? 16 : internalNodes.length > 30 ? 12 : 8;
+  const CARD_WIDTH = 220;
+  const CARD_HEIGHT = 85;
+  const X_GAP = 60;
+  const Y_GAP = 25;
+  let currentLayerBaseX = 300;
+
+  sortedLayerRanks.forEach((r) => {
+    const nodesInLayer = layers[r] || [];
+    const cols = Math.ceil(nodesInLayer.length / maxPerCol) || 1;
+
     nodesInLayer.forEach((n, idx) => {
       const colOffset = Math.floor(idx / maxPerCol);
       const rowIdx = idx % maxPerCol;
       positions[n.id] = {
-        x: 300 + (r * 320) + (colOffset * 250),
-        y: 80 + rowIdx * 115,
+        x: currentLayerBaseX + colOffset * (CARD_WIDTH + 35),
+        y: 80 + rowIdx * (CARD_HEIGHT + Y_GAP),
       };
     });
+
+    currentLayerBaseX += cols * (CARD_WIDTH + 35) + X_GAP;
   });
 
-  // 6. Out-Ports 固定排布在最右列
-  const rightX = 350 + (maxRank + 2) * 320;
+  // 7. Out-Ports 固定排布在最右列
+  const rightX = Math.max(currentLayerBaseX, 850);
   module.outPorts.forEach((port, idx) => {
-    positions[`outport_${port}`] = { x: Math.max(rightX, 800), y: 100 + idx * 75 };
+    positions[`outport_${port}`] = { x: rightX, y: 80 + idx * 70 };
   });
 
   return positions;
@@ -481,19 +535,6 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
       setIsUntangling(true);
 
-      // 若卡片较多 (> 60 节点)，直接使用客户端极速拓扑分层网格排版 (5ms 内完成，天然避免超高纵向堆叠并支持缩略图全景导航)
-      if (internalNodes.length > 60) {
-        const clientPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
-        setNodePositions(clientPos);
-        const layoutData: PersistedDrillLayout = { positions: clientPos, portEdges: [] };
-        moduleLayoutMemoryCache.set(module.id, layoutData);
-        savePersistedLayout(workspaceRoot, module.id, layoutData);
-        setIsUntangling(false);
-        if (showFeedback) showToast('✓ 已完成智能拓扑分层理线并自动保存');
-        setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 40);
-        return;
-      }
-
       try {
         const res = await fetch('/api/layout-drilldown', {
           method: 'POST',
@@ -501,7 +542,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           body: JSON.stringify({ moduleId: module.id, forceRefresh }),
         });
         const data = await res.json();
-        if (data.success && data.layout?.nodes) {
+        if (data.success && data.layout?.nodes && (!data.layout.width || data.layout.width < 30000)) {
           const posMap: Record<string, { x: number; y: number }> = {};
           data.layout.nodes.forEach((n: any) => {
             posMap[n.id] = { x: n.x, y: n.y };
@@ -513,12 +554,12 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           moduleLayoutMemoryCache.set(module.id, layoutData);
           savePersistedLayout(workspaceRoot, module.id, layoutData);
 
-          if (showFeedback) showToast('✓ 已重新理线并自动保存');
+          if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
           setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 50);
           return;
         }
-      } catch {
-        // 服务端不可达时平滑降级
+      } catch (err) {
+        console.warn('服务端理线请求失败，采用客户端拓扑排版降级:', err);
       } finally {
         setIsUntangling(false);
       }
@@ -528,7 +569,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       const clientData: PersistedDrillLayout = { positions: clientPos, portEdges: [] };
       moduleLayoutMemoryCache.set(module.id, clientData);
       savePersistedLayout(workspaceRoot, module.id, clientData);
-      if (showFeedback) showToast('✓ 已完成客户端拓扑分层理线并保存');
+      if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
       setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 50);
     },
     [module, workspaceRoot, internalNodes, allEdges, rfInstance]
@@ -958,6 +999,19 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onPaneClick={() => {
           setSelectedNodeId(null);
           setHoveredNodeId(null);
+        }}
+        onNodeDragStop={(_, node) => {
+          setNodePositions((prev) => {
+            const updated = {
+              ...prev,
+              [node.id]: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
+            };
+            const mem = moduleLayoutMemoryCache.get(module.id);
+            const layoutData = { positions: updated, portEdges: mem?.portEdges || serverPortEdges };
+            moduleLayoutMemoryCache.set(module.id, layoutData);
+            savePersistedLayout(workspaceRoot, module.id, layoutData);
+            return updated;
+          });
         }}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}

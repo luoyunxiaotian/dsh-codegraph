@@ -564,6 +564,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           }
         }}
         onNodeClick={(_, node) => setSelectedModuleId((prev) => (prev === node.id ? null : node.id))}
+        onNodeDoubleClick={(_, node) => onDrillDown(node.id)}
         onPaneClick={() => {
           setSelectedModuleId(null);
           setHoveredModuleId(null);
