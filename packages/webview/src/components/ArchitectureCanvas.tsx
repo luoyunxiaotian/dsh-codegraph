@@ -10,6 +10,7 @@ import {
   EdgeProps,
   BaseEdge,
   getBezierPath,
+  getSmoothStepPath,
   EdgeLabelRenderer,
   useNodesState,
   useEdgesState,
@@ -28,9 +29,12 @@ import {
   Bot,
   Search,
   Copy,
-  LayoutGrid,
   Maximize2,
   Globe,
+  Wand2,
+  GitFork,
+  Route,
+  Sparkles,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard, showToast } from '../utils/chatBridge.js';
@@ -46,6 +50,9 @@ interface ArchitectureCanvasProps {
 const ModuleCardNode = ({ data }: NodeProps) => {
   const mod = data.module as ModuleContainer;
   const onDrillDown = data.onDrillDown as (id: string) => void;
+  const isFocused = Boolean(data.isFocused);
+  const isConnected = Boolean(data.isConnected);
+  const isDimmed = Boolean(data.isDimmed);
   const isContract = mod.id === 'mod_contracts' || mod.archetypeRole === 'Contract Hub';
 
   const getPlatformBadge = (p?: any) => {
@@ -68,8 +75,17 @@ const ModuleCardNode = ({ data }: NodeProps) => {
   return (
     <div
       onDoubleClick={() => onDrillDown(mod.id)}
+      style={{
+        opacity: isDimmed ? 0.35 : 1,
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+        filter: isDimmed ? 'grayscale(40%)' : 'none',
+      }}
       className={`w-[270px] bg-dsh-layer1 border ${
-        isContract
+        isFocused
+          ? 'ring-2 ring-dsh-blue border-dsh-blue shadow-xl shadow-blue-500/30'
+          : isConnected
+          ? 'border-dsh-blue/80 shadow-md shadow-blue-500/15'
+          : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue/80'
       } active:border-dsh-blue rounded-md shadow-lg p-3.5 transition-all hover:shadow-black/40 cursor-grab active:cursor-grabbing group select-none`}
@@ -159,7 +175,7 @@ const ModuleCardNode = ({ data }: NodeProps) => {
   );
 };
 
-// DeepSeek Harness 风格总线边
+// DeepSeek Harness 风格总线边 (支持平滑正交与聚焦点高亮)
 const BusEdge = ({
   id,
   sourceX,
@@ -169,34 +185,46 @@ const BusEdge = ({
   sourcePosition,
   targetPosition,
   data,
+  style,
 }: EdgeProps) => {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const isSmooth = (data as any)?.routingMode === 'smoothstep';
+  const pathFn = isSmooth ? getSmoothStepPath : getBezierPath;
+  const [edgePath, labelX, labelY] = pathFn({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
-  });
+    borderRadius: 16,
+  } as any);
 
   const callCount = (data as any)?.callCount || 1;
+  const isDimmed = Boolean((data as any)?.isDimmed);
+  const isFocused = Boolean((data as any)?.isFocused);
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} />
-      <EdgeLabelRenderer>
-        <div
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-            pointerEvents: 'all',
-          }}
-          className="px-2 py-0.5 rounded-full bg-dsh-layer2 border border-dsh-border3 text-[11px] font-mono text-dsh-secondary shadow hover:border-dsh-blue transition-colors cursor-default"
-          title={`${callCount} 组跨模块调用 / 导入关联`}
-        >
-          {callCount} {callCount > 1 ? 'links' : 'link'}
-        </div>
-      </EdgeLabelRenderer>
+      <BaseEdge id={id} path={edgePath} style={style} />
+      {!isDimmed && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: 'all',
+            }}
+            className={`px-2 py-0.5 rounded-full ${
+              isFocused
+                ? 'bg-dsh-blue text-white shadow-md shadow-blue-500/30 border border-blue-400 font-bold'
+                : 'bg-dsh-layer2 border border-dsh-border3 text-dsh-secondary shadow'
+            } text-[11px] font-mono hover:border-dsh-blue transition-all cursor-default select-none`}
+            title={`${callCount} 组跨模块调用 / 导入关联`}
+          >
+            {callCount} {callCount > 1 ? 'links' : 'link'}
+          </div>
+        </EdgeLabelRenderer>
+      )}
     </>
   );
 };
@@ -213,9 +241,21 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
 
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 
-  // 1. 采用 useNodesState 与 useEdgesState 支持鼠标左键自由拖动
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
+
+  // 连线与聚焦点控制
+  const [routingMode, setRoutingMode] = useState<'smoothstep' | 'bezier'>('smoothstep');
+  const [hoveredModuleId, setHoveredModuleId] = useState<string | null>(null);
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [isUntangling, setIsUntangling] = useState<boolean>(false);
+  const [currentLayout, setCurrentLayout] = useState<LayoutResult | undefined>(layout);
+
+  useEffect(() => {
+    setCurrentLayout(layout);
+  }, [layout]);
+
+  const focusedModuleId = selectedModuleId || hoveredModuleId;
 
   // 2. 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
@@ -225,10 +265,28 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     items: ContextMenuItem[];
   } | null>(null);
 
-  // 初始化或当布局/模块更新时同步节点位置
+  // 初始化或当布局/模块更新时同步节点位置与聚焦点样式
   useEffect(() => {
+    // 计算聚焦点相连的边与模块
+    const connectedBusIds = new Set<string>();
+    const connectedModIds = new Set<string>();
+    if (focusedModuleId) {
+      connectedModIds.add(focusedModuleId);
+      buses.forEach((b) => {
+        if (b.sourceModule === focusedModuleId || b.targetModule === focusedModuleId) {
+          connectedBusIds.add(b.id);
+          connectedModIds.add(b.sourceModule);
+          connectedModIds.add(b.targetModule);
+        }
+      });
+    }
+
     const computedNodes = modules.map((m) => {
-      const layoutPos = layout?.nodes.find((n) => n.id === m.id);
+      const layoutPos = currentLayout?.nodes.find((n) => n.id === m.id);
+      const isFocused = focusedModuleId === m.id;
+      const isConnected = Boolean(focusedModuleId && connectedModIds.has(m.id));
+      const isDimmed = Boolean(focusedModuleId && !connectedModIds.has(m.id));
+
       return {
         id: m.id,
         type: 'moduleCard',
@@ -239,42 +297,92 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         data: {
           module: m,
           onDrillDown,
+          isFocused,
+          isConnected,
+          isDimmed,
         },
       };
     });
 
-    const computedEdges = buses.map((b) => ({
-      id: b.id,
-      source: b.sourceModule,
-      target: b.targetModule,
-      type: 'busEdge',
-      data: {
-        callCount: b.callCount,
-        symbols: b.symbols,
-      },
-    }));
+    const computedEdges = buses.map((b) => {
+      const isConnected = focusedModuleId ? connectedBusIds.has(b.id) : true;
+      const isOutgoing = focusedModuleId && b.sourceModule === focusedModuleId;
+      const isIncoming = focusedModuleId && b.targetModule === focusedModuleId;
+      const isDimmed = Boolean(focusedModuleId && !isConnected);
+
+      let strokeColor = isDark ? 'rgba(99, 102, 241, 0.65)' : 'rgba(79, 70, 229, 0.65)';
+      if (focusedModuleId) {
+        if (isOutgoing) {
+          strokeColor = '#3b82f6';
+        } else if (isIncoming) {
+          strokeColor = '#10b981';
+        } else {
+          strokeColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+        }
+      }
+
+      return {
+        id: b.id,
+        source: b.sourceModule,
+        target: b.targetModule,
+        type: 'busEdge',
+        animated: Boolean(focusedModuleId && isConnected),
+        zIndex: focusedModuleId ? (isConnected ? 20 : 1) : 5,
+        style: {
+          stroke: strokeColor,
+          strokeWidth: focusedModuleId ? (isConnected ? 3 : 1) : 2,
+          opacity: focusedModuleId ? (isConnected ? 1 : 0.08) : 0.85,
+          transition: 'stroke 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease',
+        },
+        data: {
+          callCount: b.callCount,
+          symbols: b.symbols,
+          routingMode,
+          isFocused: focusedModuleId && isConnected,
+          isDimmed,
+        },
+      };
+    });
 
     setNodes(computedNodes);
     setEdges(computedEdges);
-  }, [modules, buses, layout, onDrillDown, setNodes, setEdges]);
+  }, [modules, buses, currentLayout, focusedModuleId, routingMode, isDark, onDrillDown, setNodes, setEdges]);
 
-  // 重置为算法分层布局
-  const handleResetLayout = useCallback(() => {
-    setNodes((prevNodes: Node[]) =>
-      prevNodes.map((n) => {
-        const layoutPos = layout?.nodes.find((ln) => ln.id === n.id);
-        return {
-          ...n,
-          position: {
-            x: layoutPos ? layoutPos.x : 100,
-            y: layoutPos ? layoutPos.y : 100,
-          },
-        };
-      })
-    );
-    rfInstance?.fitView({ duration: 300 });
-    showToast('✓ 已恢复标准正交分层排版');
-  }, [layout, rfInstance, setNodes]);
+  // 重置 / 一键排版为算法分层布局
+  const handleResetLayout = useCallback(async () => {
+    setIsUntangling(true);
+    try {
+      const res = await fetch('/api/layout-architecture', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.layout?.architecture) {
+        setCurrentLayout(data.layout.architecture);
+        showToast('✓ 已使用 ELK Sugiyama 正交分层完成智能理线');
+        setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
+        return;
+      }
+    } catch {
+      // 本地降级
+    } finally {
+      setIsUntangling(false);
+    }
+
+    if (currentLayout) {
+      setNodes((prevNodes: Node[]) =>
+        prevNodes.map((n) => {
+          const layoutPos = currentLayout.nodes.find((ln) => ln.id === n.id);
+          return {
+            ...n,
+            position: {
+              x: layoutPos ? layoutPos.x : 100,
+              y: layoutPos ? layoutPos.y : 100,
+            },
+          };
+        })
+      );
+      rfInstance?.fitView({ duration: 300 });
+      showToast('✓ 已恢复标准正交分层排版');
+    }
+  }, [currentLayout, rfInstance, setNodes]);
 
   // 卡片右键处理
   const handleNodeContextMenu = useCallback(
@@ -305,6 +413,11 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           label: '深入下钻该模块架构',
           icon: <Search className="w-3.5 h-3.5 text-dsh-secondary" />,
           onClick: () => onDrillDown(mod.id),
+        },
+        {
+          label: '聚焦高亮该模块及总线',
+          icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
+          onClick: () => setSelectedModuleId(mod.id),
         },
         {
           label: '复制所有文件相对路径',
@@ -345,8 +458,8 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           },
         },
         {
-          label: '重新自动排版 (重置布局)',
-          icon: <LayoutGrid className="w-3.5 h-3.5 text-dsh-secondary" />,
+          label: '一键自动理线 (ELK Sugiyama)',
+          icon: <Wand2 className="w-3.5 h-3.5 text-dsh-blue" />,
           divider: true,
           onClick: handleResetLayout,
         },
@@ -369,6 +482,55 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
 
   return (
     <div className="w-full h-[calc(100vh-44px)] bg-dsh-base relative">
+      {/* 顶部右侧理线与连线控制工具栏 */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2 p-1 rounded-lg bg-dsh-layer1/90 backdrop-blur border border-dsh-border2 shadow-md text-[12px]">
+        {/* 一键理线按钮 */}
+        <button
+          onClick={handleResetLayout}
+          disabled={isUntangling}
+          title="使用 ELK Sugiyama 正交分层算法重新排列模块并最小化总线交叉"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
+        >
+          <Wand2 className={`w-3.5 h-3.5 ${isUntangling ? 'animate-spin' : ''}`} />
+          <span>{isUntangling ? '理线中...' : '一键理线'}</span>
+        </button>
+
+        {/* 平滑正交 / 优雅曲线 切换 */}
+        <button
+          onClick={() => setRoutingMode((prev) => (prev === 'smoothstep' ? 'bezier' : 'smoothstep'))}
+          title={routingMode === 'smoothstep' ? '切换为贝塞尔优雅曲线' : '切换为平滑正交折线 (规避斜切交叉)'}
+          className="flex items-center gap-1 px-2 py-1 rounded hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+        >
+          {routingMode === 'smoothstep' ? (
+            <>
+              <GitFork className="w-3.5 h-3.5 text-dsh-blue" />
+              <span>正交折线</span>
+            </>
+          ) : (
+            <>
+              <Route className="w-3.5 h-3.5 text-purple-400" />
+              <span>贝塞尔曲线</span>
+            </>
+          )}
+        </button>
+
+        {/* 聚焦重置提示 */}
+        {focusedModuleId && (
+          <button
+            onClick={() => {
+              setSelectedModuleId(null);
+              setHoveredModuleId(null);
+            }}
+            title="点击退出聚焦高亮模式"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-colors animate-pulse"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="truncate max-w-[100px]">已聚焦</span>
+            <span className="text-[10px] opacity-70">✕</span>
+          </button>
+        )}
+      </div>
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -377,6 +539,13 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={setRfInstance}
+        onNodeMouseEnter={(_, node) => setHoveredModuleId(node.id)}
+        onNodeMouseLeave={() => setHoveredModuleId(null)}
+        onNodeClick={(_, node) => setSelectedModuleId((prev) => (prev === node.id ? null : node.id))}
+        onPaneClick={() => {
+          setSelectedModuleId(null);
+          setHoveredModuleId(null);
+        }}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView

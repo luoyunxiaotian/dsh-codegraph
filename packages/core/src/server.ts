@@ -223,6 +223,128 @@ export class CodeGraphServer {
       return;
     }
 
+    if (pathname === '/api/layout-architecture' && req.method === 'POST') {
+      let last = this.core.getLastResult();
+      if (!last) {
+        const cached = this.core.loadFromCache();
+        if (cached) last = cached.graph;
+      }
+      if (!last) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '图谱尚未初始化' }));
+        return;
+      }
+      const archLayout = await ElkLayoutEngine.layoutArchitecture(
+        last.architectureView.modules,
+        last.architectureView.buses
+      );
+      this.core.setLastLayout({ architecture: archLayout });
+      this.core.saveToCache({ architecture: archLayout });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, layout: { architecture: archLayout } }));
+      return;
+    }
+
+    if (pathname === '/api/layout-drilldown' && req.method === 'POST') {
+      const body = await this.readJsonBody(req);
+      const moduleId = body?.moduleId;
+      if (!moduleId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '缺少 moduleId 参数' }));
+        return;
+      }
+
+      let last = this.core.getLastResult();
+      if (!last) {
+        const cached = this.core.loadFromCache();
+        if (cached) last = cached.graph;
+      }
+      if (!last) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '图谱尚未初始化' }));
+        return;
+      }
+
+      const targetModule = last.architectureView.modules.find((m) => m.id === moduleId);
+      if (!targetModule) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `模块不存在: ${moduleId}` }));
+        return;
+      }
+
+      const moduleFiles = new Set(targetModule.files);
+      const internalNodes = Object.values(last.allNodes).filter(
+        (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+      );
+      const internalNodeIds = new Set(internalNodes.map((n) => n.id));
+
+      const internalCalls: Array<{ source: string; target: string }> = [];
+      last.allEdges.forEach((e) => {
+        if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
+          internalCalls.push({ source: e.source, target: e.target });
+        }
+      });
+
+      // 解析端口与内部符号的连线
+      const portEdges: Array<{ source: string; target: string; isPortEdge: boolean }> = [];
+
+      // 1. In-Ports -> 内部入口符号
+      targetModule.inPorts.forEach((port) => {
+        const inPortId = `inport_${port}`;
+        const matched = internalNodes.filter((n) => n.name === port || n.id === port);
+        if (matched.length > 0) {
+          matched.forEach((m) => {
+            portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
+          });
+        } else {
+          // 若无同名符号，尝试匹配外部调用打入的内部目标
+          const incoming = last!.allEdges.filter(
+            (e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source)
+          );
+          if (incoming.length > 0) {
+            portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
+          }
+        }
+      });
+
+      // 2. 内部符号 -> Out-Ports 外部调用依赖
+      targetModule.outPorts.forEach((port) => {
+        const outPortId = `outport_${port}`;
+        // 查找哪个内部节点调用了该外部目标
+        const outgoing = last!.allEdges.filter(
+          (e) =>
+            internalNodeIds.has(e.source) &&
+            (!internalNodeIds.has(e.target) || e.target.includes(port)) &&
+            (last!.allNodes[e.target]?.name === port || e.target.endsWith(port))
+        );
+        if (outgoing.length > 0) {
+          outgoing.forEach((og) => {
+            portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
+          });
+        }
+      });
+
+      const layout = await ElkLayoutEngine.layoutModuleDetail(
+        internalNodes,
+        internalCalls,
+        {
+          inPorts: targetModule.inPorts,
+          outPorts: targetModule.outPorts,
+          portEdges,
+        }
+      );
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          success: true,
+          layout,
+          portEdges,
+        })
+      );
+      return;
+    }
+
     if (pathname === '/api/status' && req.method === 'GET') {
       const wsParam = reqUrl.searchParams.get('workspace');
       if (wsParam && fs.existsSync(wsParam)) {

@@ -60,8 +60,11 @@ export class ElkLayoutEngine {
         'elk.algorithm': 'layered',
         'elk.direction': 'RIGHT',
         'elk.spacing.nodeNode': '60',
-        'elk.layered.spacing.nodeNodeBetweenLayers': '80',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '90',
         'elk.edgeRouting': 'ORTHOGONAL',
+        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+        'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
       },
       children,
       edges,
@@ -116,6 +119,8 @@ export class ElkLayoutEngine {
         'elk.spacing.nodeNode': '40',
         'elk.layered.spacing.nodeNodeBetweenLayers': '60',
         'elk.edgeRouting': 'ORTHOGONAL',
+        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
       },
       children,
       edges,
@@ -148,18 +153,59 @@ export class ElkLayoutEngine {
 
   /**
    * 计算模块内部符号下钻细节图的布局 (Module Internal Drill-Down)
+   * 采用 Sugiyama 分层排版算法 + LAYER_SWEEP 交叉最小化策略 + In/Out Port 首尾层约束
    */
   public static async layoutModuleDetail(
     internalNodes: CodeNode[],
-    internalCalls: Array<{ source: string; target: string }>
+    internalCalls: Array<{ source: string; target: string }>,
+    options?: {
+      inPorts?: string[] | Array<{ id: string; name?: string }>;
+      outPorts?: string[] | Array<{ id: string; name?: string }>;
+      portEdges?: Array<{ source: string; target: string }>;
+    }
   ): Promise<LayoutResult> {
-    const children: ElkNode[] = internalNodes.map((n) => ({
-      id: n.id,
-      width: 220,
-      height: 75,
-    }));
+    const children: ElkNode[] = [];
 
-    const edges: ElkExtendedEdge[] = internalCalls.map((c, idx) => ({
+    // 1. In-Ports (固定在最左侧首层)
+    const inPortsList = options?.inPorts || [];
+    inPortsList.forEach((p) => {
+      const id = typeof p === 'string' ? `inport_${p}` : p.id;
+      children.push({
+        id,
+        width: 170,
+        height: 52,
+        layoutOptions: {
+          'elk.layered.layering.layerConstraint': 'FIRST',
+        },
+      });
+    });
+
+    // 2. 内部符号节点 (中间层)
+    internalNodes.forEach((n) => {
+      children.push({
+        id: n.id,
+        width: 230,
+        height: 85,
+      });
+    });
+
+    // 3. Out-Ports (固定在最右侧尾层)
+    const outPortsList = options?.outPorts || [];
+    outPortsList.forEach((p) => {
+      const id = typeof p === 'string' ? `outport_${p}` : p.id;
+      children.push({
+        id,
+        width: 170,
+        height: 52,
+        layoutOptions: {
+          'elk.layered.layering.layerConstraint': 'LAST',
+        },
+      });
+    });
+
+    // 4. 汇总所有连线 (内部调用 + 端口连线)
+    const allCalls = [...internalCalls, ...(options?.portEdges || [])];
+    const edges: ElkExtendedEdge[] = allCalls.map((c, idx) => ({
       id: `detail_edge_${idx}`,
       sources: [c.source],
       targets: [c.target],
@@ -170,9 +216,12 @@ export class ElkLayoutEngine {
       layoutOptions: {
         'elk.algorithm': 'layered',
         'elk.direction': 'RIGHT',
-        'elk.spacing.nodeNode': '35',
-        'elk.layered.spacing.nodeNodeBetweenLayers': '55',
+        'elk.spacing.nodeNode': '40',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '90',
         'elk.edgeRouting': 'ORTHOGONAL',
+        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+        'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
       },
       children,
       edges,
@@ -184,8 +233,8 @@ export class ElkLayoutEngine {
       id: c.id,
       x: c.x || 0,
       y: c.y || 0,
-      width: c.width || 220,
-      height: c.height || 75,
+      width: c.width || (c.id.startsWith('inport_') || c.id.startsWith('outport_') ? 170 : 230),
+      height: c.height || (c.id.startsWith('inport_') || c.id.startsWith('outport_') ? 52 : 85),
     }));
 
     const layoutedEdges: LayoutedEdge[] = (layouted.edges || []).map((e: any) => ({
@@ -198,7 +247,7 @@ export class ElkLayoutEngine {
     return {
       nodes: layoutedNodes,
       edges: layoutedEdges,
-      width: layouted.width || 800,
+      width: layouted.width || 1000,
       height: layouted.height || 600,
     };
   }

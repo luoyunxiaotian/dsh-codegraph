@@ -110353,8 +110353,11 @@ var ElkLayoutEngine = class {
         "elk.algorithm": "layered",
         "elk.direction": "RIGHT",
         "elk.spacing.nodeNode": "60",
-        "elk.layered.spacing.nodeNodeBetweenLayers": "80",
-        "elk.edgeRouting": "ORTHOGONAL"
+        "elk.layered.spacing.nodeNodeBetweenLayers": "90",
+        "elk.edgeRouting": "ORTHOGONAL",
+        "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+        "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+        "elk.layered.cycleBreaking.strategy": "DEPTH_FIRST"
       },
       children,
       edges
@@ -110401,7 +110404,9 @@ var ElkLayoutEngine = class {
         "elk.direction": "DOWN",
         "elk.spacing.nodeNode": "40",
         "elk.layered.spacing.nodeNodeBetweenLayers": "60",
-        "elk.edgeRouting": "ORTHOGONAL"
+        "elk.edgeRouting": "ORTHOGONAL",
+        "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+        "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF"
       },
       children,
       edges
@@ -110429,14 +110434,43 @@ var ElkLayoutEngine = class {
   }
   /**
    * 计算模块内部符号下钻细节图的布局 (Module Internal Drill-Down)
+   * 采用 Sugiyama 分层排版算法 + LAYER_SWEEP 交叉最小化策略 + In/Out Port 首尾层约束
    */
-  static async layoutModuleDetail(internalNodes, internalCalls) {
-    const children = internalNodes.map((n) => ({
-      id: n.id,
-      width: 220,
-      height: 75
-    }));
-    const edges = internalCalls.map((c, idx) => ({
+  static async layoutModuleDetail(internalNodes, internalCalls, options) {
+    const children = [];
+    const inPortsList = options?.inPorts || [];
+    inPortsList.forEach((p) => {
+      const id = typeof p === "string" ? `inport_${p}` : p.id;
+      children.push({
+        id,
+        width: 170,
+        height: 52,
+        layoutOptions: {
+          "elk.layered.layering.layerConstraint": "FIRST"
+        }
+      });
+    });
+    internalNodes.forEach((n) => {
+      children.push({
+        id: n.id,
+        width: 230,
+        height: 85
+      });
+    });
+    const outPortsList = options?.outPorts || [];
+    outPortsList.forEach((p) => {
+      const id = typeof p === "string" ? `outport_${p}` : p.id;
+      children.push({
+        id,
+        width: 170,
+        height: 52,
+        layoutOptions: {
+          "elk.layered.layering.layerConstraint": "LAST"
+        }
+      });
+    });
+    const allCalls = [...internalCalls, ...options?.portEdges || []];
+    const edges = allCalls.map((c, idx) => ({
       id: `detail_edge_${idx}`,
       sources: [c.source],
       targets: [c.target]
@@ -110446,9 +110480,12 @@ var ElkLayoutEngine = class {
       layoutOptions: {
         "elk.algorithm": "layered",
         "elk.direction": "RIGHT",
-        "elk.spacing.nodeNode": "35",
-        "elk.layered.spacing.nodeNodeBetweenLayers": "55",
-        "elk.edgeRouting": "ORTHOGONAL"
+        "elk.spacing.nodeNode": "40",
+        "elk.layered.spacing.nodeNodeBetweenLayers": "90",
+        "elk.edgeRouting": "ORTHOGONAL",
+        "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+        "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+        "elk.layered.cycleBreaking.strategy": "DEPTH_FIRST"
       },
       children,
       edges
@@ -110458,8 +110495,8 @@ var ElkLayoutEngine = class {
       id: c.id,
       x: c.x || 0,
       y: c.y || 0,
-      width: c.width || 220,
-      height: c.height || 75
+      width: c.width || (c.id.startsWith("inport_") || c.id.startsWith("outport_") ? 170 : 230),
+      height: c.height || (c.id.startsWith("inport_") || c.id.startsWith("outport_") ? 52 : 85)
     }));
     const layoutedEdges = (layouted.edges || []).map((e) => ({
       id: e.id,
@@ -110470,7 +110507,7 @@ var ElkLayoutEngine = class {
     return {
       nodes: layoutedNodes,
       edges: layoutedEdges,
-      width: layouted.width || 800,
+      width: layouted.width || 1e3,
       height: layouted.height || 600
     };
   }
@@ -110656,6 +110693,96 @@ var CodeGraphServer = class {
         success: true,
         graph: newResult,
         layout: { architecture: archLayout }
+      }));
+      return;
+    }
+    if (pathname === "/api/layout-architecture" && req.method === "POST") {
+      let last = this.core.getLastResult();
+      if (!last) {
+        const cached = this.core.loadFromCache();
+        if (cached)
+          last = cached.graph;
+      }
+      if (!last) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "\u56FE\u8C31\u5C1A\u672A\u521D\u59CB\u5316" }));
+        return;
+      }
+      const archLayout = await ElkLayoutEngine.layoutArchitecture(last.architectureView.modules, last.architectureView.buses);
+      this.core.setLastLayout({ architecture: archLayout });
+      this.core.saveToCache({ architecture: archLayout });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, layout: { architecture: archLayout } }));
+      return;
+    }
+    if (pathname === "/api/layout-drilldown" && req.method === "POST") {
+      const body2 = await this.readJsonBody(req);
+      const moduleId = body2?.moduleId;
+      if (!moduleId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "\u7F3A\u5C11 moduleId \u53C2\u6570" }));
+        return;
+      }
+      let last = this.core.getLastResult();
+      if (!last) {
+        const cached = this.core.loadFromCache();
+        if (cached)
+          last = cached.graph;
+      }
+      if (!last) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "\u56FE\u8C31\u5C1A\u672A\u521D\u59CB\u5316" }));
+        return;
+      }
+      const targetModule = last.architectureView.modules.find((m) => m.id === moduleId);
+      if (!targetModule) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `\u6A21\u5757\u4E0D\u5B58\u5728: ${moduleId}` }));
+        return;
+      }
+      const moduleFiles = new Set(targetModule.files);
+      const internalNodes = Object.values(last.allNodes).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
+      const internalNodeIds = new Set(internalNodes.map((n) => n.id));
+      const internalCalls = [];
+      last.allEdges.forEach((e) => {
+        if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
+          internalCalls.push({ source: e.source, target: e.target });
+        }
+      });
+      const portEdges = [];
+      targetModule.inPorts.forEach((port) => {
+        const inPortId = `inport_${port}`;
+        const matched = internalNodes.filter((n) => n.name === port || n.id === port);
+        if (matched.length > 0) {
+          matched.forEach((m) => {
+            portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
+          });
+        } else {
+          const incoming = last.allEdges.filter((e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source));
+          if (incoming.length > 0) {
+            portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
+          }
+        }
+      });
+      targetModule.outPorts.forEach((port) => {
+        const outPortId = `outport_${port}`;
+        const outgoing = last.allEdges.filter((e) => internalNodeIds.has(e.source) && (!internalNodeIds.has(e.target) || e.target.includes(port)) && (last.allNodes[e.target]?.name === port || e.target.endsWith(port)));
+        if (outgoing.length > 0) {
+          outgoing.forEach((og) => {
+            portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
+          });
+        }
+      });
+      const layout = await ElkLayoutEngine.layoutModuleDetail(internalNodes, internalCalls, {
+        inPorts: targetModule.inPorts,
+        outPorts: targetModule.outPorts,
+        portEdges
+      });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        success: true,
+        layout,
+        portEdges
       }));
       return;
     }

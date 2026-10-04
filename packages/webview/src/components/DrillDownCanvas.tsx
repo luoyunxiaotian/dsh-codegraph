@@ -27,9 +27,14 @@ import {
   Maximize2,
   Globe,
   BookOpen,
+  Wand2,
+  GitFork,
+  Filter,
+  Sparkles,
+  Route,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
-import { insertIntoChat, copyToClipboard } from '../utils/chatBridge.js';
+import { insertIntoChat, copyToClipboard, showToast } from '../utils/chatBridge.js';
 import { useTheme } from '../context/ThemeContext.js';
 
 interface DrillDownCanvasProps {
@@ -44,6 +49,9 @@ interface DrillDownCanvasProps {
 const InternalSymbolNode = ({ data }: NodeProps) => {
   const node = data.node as CodeNode;
   const onSelectNode = data.onSelectNode as (id: string, path: string, line: number) => void;
+  const isFocused = Boolean(data.isFocused);
+  const isConnected = Boolean(data.isConnected);
+  const isDimmed = Boolean(data.isDimmed);
 
   const isClass = node.entityType === 'CLASS';
   const isContract = node.entityType === 'CONTRACT_ENDPOINT' || node.entityType === 'CONTRACT_TOPIC';
@@ -52,8 +60,17 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
     <div
       onClick={() => onSelectNode(node.id, node.filePath, node.loc.startLine)}
       title={node.metadata?.story?.summaryText || `${node.name}: 点击打开交互透视与源码`}
+      style={{
+        opacity: isDimmed ? 0.35 : 1,
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+        filter: isDimmed ? 'grayscale(40%)' : 'none',
+      }}
       className={`w-[220px] bg-dsh-layer1 border ${
-        isContract
+        isFocused
+          ? 'ring-2 ring-dsh-blue border-dsh-blue shadow-lg shadow-blue-500/30'
+          : isConnected
+          ? 'border-dsh-blue/80 shadow-md shadow-blue-500/10'
+          : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue'
       } rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none`}
@@ -106,12 +123,29 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
 // In-Port 端口卡片
 const InPortNode = ({ data }: NodeProps) => {
   const name = (data as any)?.name as string;
+  const isFocused = Boolean((data as any)?.isFocused);
+  const isConnected = Boolean((data as any)?.isConnected);
+  const isDimmed = Boolean((data as any)?.isDimmed);
+
   return (
-    <div className="w-[160px] bg-dsh-green-tint border border-dsh-green-border rounded-md p-2 shadow flex items-center gap-2 select-none cursor-grab active:cursor-grabbing">
+    <div
+      style={{
+        opacity: isDimmed ? 0.35 : 1,
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+        filter: isDimmed ? 'grayscale(40%)' : 'none',
+      }}
+      className={`w-[170px] bg-dsh-green-tint border ${
+        isFocused
+          ? 'ring-2 ring-emerald-500 border-emerald-500 shadow-lg shadow-emerald-500/30'
+          : isConnected
+          ? 'border-emerald-500 shadow-md'
+          : 'border-dsh-green-border'
+      } rounded-md p-2 shadow flex items-center gap-2 select-none cursor-grab active:cursor-grabbing`}
+    >
       <Handle type="source" position={Position.Right} />
       <ArrowLeftCircle className="w-3.5 h-3.5 text-dsh-green shrink-0" />
       <div className="truncate">
-        <div className="text-[9px] text-dsh-green font-bold uppercase tracking-tight">📥 IN-PORT (外部调用)</div>
+        <div className="text-[9px] text-dsh-green font-bold uppercase tracking-tight">📥 IN-PORT (外部入口)</div>
         <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
           {name}
         </div>
@@ -123,8 +157,25 @@ const InPortNode = ({ data }: NodeProps) => {
 // Out-Port 端口卡片
 const OutPortNode = ({ data }: NodeProps) => {
   const name = (data as any)?.name as string;
+  const isFocused = Boolean((data as any)?.isFocused);
+  const isConnected = Boolean((data as any)?.isConnected);
+  const isDimmed = Boolean((data as any)?.isDimmed);
+
   return (
-    <div className="w-[160px] bg-dsh-blue-tint border border-dsh-blue-border rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing">
+    <div
+      style={{
+        opacity: isDimmed ? 0.35 : 1,
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+        filter: isDimmed ? 'grayscale(40%)' : 'none',
+      }}
+      className={`w-[170px] bg-dsh-blue-tint border ${
+        isFocused
+          ? 'ring-2 ring-blue-500 border-blue-500 shadow-lg shadow-blue-500/30'
+          : isConnected
+          ? 'border-blue-500 shadow-md'
+          : 'border-dsh-blue-border'
+      } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing`}
+    >
       <Handle type="target" position={Position.Left} />
       <div className="truncate">
         <div className="text-[9px] text-dsh-blue font-bold uppercase tracking-tight">📤 OUT-PORT (外调依赖)</div>
@@ -136,6 +187,103 @@ const OutPortNode = ({ data }: NodeProps) => {
     </div>
   );
 };
+
+/**
+ * 客户端拓扑排版启发式算法 (Topological DAG Layering & Crossing Minimization)
+ * 当离线或无需服务器端二次请求时，提供极速平滑排版
+ */
+function calculateClientTopologicalLayout(
+  module: ModuleContainer,
+  internalNodes: CodeNode[],
+  allEdges: CodeEdge[]
+): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+  const internalIds = new Set(internalNodes.map((n) => n.id));
+
+  // 1. In-Ports 固定排布在最左列
+  module.inPorts.forEach((port, idx) => {
+    positions[`inport_${port}`] = { x: 50, y: 100 + idx * 75 };
+  });
+
+  // 2. 构建内部有向图 (Adjacency & in-degrees)
+  const adj: Record<string, string[]> = {};
+  const inDegree: Record<string, number> = {};
+  internalNodes.forEach((n) => {
+    adj[n.id] = [];
+    inDegree[n.id] = 0;
+  });
+
+  allEdges.forEach((e) => {
+    if (internalIds.has(e.source) && internalIds.has(e.target) && e.source !== e.target) {
+      adj[e.source]?.push(e.target);
+      inDegree[e.target] = (inDegree[e.target] || 0) + 1;
+    }
+  });
+
+  // 3. 计算每个内部节点的分层 (Layer / Rank)
+  const rank: Record<string, number> = {};
+  const queue: string[] = [];
+  internalNodes.forEach((n) => {
+    if ((inDegree[n.id] || 0) === 0) {
+      rank[n.id] = 0;
+      queue.push(n.id);
+    }
+  });
+
+  if (queue.length === 0 && internalNodes.length > 0) {
+    rank[internalNodes[0].id] = 0;
+    queue.push(internalNodes[0].id);
+  }
+
+  while (queue.length > 0) {
+    const u = queue.shift()!;
+    const uRank = rank[u] || 0;
+    (adj[u] || []).forEach((v) => {
+      if (rank[v] === undefined || rank[v] < uRank + 1) {
+        rank[v] = uRank + 1;
+        queue.push(v);
+      }
+    });
+  }
+
+  // 补充未遍历到的孤立节点
+  internalNodes.forEach((n) => {
+    if (rank[n.id] === undefined) {
+      rank[n.id] = 0;
+    }
+  });
+
+  // 4. 按层分组
+  const layers: Record<number, CodeNode[]> = {};
+  let maxRank = 0;
+  internalNodes.forEach((n) => {
+    const r = rank[n.id];
+    if (r > maxRank) maxRank = r;
+    if (!layers[r]) layers[r] = [];
+    layers[r].push(n);
+  });
+
+  // 5. 排布各层内部节点 (Barycenter 交叉最小化启发式排序)
+  Object.keys(layers).forEach((rKey) => {
+    const r = Number(rKey);
+    const nodesInLayer = layers[r];
+    nodesInLayer.sort((a, b) => a.name.localeCompare(b.name));
+    nodesInLayer.forEach((n, idx) => {
+      positions[n.id] = {
+        x: 300 + r * 280,
+        y: 80 + idx * 115,
+      };
+    });
+  });
+
+  // 6. Out-Ports 固定排布在最右列
+  const rightX = 350 + (maxRank + 1) * 280;
+  module.outPorts.forEach((port, idx) => {
+    positions[`outport_${port}`] = { x: Math.max(rightX, 600), y: 100 + idx * 75 };
+  });
+
+  return positions;
+}
 
 export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   module,
@@ -158,6 +306,15 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
 
+  // 连线与理线控制状态
+  const [routingMode, setRoutingMode] = useState<'smoothstep' | 'bezier'>('smoothstep');
+  const [filterCallsOnly, setFilterCallsOnly] = useState<boolean>(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isUntangling, setIsUntangling] = useState<boolean>(false);
+  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [serverPortEdges, setServerPortEdges] = useState<Array<{ source: string; target: string }>>([]);
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -166,65 +323,251 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   } | null>(null);
 
   const moduleFiles = useMemo(() => new Set(module.files), [module.files]);
+  const internalNodes = useMemo(
+    () =>
+      Object.values(allNodes).filter(
+        (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+      ),
+    [allNodes, moduleFiles]
+  );
+  const internalNodeIds = useMemo(() => new Set(internalNodes.map((n) => n.id)), [internalNodes]);
 
+  // 计算端口关联边 (In-Ports 打入入口，内部符号打出 Out-Ports)
+  const resolvedPortEdges = useMemo(() => {
+    if (serverPortEdges.length > 0) {
+      return serverPortEdges;
+    }
+    const list: Array<{ source: string; target: string }> = [];
+
+    // 1. In-Ports -> 内部目标符号
+    module.inPorts.forEach((port) => {
+      const inPortId = `inport_${port}`;
+      const matched = internalNodes.filter((n) => n.name === port || n.id === port);
+      if (matched.length > 0) {
+        matched.forEach((m) => list.push({ source: inPortId, target: m.id }));
+      } else {
+        const incoming = allEdges.filter(
+          (e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source)
+        );
+        if (incoming.length > 0) {
+          list.push({ source: inPortId, target: incoming[0].target });
+        }
+      }
+    });
+
+    // 2. 内部符号 -> Out-Ports 外部调用
+    module.outPorts.forEach((port) => {
+      const outPortId = `outport_${port}`;
+      const outgoing = allEdges.filter(
+        (e) =>
+          internalNodeIds.has(e.source) &&
+          (allNodes[e.target]?.name === port || e.target.endsWith(port))
+      );
+      if (outgoing.length > 0) {
+        outgoing.forEach((og) => list.push({ source: og.source, target: outPortId }));
+      }
+    });
+
+    return list;
+  }, [module.inPorts, module.outPorts, internalNodes, internalNodeIds, allEdges, allNodes, serverPortEdges]);
+
+  // 执行自动理线与最优分层布局
+  const performUntangleLayout = useCallback(
+    async (showFeedback = true) => {
+      setIsUntangling(true);
+      try {
+        const res = await fetch('/api/layout-drilldown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ moduleId: module.id }),
+        });
+        const data = await res.json();
+        if (data.success && data.layout?.nodes) {
+          const posMap: Record<string, { x: number; y: number }> = {};
+          data.layout.nodes.forEach((n: any) => {
+            posMap[n.id] = { x: n.x, y: n.y };
+          });
+          setNodePositions(posMap);
+          if (data.portEdges) {
+            setServerPortEdges(data.portEdges);
+          }
+          if (showFeedback) showToast('✓ 已使用 ELK Sugiyama 正交分层完成智能理线');
+          setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
+          return;
+        }
+      } catch {
+        // 降级为客户端拓扑分层算法
+      } finally {
+        setIsUntangling(false);
+      }
+
+      const clientPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
+      setNodePositions(clientPos);
+      if (showFeedback) showToast('✓ 已完成客户端拓扑分层理线');
+      setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
+    },
+    [module, internalNodes, allEdges, rfInstance]
+  );
+
+  // 初始化加载自动理线
   useEffect(() => {
-    const internalNodes = Object.values(allNodes).filter(
-      (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
-    );
+    performUntangleLayout(false);
+  }, [module.id]);
 
-    const reactNodes: any[] = [];
-    const reactEdges: any[] = [];
+  // 聚焦点计算 (Spotlight Dimming)
+  const focusedNodeId = selectedNodeId || hoveredNodeId;
 
-    // 1. 排布 In-Ports (左列)
-    module.inPorts.forEach((port, idx) => {
-      reactNodes.push({
-        id: `inport_${port}`,
-        type: 'inPort',
-        position: { x: 50, y: 100 + idx * 65 },
-        data: { name: port, portType: 'IN' },
-      });
-    });
+  // 装配节点与连线
+  useEffect(() => {
+    const rawEdges: any[] = [];
 
-    // 2. 排布内部符号 (中列矩阵)
-    internalNodes.forEach((n, idx) => {
-      const col = Math.floor(idx / 5);
-      const row = idx % 5;
-      reactNodes.push({
-        id: n.id,
-        type: 'internalSymbol',
-        position: { x: 260 + col * 250, y: 80 + row * 90 },
-        data: { node: n, onSelectNode },
-      });
-    });
-
-    // 3. 排布 Out-Ports (右列)
-    const maxCol = Math.max(1, Math.ceil(internalNodes.length / 5));
-    const rightX = 300 + maxCol * 250;
-    module.outPorts.forEach((port, idx) => {
-      reactNodes.push({
-        id: `outport_${port}`,
-        type: 'outPort',
-        position: { x: rightX, y: 100 + idx * 65 },
-        data: { name: port, portType: 'OUT' },
-      });
-    });
-
-    // 4. 内部连线
-    const internalNodeIds = new Set(internalNodes.map((n) => n.id));
+    // 1. 内部连线
     allEdges.forEach((e, idx) => {
       if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
-        reactEdges.push({
+        if (filterCallsOnly && e.relation !== 'CALLS' && e.relation !== 'CALLS_CONTRACT' && e.relation !== 'HANDLED_BY') {
+          return;
+        }
+        rawEdges.push({
           id: `drill_e_${idx}`,
           source: e.source,
           target: e.target,
-          type: 'default',
+          relation: e.relation,
+          isPortEdge: false,
         });
       }
     });
 
+    // 2. 端口关联连线
+    resolvedPortEdges.forEach((pe, idx) => {
+      rawEdges.push({
+        id: `drill_port_e_${idx}`,
+        source: pe.source,
+        target: pe.target,
+        relation: 'CALLS',
+        isPortEdge: true,
+      });
+    });
+
+    // 3. 计算聚焦点关联集合
+    const connectedEdgeIds = new Set<string>();
+    const connectedNodeIds = new Set<string>();
+    if (focusedNodeId) {
+      connectedNodeIds.add(focusedNodeId);
+      rawEdges.forEach((e) => {
+        if (e.source === focusedNodeId || e.target === focusedNodeId) {
+          connectedEdgeIds.add(e.id);
+          connectedNodeIds.add(e.source);
+          connectedNodeIds.add(e.target);
+        }
+      });
+    }
+
+    // 4. 构建渲染连线 (根据聚焦点状态与路由样式着色)
+    const reactEdges = rawEdges.map((e) => {
+      const isConnected = focusedNodeId ? connectedEdgeIds.has(e.id) : true;
+      const isOutgoing = focusedNodeId && e.source === focusedNodeId;
+      const isIncoming = focusedNodeId && e.target === focusedNodeId;
+
+      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.45)';
+      if (e.isPortEdge) {
+        strokeColor = isDark ? '#818cf8' : '#6366f1';
+      }
+
+      if (focusedNodeId) {
+        if (isOutgoing) {
+          strokeColor = '#3b82f6'; // 出站调用: 天蓝
+        } else if (isIncoming) {
+          strokeColor = '#10b981'; // 入站调用: 翠绿
+        } else {
+          strokeColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)';
+        }
+      }
+
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        type: routingMode === 'smoothstep' ? 'smoothstep' : 'default',
+        pathOptions: routingMode === 'smoothstep' ? { borderRadius: 16 } : undefined,
+        animated: Boolean(focusedNodeId && isConnected),
+        zIndex: focusedNodeId ? (isConnected ? 20 : 1) : 5,
+        style: {
+          stroke: strokeColor,
+          strokeWidth: focusedNodeId ? (isConnected ? 2.5 : 1) : e.isPortEdge ? 1.6 : 1.4,
+          opacity: focusedNodeId ? (isConnected ? 1 : 0.08) : 0.75,
+          strokeDasharray: e.isPortEdge && !focusedNodeId ? '4 4' : undefined,
+          transition: 'stroke 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease',
+        },
+      };
+    });
+
+    // 5. 构建渲染节点
+    const reactNodes: any[] = [];
+
+    // In-Ports
+    module.inPorts.forEach((port, idx) => {
+      const id = `inport_${port}`;
+      const pos = nodePositions[id] || { x: 50, y: 100 + idx * 75 };
+      const isFocused = focusedNodeId === id;
+      const isConnected = Boolean(focusedNodeId && connectedNodeIds.has(id));
+      const isDimmed = Boolean(focusedNodeId && !connectedNodeIds.has(id));
+
+      reactNodes.push({
+        id,
+        type: 'inPort',
+        position: pos,
+        data: { name: port, portType: 'IN', isFocused, isConnected, isDimmed },
+      });
+    });
+
+    // Internal symbols
+    internalNodes.forEach((n, idx) => {
+      const pos = nodePositions[n.id] || { x: 300 + (idx % 4) * 280, y: 80 + Math.floor(idx / 4) * 110 };
+      const isFocused = focusedNodeId === n.id;
+      const isConnected = Boolean(focusedNodeId && connectedNodeIds.has(n.id));
+      const isDimmed = Boolean(focusedNodeId && !connectedNodeIds.has(n.id));
+
+      reactNodes.push({
+        id: n.id,
+        type: 'internalSymbol',
+        position: pos,
+        data: { node: n, onSelectNode, isFocused, isConnected, isDimmed },
+      });
+    });
+
+    // Out-Ports
+    module.outPorts.forEach((port, idx) => {
+      const id = `outport_${port}`;
+      const pos = nodePositions[id] || { x: 900, y: 100 + idx * 75 };
+      const isFocused = focusedNodeId === id;
+      const isConnected = Boolean(focusedNodeId && connectedNodeIds.has(id));
+      const isDimmed = Boolean(focusedNodeId && !connectedNodeIds.has(id));
+
+      reactNodes.push({
+        id,
+        type: 'outPort',
+        position: pos,
+        data: { name: port, portType: 'OUT', isFocused, isConnected, isDimmed },
+      });
+    });
+
     setNodes(reactNodes);
     setEdges(reactEdges);
-  }, [module, allNodes, allEdges, moduleFiles, onSelectNode, setNodes, setEdges]);
+  }, [
+    module,
+    internalNodes,
+    internalNodeIds,
+    allEdges,
+    resolvedPortEdges,
+    nodePositions,
+    routingMode,
+    filterCallsOnly,
+    focusedNodeId,
+    isDark,
+    onSelectNode,
+    setNodes,
+    setEdges,
+  ]);
 
   // 节点右键处理
   const handleNodeContextMenu = useCallback(
@@ -262,6 +605,11 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
             onClick: () => onSelectNode(codeNode.id, codeNode.filePath, codeNode.loc.startLine),
           },
           {
+            label: '聚焦高亮此节点关联连线',
+            icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
+            onClick: () => setSelectedNodeId(codeNode.id),
+          },
+          {
             label: '复制完整限定名 (Qualified Name)',
             icon: <Copy className="w-3.5 h-3.5 text-dsh-tertiary" />,
             onClick: () => copyToClipboard(codeNode.qualifiedName, '符号限定名'),
@@ -293,6 +641,11 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
               const text = `[模块接口: ${portType === 'IN' ? '输入端' : '输出依赖'}] \`${portName}\` (所属模块: **${module.name}**)`;
               insertIntoChat(text, { title: `端口: ${portName}` });
             },
+          },
+          {
+            label: '聚焦高亮此端口连线',
+            icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
+            onClick: () => setSelectedNodeId(node.id),
           },
           {
             label: '复制端口标识',
@@ -328,6 +681,11 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           },
         },
         {
+          label: '一键自动理线 (ELK Sugiyama)',
+          icon: <Wand2 className="w-3.5 h-3.5 text-dsh-blue" />,
+          onClick: () => performUntangleLayout(true),
+        },
+        {
           label: '返回宏观架构',
           icon: <ArrowLeft className="w-3.5 h-3.5 text-dsh-secondary" />,
           divider: true,
@@ -347,7 +705,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         items,
       });
     },
-    [module, onBackToArchitecture, rfInstance]
+    [module, performUntangleLayout, onBackToArchitecture, rfInstance]
   );
 
   return (
@@ -366,6 +724,69 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         <span className="text-[11px] text-dsh-tertiary">({module.files.length} 个源码文件)</span>
       </div>
 
+      {/* 顶部右侧理线控制工具栏 */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-2 p-1 rounded-lg bg-dsh-layer1/90 backdrop-blur border border-dsh-border2 shadow-md text-[12px]">
+        {/* 一键理线按钮 */}
+        <button
+          onClick={() => performUntangleLayout(true)}
+          disabled={isUntangling}
+          title="使用 ELK Sugiyama 分层正交算法重新排版并规避连线交叉"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
+        >
+          <Wand2 className={`w-3.5 h-3.5 ${isUntangling ? 'animate-spin' : ''}`} />
+          <span>{isUntangling ? '理线中...' : '一键理线'}</span>
+        </button>
+
+        {/* 平滑正交 / 优雅曲线 切换 */}
+        <button
+          onClick={() => setRoutingMode((prev) => (prev === 'smoothstep' ? 'bezier' : 'smoothstep'))}
+          title={routingMode === 'smoothstep' ? '切换为贝塞尔优雅曲线' : '切换为平滑正交折线 (规避斜切交叉)'}
+          className="flex items-center gap-1 px-2 py-1 rounded hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+        >
+          {routingMode === 'smoothstep' ? (
+            <>
+              <GitFork className="w-3.5 h-3.5 text-dsh-blue" />
+              <span>正交折线</span>
+            </>
+          ) : (
+            <>
+              <Route className="w-3.5 h-3.5 text-purple-400" />
+              <span>贝塞尔曲线</span>
+            </>
+          )}
+        </button>
+
+        {/* 核心调用 / 全部连线 过滤 */}
+        <button
+          onClick={() => setFilterCallsOnly((prev) => !prev)}
+          title={filterCallsOnly ? '显示全部连线 (包含导入和结构依赖)' : '降噪：仅显示核心函数调用 (隐藏导入边)'}
+          className={`flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
+            filterCallsOnly
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+              : 'hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border-dsh-border1'
+          }`}
+        >
+          <Filter className="w-3.5 h-3.5" />
+          <span>{filterCallsOnly ? '仅核心调用' : '全部连线'}</span>
+        </button>
+
+        {/* 聚焦重置提示 */}
+        {focusedNodeId && (
+          <button
+            onClick={() => {
+              setSelectedNodeId(null);
+              setHoveredNodeId(null);
+            }}
+            title="点击退出聚焦高亮模式"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-colors animate-pulse"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="truncate max-w-[100px]">已聚焦</span>
+            <span className="text-[10px] opacity-70">✕</span>
+          </button>
+        )}
+      </div>
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -373,6 +794,13 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         onInit={setRfInstance}
+        onNodeMouseEnter={(_, node) => setHoveredNodeId(node.id)}
+        onNodeMouseLeave={() => setHoveredNodeId(null)}
+        onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
+        onPaneClick={() => {
+          setSelectedNodeId(null);
+          setHoveredNodeId(null);
+        }}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView

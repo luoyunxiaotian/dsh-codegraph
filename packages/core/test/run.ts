@@ -316,6 +316,61 @@ func main() {
   }
   console.log(`  ✓ 模块 [${testModule.name}] 交互描述: "${modStory.purposeDescription}"`);
 
+  // =========================================================================
+  // 测试 9: 验证 ELK Sugiyama 正交分层排版引擎与自动理线算法
+  // =========================================================================
+  console.log('\n[测试 9] 验证 ELK Sugiyama 正交分层排版与一键理线算法...');
+  const { ElkLayoutEngine } = await import('../src/layout/elk-layout.js');
+  
+  const sampleInternalNodes = [loginNode, verifyNode];
+  const sampleCalls = [{ source: loginNode.id, target: verifyNode.id }];
+  const sampleInPorts = ['login'];
+  const sampleOutPorts = ['external_service'];
+  const samplePortEdges = [
+    { source: 'inport_login', target: loginNode.id },
+    { source: verifyNode.id, target: 'outport_external_service' },
+  ];
+
+  const detailLayout = await ElkLayoutEngine.layoutModuleDetail(
+    sampleInternalNodes,
+    sampleCalls,
+    {
+      inPorts: sampleInPorts,
+      outPorts: sampleOutPorts,
+      portEdges: samplePortEdges,
+    }
+  );
+
+  if (!detailLayout.nodes || detailLayout.nodes.length < 4) {
+    throw new Error(`下钻布局节点总数不符合预期: ${detailLayout.nodes?.length}`);
+  }
+
+  const inPortPos = detailLayout.nodes.find((n) => n.id === 'inport_login');
+  const loginPos = detailLayout.nodes.find((n) => n.id === loginNode.id);
+  const verifyPos = detailLayout.nodes.find((n) => n.id === verifyNode.id);
+  const outPortPos = detailLayout.nodes.find((n) => n.id === 'outport_external_service');
+
+  if (!inPortPos || !loginPos || !verifyPos || !outPortPos) {
+    throw new Error('下钻布局关键节点坐标缺失');
+  }
+
+  console.log(`  ✓ 坐标层级流向检验:`);
+  console.log(`    - In-Port [inport_login]: x=${inPortPos.x}, y=${inPortPos.y}`);
+  console.log(`    - 内部入口 [${loginNode.name}]: x=${loginPos.x}, y=${loginPos.y}`);
+  console.log(`    - 业务调用 [${verifyNode.name}]: x=${verifyPos.x}, y=${verifyPos.y}`);
+  console.log(`    - Out-Port [outport_external_service]: x=${outPortPos.x}, y=${outPortPos.y}`);
+
+  if (inPortPos.x >= loginPos.x) {
+    throw new Error(`In-Port x(${inPortPos.x}) 未能在入口节点 x(${loginPos.x}) 的左侧`);
+  }
+  if (loginPos.x > verifyPos.x) {
+    throw new Error(`调用方 x(${loginPos.x}) 未能在被调方 x(${verifyPos.x}) 的同级或左侧`);
+  }
+  if (outPortPos.x <= verifyPos.x) {
+    throw new Error(`Out-Port x(${outPortPos.x}) 未能在调用源 x(${verifyPos.x}) 的右侧`);
+  }
+  console.log('  ✓ 成功验证 Sugiyama 分层排版与 In/Out Port 首尾层级正交流向约束！');
+
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });
   console.log('\n🎉 所有核心测试全部通过！\n');
