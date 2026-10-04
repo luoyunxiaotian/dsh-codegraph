@@ -43,11 +43,27 @@ interface ArchitectureCanvasProps {
   onDrillDown: (moduleId: string) => void;
 }
 
-// DeepSeek Harness 风格模块卡片节点 (支持鼠标左键拖动)
 const ModuleCardNode = ({ data }: NodeProps) => {
   const mod = data.module as ModuleContainer;
   const onDrillDown = data.onDrillDown as (id: string) => void;
   const isContract = mod.id === 'mod_contracts' || mod.archetypeRole === 'Contract Hub';
+
+  const getPlatformBadge = (p?: any) => {
+    if (!p) return null;
+    switch (p) {
+      case 'MOBILE_ANDROID': return { label: '📱 Android', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+      case 'MOBILE_IOS': return { label: '🍏 iOS', cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' };
+      case 'DESKTOP_CPP': return { label: '💻 PC (C++)', cls: 'bg-sky-500/10 text-sky-400 border-sky-500/30' };
+      case 'DESKTOP_PYTHON': return { label: '🐍 PC (Py)', cls: 'bg-amber-500/10 text-amber-400 border-amber-500/30' };
+      case 'DESKTOP_ELECTRON': return { label: '⚡ PC (Electron)', cls: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' };
+      case 'WEB_FRONTEND': return { label: '🌐 Web', cls: 'bg-blue-500/10 text-blue-400 border-blue-500/30' };
+      case 'BACKEND_SERVICE': return { label: '⚙️ 后端 API', cls: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30' };
+      case 'TOOL_SCRIPT': return { label: '🔧 工具', cls: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30' };
+      default: return null;
+    }
+  };
+
+  const platformBadge = getPlatformBadge(mod.projectPlatform);
 
   return (
     <div
@@ -78,15 +94,22 @@ const ModuleCardNode = ({ data }: NodeProps) => {
             {mod.name}
           </span>
         </div>
-        <span
-          className={`text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 ml-1 border ${
-            isContract
-              ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
-              : 'bg-dsh-layer2 text-dsh-secondary border-dsh-border2'
-          }`}
-        >
-          {isContract ? '契约中枢' : `${mod.files.length} 文件`}
-        </span>
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {platformBadge && (
+            <span className={`text-[9px] px-1 py-0.2 rounded border font-medium ${platformBadge.cls}`}>
+              {platformBadge.label}
+            </span>
+          )}
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+              isContract
+                ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                : 'bg-dsh-layer2 text-dsh-secondary border-dsh-border2'
+            }`}
+          >
+            {isContract ? '契约中枢' : `${mod.files.length} 文件`}
+          </span>
+        </div>
       </div>
 
       {/* 文件列表摘要 */}

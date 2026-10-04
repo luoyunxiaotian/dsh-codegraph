@@ -11,12 +11,19 @@ import {
   ProcessFlow,
   ProcessFlowStep,
   ArchetypeType,
+  DetectedProjectProfile,
+  ProjectPlatform,
 } from '../types/index.js';
 import { ArchetypeEngine } from '../archetype/detector.js';
 
+export interface CompileOptions {
+  projects?: DetectedProjectProfile[];
+  activeProjectId?: string;
+}
+
 export class DualModelCompiler {
   /**
-   * 编译全局图谱：支持快通道装配、装配一致性健康校验与自动纠错回滚
+   * 编译全局图谱：支持快通道装配、装配一致性健康校验与自动纠错回滚及多端生态分层
    */
   public static compile(
     projectName: string,
@@ -24,18 +31,58 @@ export class DualModelCompiler {
     fileList: string[],
     nodes: CodeNode[],
     edges: CodeEdge[],
-    initialArchetype: ArchetypeType = 'UNIVERSAL'
+    initialArchetype: ArchetypeType = 'UNIVERSAL',
+    options?: CompileOptions
   ): FullGraphResult {
     let currentArchetype = initialArchetype;
     let isAutoCorrected = false;
 
+    let targetNodes = nodes;
+    let targetEdges = edges;
+    let targetFileList = fileList;
+
+    const activeProjectId = options?.activeProjectId;
+    const isSingleProjectView = Boolean(activeProjectId && activeProjectId !== 'all');
+
+    if (isSingleProjectView) {
+      // 过滤出该子工程的专属节点及与其有交互的契约节点
+      const projNodeIds = new Set(
+        nodes.filter((n) => n.projectId === activeProjectId).map((n) => n.id)
+      );
+
+      const contractNodeIds = new Set<string>();
+      for (const e of edges) {
+        if (projNodeIds.has(e.source)) {
+          const tgt = nodes.find((n) => n.id === e.target);
+          if (tgt && tgt.semanticRole === 'CONTRACT') {
+            contractNodeIds.add(tgt.id);
+          }
+        }
+        if (projNodeIds.has(e.target)) {
+          const src = nodes.find((n) => n.id === e.source);
+          if (src && src.semanticRole === 'CONTRACT') {
+            contractNodeIds.add(src.id);
+          }
+        }
+      }
+
+      const allowedNodeIds = new Set([...projNodeIds, ...contractNodeIds]);
+      targetNodes = nodes.filter((n) => allowedNodeIds.has(n.id));
+      targetEdges = edges.filter(
+        (e) => allowedNodeIds.has(e.source) && allowedNodeIds.has(e.target)
+      );
+
+      const targetFileSet = new Set(targetNodes.map((n) => n.filePath));
+      targetFileList = fileList.filter((f) => targetFileSet.has(f));
+    }
+
     // 1. 如果初判为特定原型，先分配槽位语义角色
     if (currentArchetype !== 'UNIVERSAL') {
-      this.assignArchetypeRoles(nodes);
+      this.assignArchetypeRoles(targetNodes);
     }
 
     // 2. 执行装配后一致性审计闸门 (Verify Gate)
-    const health = ArchetypeEngine.verifyPostAssemblyHealth(currentArchetype, nodes, edges);
+    const health = ArchetypeEngine.verifyPostAssemblyHealth(currentArchetype, targetNodes, targetEdges);
     if (!health.passed) {
       // 触发自动纠错与无缝降级回退！
       currentArchetype = 'UNIVERSAL';
@@ -43,19 +90,28 @@ export class DualModelCompiler {
     }
 
     // 3. 构建模型 1：宏观架构总线视图
-    const architectureView = this.buildArchitectureView(fileList, nodes, edges, currentArchetype);
+    const architectureView = this.buildArchitectureView(
+      targetFileList,
+      targetNodes,
+      targetEdges,
+      currentArchetype,
+      options?.projects,
+      activeProjectId
+    );
 
     // 4. 构建模型 2：入口时序业务流程视图
-    const processFlows = this.buildProcessFlows(nodes, edges);
+    const processFlows = this.buildProcessFlows(targetNodes, targetEdges);
 
     const allNodesMap: Record<string, CodeNode> = {};
     const languages: Record<string, number> = {};
-    for (const n of nodes) {
+    for (const n of targetNodes) {
       allNodesMap[n.id] = n;
       if (n.language && n.language !== 'contract') {
         languages[n.language] = (languages[n.language] || 0) + 1;
       }
     }
+
+    const isMultiProject = Boolean(options?.projects && options.projects.length > 1);
 
     return {
       meta: {
@@ -65,15 +121,18 @@ export class DualModelCompiler {
         archetype: currentArchetype,
         archetypeHealth: health,
         isAutoCorrected,
-        fileCount: fileList.length,
-        nodeCount: nodes.length,
-        edgeCount: edges.length,
+        fileCount: targetFileList.length,
+        nodeCount: targetNodes.length,
+        edgeCount: targetEdges.length,
         languages,
+        projects: options?.projects,
+        activeProjectId: isSingleProjectView ? activeProjectId : undefined,
+        isMultiProject,
       },
       architectureView,
       processFlows,
       allNodes: allNodesMap,
-      allEdges: edges,
+      allEdges: targetEdges,
     };
   }
 
@@ -98,19 +157,98 @@ export class DualModelCompiler {
   }
 
   /**
-   * 构建模型 1：模块容器、依赖总线与虚拟端口
+   * 构建模型 1：模块容器、依赖总线与虚拟端口 (支持多端生态聚合与单工程精细视图)
    */
   private static buildArchitectureView(
     fileList: string[],
     nodes: CodeNode[],
     edges: CodeEdge[],
-    archetype: ArchetypeType
+    archetype: ArchetypeType,
+    projects?: DetectedProjectProfile[],
+    activeProjectId?: string
   ): { modules: ModuleContainer[]; buses: ModuleBus[] } {
     const modules: ModuleContainer[] = [];
     const fileToModuleMap = new Map<string, string>(); // filePath -> moduleId
 
-    // 方案 A: 若为通用模式，采用 Louvain 社区聚类划分模块
-    if (archetype === 'UNIVERSAL') {
+    const isMultiProjectOverview = Boolean(
+      projects && projects.length > 1 && (!activeProjectId || activeProjectId === 'all')
+    );
+
+    const activeProfile = activeProjectId ? projects?.find((p) => p.id === activeProjectId) : undefined;
+
+    if (isMultiProjectOverview && projects) {
+      // 方案 C: 全端生态多工程协同视图 (按端/工程划分清晰隔离容器)
+      for (const proj of projects) {
+        const projFiles = fileList.filter((f) => {
+          if (proj.relPath === '.') return true;
+          return f === proj.relPath || f.startsWith(proj.relPath + '/');
+        });
+
+        if (projFiles.length === 0) continue;
+
+        if (projFiles.length <= 12) {
+          const modId = `mod_proj_${proj.id}`;
+          for (const f of projFiles) {
+            fileToModuleMap.set(f, modId);
+          }
+          modules.push({
+            id: modId,
+            name: `${proj.name}${proj.versionString ? ` (${proj.versionString})` : ''}`,
+            files: projFiles,
+            inPorts: [],
+            outPorts: [],
+            archetypeRole: proj.recommendReason || 'Subproject',
+            projectId: proj.id,
+            projectPlatform: proj.platform,
+          });
+        } else {
+          // 子工程规模较大时，按其内部一级子目录划分模块
+          const subGroups = new Map<string, string[]>();
+          for (const f of projFiles) {
+            const relToProj = proj.relPath === '.' ? f : f.slice(proj.relPath.length + 1);
+            const segs = relToProj.split('/');
+            const subName = segs.length > 1 ? segs[0] : 'core';
+            const list = subGroups.get(subName) || [];
+            list.push(f);
+            subGroups.set(subName, list);
+          }
+
+          for (const [subName, sFiles] of subGroups.entries()) {
+            const modId = `mod_${proj.id}_${subName}`;
+            for (const f of sFiles) {
+              fileToModuleMap.set(f, modId);
+            }
+            modules.push({
+              id: modId,
+              name: `[${proj.name}] ${subName}`,
+              files: sFiles,
+              inPorts: [],
+              outPorts: [],
+              archetypeRole: proj.recommendReason || 'Subproject',
+              projectId: proj.id,
+              projectPlatform: proj.platform,
+            });
+          }
+        }
+      }
+
+      // 检查是否有未被子工程捕获的根目录零散文件
+      const unmapped = fileList.filter((f) => !fileToModuleMap.has(f) && !f.startsWith('contracts/'));
+      if (unmapped.length > 0) {
+        const modId = 'mod_root_shared';
+        for (const f of unmapped) {
+          fileToModuleMap.set(f, modId);
+        }
+        modules.push({
+          id: modId,
+          name: 'Root Shared Files',
+          files: unmapped,
+          inPorts: [],
+          outPorts: [],
+          archetypeRole: 'Shared',
+        });
+      }
+    } else if (archetype === 'UNIVERSAL') {
       const g = new Graph({ type: 'undirected' });
       for (const f of fileList) {
         g.addNode(f);
@@ -159,6 +297,8 @@ export class DualModelCompiler {
           inPorts: [],
           outPorts: [],
           archetypeRole: 'Community',
+          projectId: activeProjectId,
+          projectPlatform: activeProfile?.platform,
         });
       }
     } else {
@@ -197,6 +337,8 @@ export class DualModelCompiler {
             inPorts: [],
             outPorts: [],
             archetypeRole: slotName,
+            projectId: activeProjectId,
+            projectPlatform: activeProfile?.platform,
           });
         }
       }

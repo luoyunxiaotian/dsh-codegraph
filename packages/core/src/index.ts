@@ -30,10 +30,13 @@ export * from './graph/contract-linker.js';
 export * from './indexer/symbol-table.js';
 export * from './watcher/hash-watcher.js';
 export * from './archetype/detector.js';
+export * from './archetype/workspace-profiler.js';
 export * from './graph/dual-compiler.js';
 export * from './layout/elk-layout.js';
 export * from './persistence/cache-store.js';
 export * from './server.js';
+import { WorkspaceProfiler } from './archetype/workspace-profiler.js';
+import { DetectedProjectProfile, WorkspaceDiscoveryResult } from './types/index.js';
 
 export interface CodeGraphCoreOptions {
   workspaceRoot: string;
@@ -49,6 +52,9 @@ export class CodeGraphCore {
   private lastGraphResult?: FullGraphResult;
   private lastLayout?: { architecture?: any };
   private forceArchetype?: ArchetypeType;
+  private projects: DetectedProjectProfile[] = [];
+  private selectedProjectIds: string[] = [];
+  private activeProjectId?: string;
 
   constructor(options: CodeGraphCoreOptions) {
     this.workspaceRoot = path.resolve(options.workspaceRoot);
@@ -89,11 +95,106 @@ export class CodeGraphCore {
     this.watcher = new DualTrackWatcher(this.workspaceRoot, this.scopePath);
   }
 
+  public discoverProjects(): WorkspaceDiscoveryResult {
+    return WorkspaceProfiler.discover(this.workspaceRoot);
+  }
+
+  public getProjects(): DetectedProjectProfile[] {
+    return this.projects;
+  }
+
+  public getSelectedProjectIds(): string[] {
+    return this.selectedProjectIds;
+  }
+
+  public setSelectedProjectIds(ids: string[]): void {
+    this.selectedProjectIds = ids;
+  }
+
+  public getActiveProjectId(): string | undefined {
+    return this.activeProjectId;
+  }
+
+  /**
+   * 极速内存切换单工程精细视图与全生态总览 (无须重新解析文件 AST，< 15ms)
+   */
+  public switchActiveProject(projectId?: string): FullGraphResult | undefined {
+    this.activeProjectId = projectId && projectId !== 'all' ? projectId : undefined;
+    if (!this.lastGraphResult) return undefined;
+
+    const allFiles = Array.from(
+      new Set(
+        this.symbolTable
+          .getAllNodes()
+          .map((n) => n.filePath)
+          .filter((f) => !f.startsWith('contracts/'))
+      )
+    );
+
+    const projectName = path.basename(this.workspaceRoot);
+    const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
+
+    const result = DualModelCompiler.compile(
+      projectName,
+      this.scopePath,
+      allFiles,
+      this.symbolTable.getAllNodes(),
+      this.symbolTable.getAllEdges(),
+      this.lastGraphResult.meta.archetype || 'UNIVERSAL',
+      {
+        projects: activeProjects.length > 0 ? activeProjects : this.projects,
+        activeProjectId: this.activeProjectId,
+      }
+    );
+
+    this.lastGraphResult = result;
+    return result;
+  }
+
+  private getFileProjectId(filePath: string): string | undefined {
+    if (this.projects.length === 0) return undefined;
+    if (this.projects.length === 1 && this.projects[0].relPath === '.') {
+      return this.projects[0].id;
+    }
+    const sorted = [...this.projects].sort((a, b) => b.relPath.length - a.relPath.length);
+    for (const p of sorted) {
+      if (p.relPath === '.' || filePath === p.relPath || filePath.startsWith(p.relPath + '/')) {
+        return p.id;
+      }
+    }
+    return undefined;
+  }
+
   /**
    * 执行跨语言多语法全量代码解析与双模型图谱编译 (0-Token 本地运行)
    */
-  public async scan(forceFull: boolean = false): Promise<FullGraphResult> {
+  public async scan(
+    forceFull: boolean = false,
+    options?: { selectedProjectIds?: string[]; activeProjectId?: string }
+  ): Promise<FullGraphResult> {
     const startTime = Date.now();
+
+    // 0. 系统关键目录与磁盘根硬拦截
+    const danger = WorkspaceProfiler.checkDangerousRoot(this.workspaceRoot);
+    if (danger.isDangerous) {
+      throw new Error(danger.reason || '所选路径属于操作系统保护目录或磁盘根目录，拒绝扫描');
+    }
+
+    // 0.1 嗅探多端/多工程画像
+    const discovery = WorkspaceProfiler.discover(this.workspaceRoot);
+    this.projects = discovery.projects;
+
+    if (options?.selectedProjectIds && options.selectedProjectIds.length > 0) {
+      this.selectedProjectIds = options.selectedProjectIds;
+    } else {
+      const recommended = this.projects.filter((p) => p.isRecommended).map((p) => p.id);
+      this.selectedProjectIds = recommended.length > 0 ? recommended : this.projects.map((p) => p.id);
+    }
+
+    if (options?.activeProjectId !== undefined) {
+      this.activeProjectId = options.activeProjectId && options.activeProjectId !== 'all' ? options.activeProjectId : undefined;
+    }
+
     const searchRoot = path.resolve(this.workspaceRoot, this.scopePath);
     const globPatterns = ExtractorRegistry.getGlobPatterns();
 
@@ -118,9 +219,17 @@ export class CodeGraphCore {
     });
 
     // 规范化文件相对路径 (相对于 workspaceRoot)
-    const normalizedFiles = sourceFiles.map((f) =>
+    let normalizedFiles = sourceFiles.map((f) =>
       path.relative(this.workspaceRoot, path.join(searchRoot, f)).replace(/\\/g, '/')
     );
+
+    // 过滤只包含被用户勾选/推荐的工程源码
+    if (this.projects.length > 1 && this.selectedProjectIds.length > 0) {
+      normalizedFiles = normalizedFiles.filter((f) => {
+        const pid = this.getFileProjectId(f);
+        return !pid || this.selectedProjectIds.includes(pid);
+      });
+    }
 
     // 2. 建立哈希基准
     await this.watcher.buildBaseline(globPatterns);
@@ -142,6 +251,15 @@ export class CodeGraphCore {
         const parser = await getParserForLanguage(grammarName);
         const tree = parser.parse(sourceCode);
         const extraction = extractor.extractFile(tree, relPath, sourceCode);
+
+        // 为该文件提取出的所有符号节点注入所属工程 projectId
+        const fileProjId = this.getFileProjectId(relPath);
+        if (fileProjId) {
+          for (const n of extraction.nodes) {
+            n.projectId = fileProjId;
+          }
+        }
+
         this.symbolTable.registerFileExtraction(extraction);
       } catch (err) {
         console.warn(`[CodeGraph] 解析文件失败: ${relPath}`, err);
@@ -151,15 +269,21 @@ export class CodeGraphCore {
     // 5. 全局跨文件调用与依赖关系解析 + 跨语言契约中枢自动链接
     this.symbolTable.resolveCrossFileReferences();
 
-    // 6. 双模型编译 (含一致性校验与自动纠错回滚)
+    // 6. 双模型编译 (含一致性校验与自动纠错回滚及多端生态聚合)
     const projectName = path.basename(this.workspaceRoot);
+    const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
+
     const result = DualModelCompiler.compile(
       projectName,
       this.scopePath,
       normalizedFiles,
       this.symbolTable.getAllNodes(),
       this.symbolTable.getAllEdges(),
-      archetypeMatch.archetype
+      archetypeMatch.archetype,
+      {
+        projects: activeProjects.length > 0 ? activeProjects : this.projects,
+        activeProjectId: this.activeProjectId,
+      }
     );
 
     this.lastGraphResult = result;
@@ -199,6 +323,14 @@ export class CodeGraphCore {
           const parser = await getParserForLanguage(grammarName);
           const tree = parser.parse(sourceCode);
           const extraction = extractor.extractFile(tree, changedFile, sourceCode);
+
+          const fileProjId = this.getFileProjectId(changedFile);
+          if (fileProjId) {
+            for (const n of extraction.nodes) {
+              n.projectId = fileProjId;
+            }
+          }
+
           this.symbolTable.registerFileExtraction(extraction);
         } catch (err) {
           console.warn(`[CodeGraph] 增量更新文件失败: ${changedFile}`, err);
@@ -220,13 +352,19 @@ export class CodeGraphCore {
     );
 
     const projectName = path.basename(this.workspaceRoot);
+    const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
+
     const result = DualModelCompiler.compile(
       projectName,
       this.scopePath,
       allFiles,
       this.symbolTable.getAllNodes(),
       this.symbolTable.getAllEdges(),
-      this.lastGraphResult?.meta.archetype || 'UNIVERSAL'
+      this.lastGraphResult?.meta.archetype || 'UNIVERSAL',
+      {
+        projects: activeProjects.length > 0 ? activeProjects : this.projects,
+        activeProjectId: this.activeProjectId,
+      }
     );
 
     this.lastGraphResult = result;

@@ -12,8 +12,9 @@ import {
   Sun,
   Moon,
   ExternalLink,
+  FolderTree,
 } from 'lucide-react';
-import { ArchetypeType } from '../../../core/src/types/index.js';
+import { ArchetypeType, DetectedProjectProfile, ProjectPlatform } from '../../../core/src/types/index.js';
 import { useTheme } from '../context/ThemeContext.js';
 
 interface TopBarProps {
@@ -32,6 +33,10 @@ interface TopBarProps {
   selectedModuleName?: string | null;
   cacheTime?: string | null;
   languages?: Record<string, number>;
+  projects?: DetectedProjectProfile[];
+  activeProjectId?: string;
+  onSwitchProject?: (projectId?: string) => void;
+  onOpenScopeDrawer?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -50,8 +55,26 @@ export const TopBar: React.FC<TopBarProps> = ({
   selectedModuleName,
   cacheTime,
   languages,
+  projects,
+  activeProjectId,
+  onSwitchProject,
+  onOpenScopeDrawer,
 }) => {
   const { theme, toggleTheme } = useTheme();
+
+  const getPlatformEmoji = (p: ProjectPlatform) => {
+    switch (p) {
+      case 'MOBILE_ANDROID': return '📱';
+      case 'MOBILE_IOS': return '🍏';
+      case 'DESKTOP_CPP': return '💻';
+      case 'DESKTOP_PYTHON': return '🐍';
+      case 'DESKTOP_ELECTRON': return '⚡';
+      case 'WEB_FRONTEND': return '🌐';
+      case 'BACKEND_SERVICE': return '⚙️';
+      case 'TOOL_SCRIPT': return '🔧';
+      default: return '📦';
+    }
+  };
 
   return (
     <header className="h-11 bg-dsh-base border-b border-dsh-border2 flex items-center justify-between px-3.5 z-20 shrink-0 select-none">
@@ -162,6 +185,39 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
           )}
         </div>
+
+        {/* Project & Scope Switcher (Dual-Layer Multi-Project View) */}
+        {projects && projects.length > 1 && (
+          <div className="ml-3 flex items-center gap-1.5">
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-dsh-platform border border-dsh-border1 text-[12px]">
+              <span className="text-[11px] text-dsh-tertiary font-medium">作用域:</span>
+              <select
+                value={activeProjectId || 'all'}
+                onChange={(e) => onSwitchProject?.(e.target.value === 'all' ? undefined : e.target.value)}
+                className="bg-transparent text-dsh-primary focus:outline-none cursor-pointer text-[12px] font-semibold max-w-[190px] truncate"
+                title="在全生态协同总览与单工程独立视图间毫秒级切换"
+              >
+                <option value="all" className="bg-dsh-layer1 text-dsh-primary font-medium">
+                  🌐 全生态协同总览 ({projects.length} 个端)
+                </option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-dsh-layer1 text-dsh-primary font-medium">
+                    {getPlatformEmoji(p.platform)} {p.name} {p.versionString ? `(${p.versionString})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={onOpenScopeDrawer}
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-dsh-layer1 hover:bg-dsh-layer2 border border-dsh-border2 text-[11px] text-dsh-secondary hover:text-dsh-primary transition-colors"
+              title="自定义管理要纳入分析的多端与版本范围"
+            >
+              <FolderTree className="w-3.5 h-3.5 text-dsh-blue" />
+              <span>端与版本范围</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right: Archetype selector, Health score & DSH Action Buttons */}

@@ -37,6 +37,39 @@ export type RelationType =
   | 'READS_WRITES'   // 读写共享状态
   | 'FLOWS_TO';      // 业务时序指向
 
+export type ProjectPlatform = 
+  | 'MOBILE_ANDROID'   // 安卓端 (Kotlin / Java)
+  | 'MOBILE_IOS'       // 苹果端 (Swift / Objective-C)
+  | 'DESKTOP_CPP'      // PC 桌面端 (C++ / Qt / Win32 / MFC)
+  | 'DESKTOP_PYTHON'   // PC 桌面端 (Python / PyQt / Tkinter)
+  | 'DESKTOP_ELECTRON' // PC 桌面端 (Electron / Tauri)
+  | 'WEB_FRONTEND'     // Web 网页前端 (React / Vue / Next / Vite)
+  | 'BACKEND_SERVICE'  // 后端服务 / 微服务 (Go / Java / Python / Node)
+  | 'SHARED_SDK'       // 共享库 / SDK
+  | 'TOOL_SCRIPT'      // 辅助工具 / 测试脚本
+  | 'UNKNOWN';
+
+export interface DetectedProjectProfile {
+  id: string;               // 唯一ID, 如 "clients_android" 或 "clients_pc_cpp"
+  name: string;             // 显示名, 如 "android-app"
+  relPath: string;          // 相对工作区路径, 如 "clients/android"
+  platform: ProjectPlatform;// 识别出的平台形态
+  primaryLanguage: string;  // 主导语言: "cpp", "kotlin", "typescript", "go", "python", "java", etc.
+  frameworks: string[];     // 识别出的技术栈/框架: ["Qt6", "CMake"] 或 ["React", "Vite"]
+  versionString?: string;   // 提取到的版本号: "v0.1.5"
+  lastModifiedMs: number;   // 最近编辑时间戳 (用于活跃度判断)
+  fileCount: number;        // 代码文件数量估算
+  isRecommended: boolean;   // 推荐决策: 是否属于主力全端生态
+  recommendReason: string;  // 推荐理由: "移动端当前主力" / "历史早期原型(已归档)" / "全端协同生态"
+}
+
+export interface WorkspaceDiscoveryResult {
+  isSingleProject: boolean;
+  hasDangerousRoot: boolean;
+  dangerousRootReason?: string;
+  projects: DetectedProjectProfile[];
+}
+
 export interface SourceLocation {
   startLine: number;
   endLine: number;
@@ -52,6 +85,7 @@ export interface CodeNode {
   semanticRole: SemanticRole;
   filePath: string;                // 相对工作区路径
   loc: SourceLocation;
+  projectId?: string;              // 所属子工程 ID (用于多工程/多端隔离)
   language?: string;               // 编程语言标识 (如: 'python', 'typescript', 'go', 'java', 'rust', 'cpp', 'csharp')
   scipUri?: string;                // 工业级 SCIP 唯一定位 URI (如: scip/python/app/routers/auth.py#login().)
   signature?: string;              // 函数或类签名 (如: def login(dto: LoginDTO))
@@ -91,6 +125,8 @@ export interface ModuleContainer {
   inPorts: string[];               // 外部打入本模块的虚拟入口端口
   outPorts: string[];              // 本模块向外调用的虚拟出口端口
   archetypeRole?: string;          // 在预置架构中的槽位 (如 Presentation, Domain, Data)
+  projectId?: string;              // 所属子工程 ID
+  projectPlatform?: ProjectPlatform;// 所属工程平台形态
 }
 
 export interface ModuleBus {
@@ -155,6 +191,9 @@ export interface FullGraphResult {
     nodeCount: number;
     edgeCount: number;
     languages?: Record<string, number>; // 语言分布 (如: { python: 15, typescript: 32, go: 8 })
+    projects?: DetectedProjectProfile[]; // 探测并参与分析的子工程画像列表
+    activeProjectId?: string;            // 当前单工程聚焦 ID (空表示全生态全景总览)
+    isMultiProject?: boolean;            // 是否包含多个子工程/端
   };
   architectureView: {
     modules: ModuleContainer[];

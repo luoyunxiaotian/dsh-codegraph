@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { CodeGraphCore } from '../src/index.js';
+import { CodeGraphCore, WorkspaceProfiler } from '../src/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -142,7 +142,135 @@ def query_user_by_name(username: str):
     console.log('  ✓ 自动纠错回滚逻辑工作正常！');
   }
 
-  // 清理测试产物
+  // 测试 6: 验证危险系统目录与磁盘根硬拦截
+  console.log('\n[测试 6] 验证危险系统目录与磁盘根硬拦截...');
+  const dangerC = WorkspaceProfiler.checkDangerousRoot('C:\\');
+  const dangerWin = WorkspaceProfiler.checkDangerousRoot('C:\\Windows');
+  const safeDir = WorkspaceProfiler.checkDangerousRoot(fixtureDir);
+  console.log(`  ✓ 磁盘根 C:\\ 拦截结果: isDangerous=${dangerC.isDangerous}`);
+  console.log(`  ✓ 系统目录 C:\\Windows 拦截结果: isDangerous=${dangerWin.isDangerous}`);
+  console.log(`  ✓ 普通项目目录拦截结果: isDangerous=${safeDir.isDangerous}`);
+  if (!dangerC.isDangerous || !dangerWin.isDangerous || safeDir.isDangerous) {
+    throw new Error('危险目录硬拦截校验失败！');
+  }
+
+  // 测试 7: 验证多端生态智能画像、版本隔离推荐与双模型视图切换
+  console.log('\n[测试 7] 验证多端生态智能嗅探、版本聚类与双模型视图切换...');
+  const multiFixture = path.resolve(__dirname, 'fixtures/multi_platform_repo');
+  if (fs.existsSync(multiFixture)) {
+    fs.rmSync(multiFixture, { recursive: true, force: true });
+  }
+
+  // 7.1 创建 Android 端 (Kotlin)
+  const androidDir = path.join(multiFixture, 'clients/android_v015');
+  fs.mkdirSync(androidDir, { recursive: true });
+  fs.writeFileSync(path.join(androidDir, 'AndroidManifest.xml'), '<manifest package="com.app"/>');
+  fs.writeFileSync(path.join(androidDir, 'build.gradle.kts'), 'plugins { id("com.android.application") }');
+  fs.writeFileSync(
+    path.join(androidDir, 'MainActivity.kt'),
+    `package com.app
+class MainActivity {
+    fun fetchUserProfile() {
+        val url = "http://api/v1/user/profile"
+    }
+}
+`
+  );
+
+  // 7.2 创建 PC 桌面端主力 C++ (Qt6)
+  const pcCppDir = path.join(multiFixture, 'clients/pc_v05');
+  fs.mkdirSync(pcCppDir, { recursive: true });
+  fs.writeFileSync(path.join(pcCppDir, 'CMakeLists.txt'), 'project(pc_client)\nfind_package(Qt6 REQUIRED)');
+  fs.writeFileSync(
+    path.join(pcCppDir, 'main.cpp'),
+    `#include <iostream>
+int main() {
+    std::string endpoint = "/api/v1/user/profile";
+    return 0;
+}
+`
+  );
+
+  // 7.3 创建 PC 桌面端历史早期原型 Python (PyQt5)
+  const pcPyDir = path.join(multiFixture, 'archive/pc_py_v01');
+  fs.mkdirSync(pcPyDir, { recursive: true });
+  fs.writeFileSync(path.join(pcPyDir, 'requirements.txt'), 'PyQt5==5.15.0\n');
+  fs.writeFileSync(
+    path.join(pcPyDir, 'gui.py'),
+    `from PyQt5.QtWidgets import QApplication
+def run():
+    pass
+`
+  );
+
+  // 7.4 创建后端微服务 (Go / Gin)
+  const backendDir = path.join(multiFixture, 'services/api');
+  fs.mkdirSync(backendDir, { recursive: true });
+  fs.writeFileSync(path.join(backendDir, 'go.mod'), 'module myapp/api\ngo 1.21\nrequire github.com/gin-gonic/gin v1.9.1');
+  fs.writeFileSync(
+    path.join(backendDir, 'main.go'),
+    `package main
+import "github.com/gin-gonic/gin"
+
+func GetProfile(c *gin.Context) {
+    c.JSON(200, gin.H{"id": 1})
+}
+
+func main() {
+    r := gin.Default()
+    r.GET("/api/v1/user/profile", GetProfile)
+}
+`
+  );
+
+  // 7.5 创建辅助开发工具
+  const toolDir = path.join(multiFixture, 'tools/codegen');
+  fs.mkdirSync(toolDir, { recursive: true });
+  fs.writeFileSync(path.join(toolDir, 'requirements.txt'), '# tool requirements\n');
+  fs.writeFileSync(path.join(toolDir, 'gen.py'), 'def generate():\n    pass\n');
+
+  // 执行画像嗅探
+  const multiCore = new CodeGraphCore({
+    workspaceRoot: multiFixture,
+    scopePath: '.',
+  });
+
+  const discovery = multiCore.discoverProjects();
+  console.log(`  ✓ 嗅探到工程总数: ${discovery.projects.length} 个`);
+  for (const p of discovery.projects) {
+    console.log(`    - [${p.platform}] ${p.name} (语言: ${p.primaryLanguage}, 版本: ${p.versionString || '无'}, 推荐: ${p.isRecommended ? '★主力' : '归档/工具'})`);
+  }
+
+  // 校验平台与推荐判定
+  const androidProj = discovery.projects.find((p) => p.platform === 'MOBILE_ANDROID');
+  const pcCppProj = discovery.projects.find((p) => p.platform === 'DESKTOP_CPP');
+  const pcPyProj = discovery.projects.find((p) => p.platform === 'DESKTOP_PYTHON');
+  const backendProj = discovery.projects.find((p) => p.platform === 'BACKEND_SERVICE');
+  const toolProj = discovery.projects.find((p) => p.platform === 'TOOL_SCRIPT');
+
+  if (!androidProj || !androidProj.isRecommended) throw new Error('Android 未正确识别为主力');
+  if (!pcCppProj || !pcCppProj.isRecommended) throw new Error('PC C++ 未正确识别为主力');
+  if (!pcPyProj || pcPyProj.isRecommended) throw new Error('PC Python 旧版未正确标记为归档');
+  if (!backendProj || !backendProj.isRecommended) throw new Error('后端服务未正确识别为主力');
+  if (!toolProj || toolProj.isRecommended) throw new Error('工具脚本未正确排除出核心推荐');
+
+  // 执行全量扫描 -> 全生态协同总览
+  const multiScanResult = await multiCore.scan();
+  console.log(`  ✓ 全生态总览编译完成: ${multiScanResult.architectureView.modules.length} 个端/模块容器, 是否多端: ${multiScanResult.meta.isMultiProject}`);
+  if (!multiScanResult.meta.isMultiProject) {
+    throw new Error('预期 isMultiProject 为 true');
+  }
+
+  // 执行单工程精细视图切换
+  const switchStart = Date.now();
+  const focusedPc = multiCore.switchActiveProject(pcCppProj.id);
+  const switchDuration = Date.now() - switchStart;
+  console.log(`  ✓ 内存切换 PC 单工程独立视图完成 (耗时 ${switchDuration}ms < 15ms): 聚焦工程=${focusedPc?.meta.activeProjectId}`);
+  if (focusedPc?.meta.activeProjectId !== pcCppProj.id) {
+    throw new Error('单工程聚焦切换失败');
+  }
+
+  fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });
   console.log('\n🎉 所有核心测试全部通过！\n');
 }

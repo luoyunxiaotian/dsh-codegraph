@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
-import { CodeGraphCore } from './index.js';
+import { CodeGraphCore, WorkspaceProfiler } from './index.js';
 import { ElkLayoutEngine } from './layout/elk-layout.js';
 
 export interface ServerOptions {
@@ -183,6 +183,46 @@ export class CodeGraphServer {
     res: http.ServerResponse,
     reqUrl: URL
   ) {
+    if (pathname === '/api/discover') {
+      let targetRoot = this.workspaceRoot;
+      if (req.method === 'POST') {
+        const body = await this.readJsonBody(req);
+        if (body?.workspaceRoot) targetRoot = path.resolve(body.workspaceRoot);
+      } else {
+        const q = reqUrl.searchParams.get('workspace');
+        if (q) targetRoot = path.resolve(q);
+      }
+      const result = WorkspaceProfiler.discover(targetRoot);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    if (pathname === '/api/switch-project' && req.method === 'POST') {
+      const body = await this.readJsonBody(req);
+      const newResult = this.core.switchActiveProject(body.activeProjectId);
+      if (!newResult) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '图谱尚未初始化或未加载' }));
+        return;
+      }
+
+      const archLayout = await ElkLayoutEngine.layoutArchitecture(
+        newResult.architectureView.modules,
+        newResult.architectureView.buses
+      );
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          success: true,
+          graph: newResult,
+          layout: { architecture: archLayout },
+        })
+      );
+      return;
+    }
+
     if (pathname === '/api/status' && req.method === 'GET') {
       const wsParam = reqUrl.searchParams.get('workspace');
       if (wsParam && fs.existsSync(wsParam)) {
@@ -230,6 +270,9 @@ export class CodeGraphServer {
           meta: last?.meta,
           graph: last,
           layout,
+          projects: this.core.getProjects(),
+          selectedProjectIds: this.core.getSelectedProjectIds(),
+          activeProjectId: this.core.getActiveProjectId(),
         })
       );
       return;
@@ -294,7 +337,10 @@ export class CodeGraphServer {
           this.core.setScopePath(body.scopePath);
         }
 
-        const graphResult = await this.core.scan(true);
+        const graphResult = await this.core.scan(true, {
+          selectedProjectIds: body?.selectedProjectIds,
+          activeProjectId: body?.activeProjectId,
+        });
         // 计算 ELK 布局坐标
         const archLayout = await ElkLayoutEngine.layoutArchitecture(
           graphResult.architectureView.modules,

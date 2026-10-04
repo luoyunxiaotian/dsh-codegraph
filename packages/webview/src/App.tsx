@@ -5,9 +5,15 @@ import { ArchitectureCanvas } from './components/ArchitectureCanvas.js';
 import { ProcessFlowCanvas } from './components/ProcessFlowCanvas.js';
 import { DrillDownCanvas } from './components/DrillDownCanvas.js';
 import { CodeDrawer } from './components/CodeDrawer.js';
+import { ProjectScopeDrawer } from './components/ProjectScopeDrawer.js';
 import { Toast } from './components/Toast.js';
 import { showToast } from './utils/chatBridge.js';
-import { FullGraphResult, ArchetypeType, CodeNode } from '../../core/src/types/index.js';
+import {
+  FullGraphResult,
+  ArchetypeType,
+  CodeNode,
+  DetectedProjectProfile,
+} from '../../core/src/types/index.js';
 
 export const App: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
@@ -23,6 +29,11 @@ export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'architecture' | 'flow' | 'drilldown'>('architecture');
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [activeCodeNode, setActiveCodeNode] = useState<CodeNode | null>(null);
+
+  // 多工程与多端生态范围管理状态
+  const [projects, setProjects] = useState<DetectedProjectProfile[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
+  const [isScopeDrawerOpen, setIsScopeDrawerOpen] = useState<boolean>(false);
 
   // 初始化检查后端状态与 URL 参数
   useEffect(() => {
@@ -44,6 +55,8 @@ export const App: React.FC = () => {
           if (wsData.hasCache && wsData.graph) {
             setGraphData(wsData.graph);
             setLayoutData(wsData.layout?.architecture);
+            setProjects(wsData.graph.meta?.projects || []);
+            setActiveProjectId(wsData.graph.meta?.activeProjectId);
             setIsInitialized(true);
             setCacheTime('已恢复');
             return;
@@ -63,10 +76,20 @@ export const App: React.FC = () => {
         } else if (queryScope) {
           setScopePath(queryScope);
         }
+        if (data.projects) {
+          setProjects(data.projects);
+        }
+        if (data.activeProjectId) {
+          setActiveProjectId(data.activeProjectId);
+        }
         if (data.initialized && data.graph) {
           // 直接装载已有图谱或本地持久化缓存，无需等待重扫
           setGraphData(data.graph);
           setLayoutData(data.layout?.architecture);
+          if (data.graph.meta?.projects) {
+            setProjects(data.graph.meta.projects);
+          }
+          setActiveProjectId(data.graph.meta?.activeProjectId);
           setIsInitialized(true);
           if (data.fromCache && data.savedAt) {
             try {
@@ -85,7 +108,11 @@ export const App: React.FC = () => {
   }, []);
 
   // 执行全量扫描
-  const handleFullScan = async (customScope?: string, customWs?: string) => {
+  const handleFullScan = async (
+    customScope?: string,
+    customWs?: string,
+    customSelectedProjectIds?: string[]
+  ) => {
     setIsLoading(true);
     const targetWs = customWs || workspaceRoot;
     const targetScope = customScope || scopePath;
@@ -96,12 +123,18 @@ export const App: React.FC = () => {
         body: JSON.stringify({
           workspaceRoot: targetWs,
           scopePath: targetScope,
+          selectedProjectIds: customSelectedProjectIds,
+          activeProjectId,
         }),
       });
       const data = await res.json();
       if (data.success && data.graph) {
         setGraphData(data.graph);
         setLayoutData(data.layout?.architecture);
+        if (data.graph.meta?.projects) {
+          setProjects(data.graph.meta.projects);
+        }
+        setActiveProjectId(data.graph.meta?.activeProjectId);
         setIsInitialized(true);
         setCacheTime('已同步保存');
         if (customScope) setScopePath(customScope);
@@ -115,6 +148,34 @@ export const App: React.FC = () => {
       showToast(`❌ 扫描连接失败: ${err.message || err}`);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 执行极速单工程 / 全生态视图切换 (< 15ms 内存切换)
+  const handleSwitchProject = async (targetProjectId?: string) => {
+    try {
+      const res = await fetch('/api/switch-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activeProjectId: targetProjectId }),
+      });
+      const data = await res.json();
+      if (data.success && data.graph) {
+        setGraphData(data.graph);
+        setLayoutData(data.layout?.architecture);
+        setActiveProjectId(targetProjectId);
+        if (targetProjectId) {
+          const p = projects.find((item) => item.id === targetProjectId);
+          showToast(`📦 聚焦工程: ${p?.name || targetProjectId}`);
+        } else {
+          showToast('🌐 切换至全生态协同总览');
+        }
+      } else {
+        showToast(`❌ 切换失败: ${data.error || '未知错误'}`);
+      }
+    } catch (err: any) {
+      console.error('切换子工程视图失败:', err);
+      showToast(`❌ 切换连接失败: ${err.message || err}`);
     }
   };
 
@@ -182,6 +243,7 @@ export const App: React.FC = () => {
   }
 
   const selectedModule = graphData.architectureView.modules.find((m) => m.id === selectedModuleId);
+  const currentProjects = graphData.meta.projects || projects;
 
   return (
     <div className="flex flex-col h-full w-full bg-dsh-base overflow-hidden">
@@ -202,6 +264,10 @@ export const App: React.FC = () => {
         selectedModuleName={selectedModule?.name}
         cacheTime={cacheTime}
         languages={graphData.meta.languages}
+        projects={currentProjects}
+        activeProjectId={graphData.meta.activeProjectId || activeProjectId}
+        onSwitchProject={handleSwitchProject}
+        onOpenScopeDrawer={() => setIsScopeDrawerOpen(true)}
       />
 
       {/* 主画布展示区 */}
@@ -234,6 +300,19 @@ export const App: React.FC = () => {
 
         {/* 源码预览抽屉 */}
         <CodeDrawer node={activeCodeNode} onClose={() => setActiveCodeNode(null)} />
+
+        {/* 多端与版本范围管理抽屉 */}
+        <ProjectScopeDrawer
+          isOpen={isScopeDrawerOpen}
+          onClose={() => setIsScopeDrawerOpen(false)}
+          projects={currentProjects}
+          initialSelectedIds={currentProjects.filter((p) => p.isRecommended).map((p) => p.id)}
+          onApplyScope={(selectedIds) => {
+            setIsScopeDrawerOpen(false);
+            handleFullScan(scopePath, workspaceRoot, selectedIds);
+          }}
+          isLoading={isLoading}
+        />
       </main>
 
       {/* 全局微型气泡提示 */}
