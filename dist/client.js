@@ -54,6 +54,68 @@ function safeCreatePortal(children, container) {
   }
   return null;
 }
+var SafeCodeGraphErrorBoundary = class extends import_react.default.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("[dsh-codegraph] UI Error Boundary caught an error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return h(
+        "div",
+        {
+          style: {
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            width: "100%",
+            background: "#151517",
+            color: "#f9fafb",
+            padding: "24px",
+            textAlign: "center",
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+          }
+        },
+        h("div", { style: { fontSize: "28px", marginBottom: "12px" } }, "\u{1F9ED}"),
+        h("h3", { style: { fontSize: "16px", fontWeight: 600, marginBottom: "8px", color: "#f87171" } }, "\u4EE3\u7801\u56FE\u8C31\u89C6\u7A97\u52A0\u8F7D\u5F02\u5E38"),
+        h(
+          "p",
+          { style: { fontSize: "12px", color: "#9ca3af", marginBottom: "16px", maxWidth: "480px", lineHeight: 1.5 } },
+          String(this.state.error?.message || this.state.error || "\u9047\u5230\u672A\u6355\u83B7\u7684\u6E32\u67D3\u9519\u8BEF\uFF0C\u5DF2\u5B89\u5168\u9694\u79BB")
+        ),
+        h(
+          "button",
+          {
+            style: {
+              background: "#4176e6",
+              color: "#ffffff",
+              border: "none",
+              padding: "6px 16px",
+              borderRadius: "6px",
+              fontSize: "12px",
+              fontWeight: 500,
+              cursor: "pointer"
+            },
+            onClick: () => this.setState({ hasError: false, error: null })
+          },
+          "\u91CD\u65B0\u52A0\u8F7D\u89C6\u7A97"
+        )
+      );
+    }
+    return this.props.children;
+  }
+};
+function SafeCodeGraphPanel(props) {
+  return h(SafeCodeGraphErrorBoundary, null, h(CodeGraphViewPanel, props));
+}
 function useHostTheme() {
   const [isDark, setIsDark] = import_react.default.useState(() => {
     if (typeof document !== "undefined") {
@@ -87,13 +149,33 @@ function useHostTheme() {
   return isDark;
 }
 function CodeGraphViewPanel(props) {
+  const [key, setKey] = import_react.default.useState(0);
+  const [status, setStatus] = import_react.default.useState("checking");
+  const [statusText, setStatusText] = import_react.default.useState("\u6B63\u5728\u68C0\u6D4B\u5F15\u64CE\u72B6\u6001...");
+  const [isScanning, setIsScanning] = import_react.default.useState(false);
+  const [sessionWorkspace, setSessionWorkspace] = import_react.default.useState(() => {
+    if (props?.sessionId && typeof localStorage !== "undefined") {
+      try {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+        if (boundWs && boundWs.trim()) {
+          return boundWs.trim();
+        }
+      } catch {
+      }
+    }
+    return "";
+  });
   const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
   const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
   const activeWorkspace = import_react.default.useMemo(() => {
+    if (sessionWorkspace) return sessionWorkspace;
     if (props?.sessionId && typeof localStorage !== "undefined") {
-      const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
-      if (boundWs && boundWs.trim()) {
-        return boundWs.trim();
+      try {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+        if (boundWs && boundWs.trim()) {
+          return boundWs.trim();
+        }
+      } catch {
       }
     }
     if (props?.activeWorkspace) return props.activeWorkspace;
@@ -120,7 +202,16 @@ function CodeGraphViewPanel(props) {
       }
     }
     return "";
-  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId, key]);
+  }, [sessionWorkspace, props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+  import_react.default.useEffect(() => {
+    if (props?.sessionId && typeof localStorage !== "undefined") {
+      try {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+        setSessionWorkspace(boundWs?.trim() || "");
+      } catch {
+      }
+    }
+  }, [props?.sessionId]);
   const isDark = useHostTheme();
   const iframeRef = import_react.default.useRef(null);
   import_react.default.useEffect(() => {
@@ -140,8 +231,13 @@ function CodeGraphViewPanel(props) {
         const targetSid = e.data.sessionId || props?.sessionId;
         const targetWs = e.data.workspaceRoot;
         if (targetSid && targetWs && typeof localStorage !== "undefined") {
-          localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
-          setKey((prev) => prev + 1);
+          try {
+            localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
+          } catch {
+          }
+          if (targetSid === props?.sessionId) {
+            setSessionWorkspace(targetWs);
+          }
         }
       }
     };
@@ -159,10 +255,6 @@ function CodeGraphViewPanel(props) {
       );
     }
   };
-  const [key, setKey] = import_react.default.useState(0);
-  const [status, setStatus] = import_react.default.useState("checking");
-  const [statusText, setStatusText] = import_react.default.useState("\u6B63\u5728\u68C0\u6D4B\u5F15\u64CE\u72B6\u6001...");
-  const [isScanning, setIsScanning] = import_react.default.useState(false);
   const iframeUrl = import_react.default.useMemo(() => {
     const base = "http://127.0.0.1:3333";
     const params = new URLSearchParams();
@@ -708,7 +800,7 @@ function CodeGraphShellManager(props) {
     window.addEventListener("codegraph:open-overlay", handleOpen);
     return () => window.removeEventListener("codegraph:open-overlay", handleOpen);
   }, []);
-  const overlayPanel = overlayState.isOpen ? h(CodeGraphViewPanel, {
+  const overlayPanel = overlayState.isOpen ? h(SafeCodeGraphPanel, {
     ...props,
     isOverlay: true,
     activeWorkspace: overlayState.workspace,
@@ -828,7 +920,7 @@ function apply(ctx) {
           order: 15,
           label: () => "\u4EE3\u7801\u56FE\u8C31"
         },
-        CodeGraphViewPanel
+        SafeCodeGraphPanel
       )
     );
     ctx.slots.inject(

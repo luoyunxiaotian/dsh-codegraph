@@ -23,6 +23,71 @@ function safeCreatePortal(children: any, container: any) {
 }
 
 /**
+ * 容灾错误边界 (Safe Error Boundary): 杜绝任何运行期异常导致会话视窗黑屏
+ */
+class SafeCodeGraphErrorBoundary extends React.Component<any, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('[dsh-codegraph] UI Error Boundary caught an error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return h(
+        'div',
+        {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            width: '100%',
+            background: '#151517',
+            color: '#f9fafb',
+            padding: '24px',
+            textAlign: 'center',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          },
+        },
+        h('div', { style: { fontSize: '28px', marginBottom: '12px' } }, '🧭'),
+        h('h3', { style: { fontSize: '16px', fontWeight: 600, marginBottom: '8px', color: '#f87171' } }, '代码图谱视窗加载异常'),
+        h('p', { style: { fontSize: '12px', color: '#9ca3af', marginBottom: '16px', maxWidth: '480px', lineHeight: 1.5 } },
+          String(this.state.error?.message || this.state.error || '遇到未捕获的渲染错误，已安全隔离')
+        ),
+        h(
+          'button',
+          {
+            style: {
+              background: '#4176e6',
+              color: '#ffffff',
+              border: 'none',
+              padding: '6px 16px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 500,
+              cursor: 'pointer',
+            },
+            onClick: () => this.setState({ hasError: false, error: null }),
+          },
+          '重新加载视窗'
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function SafeCodeGraphPanel(props: any) {
+  return h(SafeCodeGraphErrorBoundary, null, h(CodeGraphViewPanel, props));
+}
+
+/**
  * 宿主主题感知 Hook: 实时监听 DeepSeek Harness 宿主暗色/亮色切换
  */
 function useHostTheme(): boolean {
@@ -124,7 +189,23 @@ function useHeroPortalTarget(): { container: HTMLElement | null; renderKey: numb
  * 代码图谱主面板组件 (同时支持作为独立 Tab 视图或新会话 Overlay 浮层呈现)
  */
 function CodeGraphViewPanel(props: any) {
-  // 1. 严格在组件顶层调用 React Hooks，严禁在 useMemo 或条件语句内部调用 hook
+  // 1. 严格在组件顶层初始化所有 State Hooks (杜绝 TDZ 暂时性死区引发未声明报错)
+  const [key, setKey] = React.useState(0);
+  const [status, setStatus] = React.useState<'checking' | 'online' | 'offline'>('checking');
+  const [statusText, setStatusText] = React.useState('正在检测引擎状态...');
+  const [isScanning, setIsScanning] = React.useState(false);
+  const [sessionWorkspace, setSessionWorkspace] = React.useState<string>(() => {
+    if (props?.sessionId && typeof localStorage !== 'undefined') {
+      try {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+        if (boundWs && boundWs.trim()) {
+          return boundWs.trim();
+        }
+      } catch {}
+    }
+    return '';
+  });
+
   const sessionCwd = typeof props?.useSessions === 'function' && props?.sessionId
     ? props.useSessions((s: any) => s?.byId?.[props?.sessionId]?.cwd)
     : undefined;
@@ -135,11 +216,14 @@ function CodeGraphViewPanel(props: any) {
 
   // 2. 动态感知工作区根目录 (优先支持会话专属自定义路径持久化记忆)
   const activeWorkspace = React.useMemo(() => {
+    if (sessionWorkspace) return sessionWorkspace;
     if (props?.sessionId && typeof localStorage !== 'undefined') {
-      const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
-      if (boundWs && boundWs.trim()) {
-        return boundWs.trim();
-      }
+      try {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+        if (boundWs && boundWs.trim()) {
+          return boundWs.trim();
+        }
+      } catch {}
     }
     if (props?.activeWorkspace) return props.activeWorkspace;
     if (sessionCwd) return sessionCwd;
@@ -167,7 +251,17 @@ function CodeGraphViewPanel(props: any) {
       } catch {}
     }
     return '';
-  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId, key]);
+  }, [sessionWorkspace, props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+
+  // 同步当前会话绑定的工作区状态
+  React.useEffect(() => {
+    if (props?.sessionId && typeof localStorage !== 'undefined') {
+      try {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+        setSessionWorkspace(boundWs?.trim() || '');
+      } catch {}
+    }
+  }, [props?.sessionId]);
 
   // 3. 宿主主题与 iframe 交互
   const isDark = useHostTheme();
@@ -192,8 +286,12 @@ function CodeGraphViewPanel(props: any) {
         const targetSid = e.data.sessionId || props?.sessionId;
         const targetWs = e.data.workspaceRoot;
         if (targetSid && targetWs && typeof localStorage !== 'undefined') {
-          localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
-          setKey((prev) => prev + 1);
+          try {
+            localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
+          } catch {}
+          if (targetSid === props?.sessionId) {
+            setSessionWorkspace(targetWs);
+          }
         }
       }
     };
@@ -212,11 +310,6 @@ function CodeGraphViewPanel(props: any) {
       );
     }
   };
-
-  const [key, setKey] = React.useState(0);
-  const [status, setStatus] = React.useState<'checking' | 'online' | 'offline'>('checking');
-  const [statusText, setStatusText] = React.useState('正在检测引擎状态...');
-  const [isScanning, setIsScanning] = React.useState(false);
 
   const iframeUrl = React.useMemo(() => {
     const base = 'http://127.0.0.1:3333';
@@ -867,7 +960,7 @@ function CodeGraphShellManager(props: any) {
   }, []);
 
   const overlayPanel = overlayState.isOpen
-    ? h(CodeGraphViewPanel, {
+    ? h(SafeCodeGraphPanel, {
         ...props,
         isOverlay: true,
         activeWorkspace: overlayState.workspace,
@@ -1019,7 +1112,7 @@ export function apply(ctx: any): void {
           order: 15,
           label: () => '代码图谱',
         },
-        CodeGraphViewPanel
+        SafeCodeGraphPanel
       )
     );
 
