@@ -299,7 +299,11 @@ export const App: React.FC = () => {
         )}
 
         {/* 源码预览抽屉 */}
-        <CodeDrawer node={activeCodeNode} onClose={() => setActiveCodeNode(null)} />
+        <CodeDrawer
+          node={activeCodeNode}
+          workspaceRoot={workspaceRoot}
+          onClose={() => setActiveCodeNode(null)}
+        />
 
         {/* 多端与版本范围管理抽屉 */}
         <ProjectScopeDrawer

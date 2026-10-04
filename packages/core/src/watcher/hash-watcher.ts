@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { execSync } from 'child_process';
 import fg from 'fast-glob';
+import { ExtractorRegistry } from '../parser/extractor-registry.js';
 
 export interface FileChangeSet {
   added: string[];
@@ -39,12 +40,29 @@ export class DualTrackWatcher {
   /**
    * 扫描指定范围目录下的所有代码文件并构建初始哈希基准表
    */
-  public async buildBaseline(patterns: string[] = ['**/*.py']): Promise<Map<string, string>> {
+  public async buildBaseline(patterns?: string[]): Promise<Map<string, string>> {
+    const globs = patterns && patterns.length > 0 ? patterns : ExtractorRegistry.getGlobPatterns();
     const searchRoot = path.resolve(this.workspaceRoot, this.scopePath);
-    const files = await fg(patterns, {
+    const files = await fg(globs, {
       cwd: searchRoot,
       absolute: false,
-      ignore: ['**/node_modules/**', '**/.git/**', '**/venv/**', '**/__pycache__/**', '**/dist/**', '**/build/**'],
+      caseSensitiveMatch: false,
+      ignore: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/venv/**',
+        '**/.venv/**',
+        '**/__pycache__/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/target/**',
+        '**/bin/**',
+        '**/obj/**',
+        '**/out/**',
+        '**/.vs/**',
+        '**/.idea/**',
+        '**/.vscode/**',
+      ],
     });
 
     this.hashMap.clear();
@@ -68,7 +86,8 @@ export class DualTrackWatcher {
   /**
    * 增量变更检测：优先尝试 Git 差异加速，兜底运行 Hash 对比
    */
-  public async detectChanges(patterns: string[] = ['**/*.py']): Promise<FileChangeSet> {
+  public async detectChanges(patterns?: string[]): Promise<FileChangeSet> {
+    const globs = patterns && patterns.length > 0 ? patterns : ExtractorRegistry.getGlobPatterns();
     // 1. 若当前存在 Git 仓库，优先走 Git 快速通道加速
     if (this.isGitRepo) {
       try {
@@ -83,7 +102,7 @@ export class DualTrackWatcher {
     }
 
     // 2. 通用 Hash 纯内容对比通道 (无 Git 依赖)
-    const hashChanges = await this.detectViaHash(patterns);
+    const hashChanges = await this.detectViaHash(globs);
     this.applyChangesToHashMap(hashChanges);
     return { ...hashChanges, isGitAccelerated: false };
   }
@@ -103,8 +122,8 @@ export class DualTrackWatcher {
       const status = line.substring(0, 2).trim();
       const filePath = line.substring(3).trim().replace(/\\/g, '/');
 
-      // 仅处理在 Scope 范围内的 Python 文件
-      if (!filePath.endsWith('.py')) continue;
+      // 仅处理在 Scope 范围内的多语言源码文件 (Python, C#, TS, Go, Java, Rust, C/C++)
+      if (!ExtractorRegistry.getExtractorForFile(filePath)) continue;
       if (normScope && normScope !== '.' && !filePath.startsWith(normScope)) continue;
 
       if (status === '??' || status === 'A') {
@@ -124,7 +143,23 @@ export class DualTrackWatcher {
     const currentFiles = await fg(patterns, {
       cwd: searchRoot,
       absolute: false,
-      ignore: ['**/node_modules/**', '**/.git/**', '**/venv/**', '**/__pycache__/**', '**/dist/**', '**/build/**'],
+      caseSensitiveMatch: false,
+      ignore: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/venv/**',
+        '**/.venv/**',
+        '**/__pycache__/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/target/**',
+        '**/bin/**',
+        '**/obj/**',
+        '**/out/**',
+        '**/.vs/**',
+        '**/.idea/**',
+        '**/.vscode/**',
+      ],
     });
 
     const currentMap = new Map<string, string>();

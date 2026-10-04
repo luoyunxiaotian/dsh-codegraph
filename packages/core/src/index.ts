@@ -202,6 +202,7 @@ export class CodeGraphCore {
     const sourceFiles = await fg(globPatterns, {
       cwd: searchRoot,
       absolute: false,
+      caseSensitiveMatch: false,
       ignore: [
         '**/node_modules/**',
         '**/.git/**',
@@ -213,8 +214,12 @@ export class CodeGraphCore {
         '**/target/**',
         '**/bin/**',
         '**/obj/**',
+        '**/out/**',
         '**/.next/**',
         '**/.turbo/**',
+        '**/.vs/**',
+        '**/.idea/**',
+        '**/.vscode/**',
       ],
     });
 

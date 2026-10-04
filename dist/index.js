@@ -108557,12 +108557,29 @@ var DualTrackWatcher = class _DualTrackWatcher {
   /**
    * 扫描指定范围目录下的所有代码文件并构建初始哈希基准表
    */
-  async buildBaseline(patterns = ["**/*.py"]) {
+  async buildBaseline(patterns) {
+    const globs = patterns && patterns.length > 0 ? patterns : ExtractorRegistry.getGlobPatterns();
     const searchRoot = path4.resolve(this.workspaceRoot, this.scopePath);
-    const files = await (0, import_fast_glob.default)(patterns, {
+    const files = await (0, import_fast_glob.default)(globs, {
       cwd: searchRoot,
       absolute: false,
-      ignore: ["**/node_modules/**", "**/.git/**", "**/venv/**", "**/__pycache__/**", "**/dist/**", "**/build/**"]
+      caseSensitiveMatch: false,
+      ignore: [
+        "**/node_modules/**",
+        "**/.git/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/__pycache__/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/target/**",
+        "**/bin/**",
+        "**/obj/**",
+        "**/out/**",
+        "**/.vs/**",
+        "**/.idea/**",
+        "**/.vscode/**"
+      ]
     });
     this.hashMap.clear();
     for (const relFile of files) {
@@ -108579,7 +108596,8 @@ var DualTrackWatcher = class _DualTrackWatcher {
   /**
    * 增量变更检测：优先尝试 Git 差异加速，兜底运行 Hash 对比
    */
-  async detectChanges(patterns = ["**/*.py"]) {
+  async detectChanges(patterns) {
+    const globs = patterns && patterns.length > 0 ? patterns : ExtractorRegistry.getGlobPatterns();
     if (this.isGitRepo) {
       try {
         const gitChanges = this.detectViaGit();
@@ -108590,7 +108608,7 @@ var DualTrackWatcher = class _DualTrackWatcher {
       } catch (err2) {
       }
     }
-    const hashChanges = await this.detectViaHash(patterns);
+    const hashChanges = await this.detectViaHash(globs);
     this.applyChangesToHashMap(hashChanges);
     return { ...hashChanges, isGitAccelerated: false };
   }
@@ -108605,7 +108623,7 @@ var DualTrackWatcher = class _DualTrackWatcher {
     for (const line of lines) {
       const status = line.substring(0, 2).trim();
       const filePath = line.substring(3).trim().replace(/\\/g, "/");
-      if (!filePath.endsWith(".py"))
+      if (!ExtractorRegistry.getExtractorForFile(filePath))
         continue;
       if (normScope && normScope !== "." && !filePath.startsWith(normScope))
         continue;
@@ -108624,7 +108642,23 @@ var DualTrackWatcher = class _DualTrackWatcher {
     const currentFiles = await (0, import_fast_glob.default)(patterns, {
       cwd: searchRoot,
       absolute: false,
-      ignore: ["**/node_modules/**", "**/.git/**", "**/venv/**", "**/__pycache__/**", "**/dist/**", "**/build/**"]
+      caseSensitiveMatch: false,
+      ignore: [
+        "**/node_modules/**",
+        "**/.git/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/__pycache__/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/target/**",
+        "**/bin/**",
+        "**/obj/**",
+        "**/out/**",
+        "**/.vs/**",
+        "**/.idea/**",
+        "**/.vscode/**"
+      ]
     });
     const currentMap = /* @__PURE__ */ new Map();
     for (const relFile of currentFiles) {
@@ -110423,15 +110457,73 @@ var CodeGraphServer = class {
         res.end(JSON.stringify({ error: "\u7F3A\u5C11 path \u53C2\u6570" }));
         return;
       }
-      const fullPath = path8.resolve(this.workspaceRoot, filePath);
-      if (!fs7.existsSync(fullPath)) {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "\u6587\u4EF6\u4E0D\u5B58\u5728" }));
+      if (filePath.startsWith("contracts/")) {
+        const contractType = filePath.replace("contracts/", "");
+        const content = [
+          "// =====================================================================",
+          `// \u8DE8\u8BED\u8A00\u5951\u7EA6\u865A\u62DF\u4E2D\u67A2\u5B9A\u4E49 (Virtual Contract: ${contractType})`,
+          "// =====================================================================",
+          "// \u8BE5\u8282\u70B9\u7531\u4EE3\u7801\u56FE\u8C31 AST \u5F15\u64CE\u6839\u636E\u8DE8\u8BED\u8A00\u8C03\u7528\u5173\u7CFB\u81EA\u52A8\u5408\u6210\uFF0C\u65E0\u7269\u7406\u6E90\u7801\u6587\u4EF6\u3002",
+          "// \u5B83\u5C06\u524D\u7AEF HTTP/RPC \u8BF7\u6C42\u4E0E\u540E\u7AEF\u670D\u52A1\u63A5\u53E3\u3001\u6D88\u606F\u961F\u5217\u8BA2\u9605\u5173\u7CFB\u5728\u67B6\u6784\u56FE\u4E2D\u5BF9\u9F50\u3002",
+          "// ====================================================================="
+        ].join("\n");
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ content, fullPath: filePath, isContract: true }));
         return;
       }
-      const content = fs7.readFileSync(fullPath, "utf-8");
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ content, fullPath }));
+      const wsParam = reqUrl2.searchParams.get("workspace");
+      let effectiveWorkspace = this.workspaceRoot;
+      if (wsParam && fs7.existsSync(wsParam)) {
+        effectiveWorkspace = path8.resolve(wsParam);
+        if (this.workspaceRoot !== effectiveWorkspace) {
+          this.setWorkspace(effectiveWorkspace);
+        }
+      }
+      const candidates = [];
+      if (path8.isAbsolute(filePath) || /^[a-zA-Z]:[/\\]/.test(filePath)) {
+        candidates.push(filePath);
+      }
+      candidates.push(path8.resolve(effectiveWorkspace, filePath));
+      candidates.push(path8.resolve(effectiveWorkspace, filePath.replace(/\//g, path8.sep)));
+      if (this.core.getScopePath() && this.core.getScopePath() !== ".") {
+        candidates.push(path8.resolve(effectiveWorkspace, this.core.getScopePath(), filePath));
+      }
+      const projects = this.core.getProjects();
+      for (const proj of projects) {
+        if (proj.relPath) {
+          candidates.push(path8.resolve(effectiveWorkspace, proj.relPath, filePath));
+        }
+      }
+      if (this.workspaceRoot !== effectiveWorkspace) {
+        candidates.push(path8.resolve(this.workspaceRoot, filePath));
+      }
+      let targetFile = null;
+      for (const cand of candidates) {
+        if (fs7.existsSync(cand) && fs7.statSync(cand).isFile()) {
+          targetFile = cand;
+          break;
+        }
+      }
+      if (!targetFile) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          error: `\u672C\u5730\u6587\u4EF6\u4E0D\u5B58\u5728: ${filePath}`,
+          workspace: effectiveWorkspace,
+          checkedCandidates: candidates.slice(0, 5)
+        }));
+        return;
+      }
+      try {
+        let content = fs7.readFileSync(targetFile, "utf-8");
+        if (content.charCodeAt(0) === 65279) {
+          content = content.slice(1);
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ content, fullPath: targetFile }));
+      } catch (err2) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: `\u8BFB\u53D6\u6587\u4EF6\u5931\u8D25: ${err2.message}` }));
+      }
       return;
     }
     res.writeHead(404, { "Content-Type": "application/json" });
@@ -110556,6 +110648,7 @@ var CodeGraphCore = class {
     const sourceFiles = await (0, import_fast_glob2.default)(globPatterns, {
       cwd: searchRoot,
       absolute: false,
+      caseSensitiveMatch: false,
       ignore: [
         "**/node_modules/**",
         "**/.git/**",
@@ -110567,8 +110660,12 @@ var CodeGraphCore = class {
         "**/target/**",
         "**/bin/**",
         "**/obj/**",
+        "**/out/**",
         "**/.next/**",
-        "**/.turbo/**"
+        "**/.turbo/**",
+        "**/.vs/**",
+        "**/.idea/**",
+        "**/.vscode/**"
       ]
     });
     let normalizedFiles = sourceFiles.map((f) => path9.relative(this.workspaceRoot, path9.join(searchRoot, f)).replace(/\\/g, "/"));

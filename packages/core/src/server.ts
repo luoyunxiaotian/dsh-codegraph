@@ -398,16 +398,95 @@ export class CodeGraphServer {
         return;
       }
 
-      const fullPath = path.resolve(this.workspaceRoot, filePath);
-      if (!fs.existsSync(fullPath)) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: '文件不存在' }));
+      // 1. 处理跨语言契约虚拟中枢节点 (如 contracts/rest-api, contracts/topics)
+      if (filePath.startsWith('contracts/')) {
+        const contractType = filePath.replace('contracts/', '');
+        const content = [
+          '// =====================================================================',
+          `// 跨语言契约虚拟中枢定义 (Virtual Contract: ${contractType})`,
+          '// =====================================================================',
+          '// 该节点由代码图谱 AST 引擎根据跨语言调用关系自动合成，无物理源码文件。',
+          '// 它将前端 HTTP/RPC 请求与后端服务接口、消息队列订阅关系在架构图中对齐。',
+          '// =====================================================================',
+        ].join('\n');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ content, fullPath: filePath, isContract: true }));
         return;
       }
 
-      const content = fs.readFileSync(fullPath, 'utf-8');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ content, fullPath }));
+      // 2. 动态同步工作区路径 (优先使用前端显式传入的 workspace 参数)
+      const wsParam = reqUrl.searchParams.get('workspace');
+      let effectiveWorkspace = this.workspaceRoot;
+      if (wsParam && fs.existsSync(wsParam)) {
+        effectiveWorkspace = path.resolve(wsParam);
+        if (this.workspaceRoot !== effectiveWorkspace) {
+          this.setWorkspace(effectiveWorkspace);
+        }
+      }
+
+      // 3. 多策略寻找物理文件路径 (兼容绝对路径、相对路径、Windows 反斜杠与跨子工程定位)
+      const candidates: string[] = [];
+
+      // 策略 A: 若传参本就是现有绝对路径 (如 H:\直播插件\...)
+      if (path.isAbsolute(filePath) || /^[a-zA-Z]:[/\\]/.test(filePath)) {
+        candidates.push(filePath);
+      }
+
+      // 策略 B: 相对于当前主工作区
+      candidates.push(path.resolve(effectiveWorkspace, filePath));
+      candidates.push(path.resolve(effectiveWorkspace, filePath.replace(/\//g, path.sep)));
+
+      // 策略 C: 相对于当前 scopePath
+      if (this.core.getScopePath() && this.core.getScopePath() !== '.') {
+        candidates.push(path.resolve(effectiveWorkspace, this.core.getScopePath(), filePath));
+      }
+
+      // 策略 D: 遍历探测所有已识别的子工程相对路径
+      const projects = this.core.getProjects();
+      for (const proj of projects) {
+        if (proj.relPath) {
+          candidates.push(path.resolve(effectiveWorkspace, proj.relPath, filePath));
+        }
+      }
+
+      // 策略 E: 兜底原 workspaceRoot
+      if (this.workspaceRoot !== effectiveWorkspace) {
+        candidates.push(path.resolve(this.workspaceRoot, filePath));
+      }
+
+      // 执行存在性探测
+      let targetFile: string | null = null;
+      for (const cand of candidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          targetFile = cand;
+          break;
+        }
+      }
+
+      if (!targetFile) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            error: `本地文件不存在: ${filePath}`,
+            workspace: effectiveWorkspace,
+            checkedCandidates: candidates.slice(0, 5),
+          })
+        );
+        return;
+      }
+
+      try {
+        let content = fs.readFileSync(targetFile, 'utf-8');
+        // 剥离 Windows C#/C++ 常见的 UTF-8 BOM 标记 (\uFEFF)
+        if (content.charCodeAt(0) === 0xfeff) {
+          content = content.slice(1);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ content, fullPath: targetFile }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `读取文件失败: ${err.message}` }));
+      }
       return;
     }
 
