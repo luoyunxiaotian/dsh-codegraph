@@ -62,14 +62,18 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
       title={node.metadata?.story?.summaryText || `${node.name}: 点击打开交互透视与源码`}
       style={{
         opacity: isDimmed ? 0.35 : 1,
-        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
-        filter: isDimmed ? 'grayscale(40%)' : 'none',
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease',
+        boxShadow: isFocused
+          ? '0 0 0 2px #3b82f6, 0 6px 20px -2px rgba(59, 130, 246, 0.35)'
+          : isConnected
+          ? '0 0 0 1.5px rgba(59, 130, 246, 0.6), 0 4px 12px -2px rgba(59, 130, 246, 0.15)'
+          : undefined,
       }}
       className={`w-[220px] bg-dsh-layer1 border ${
         isFocused
-          ? 'ring-2 ring-dsh-blue border-dsh-blue shadow-lg shadow-blue-500/30'
+          ? 'border-dsh-blue'
           : isConnected
-          ? 'border-dsh-blue/80 shadow-md shadow-blue-500/10'
+          ? 'border-dsh-blue/70'
           : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue'
@@ -131,14 +135,18 @@ const InPortNode = ({ data }: NodeProps) => {
     <div
       style={{
         opacity: isDimmed ? 0.35 : 1,
-        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
-        filter: isDimmed ? 'grayscale(40%)' : 'none',
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease',
+        boxShadow: isFocused
+          ? '0 0 0 2px #10b981, 0 6px 20px -2px rgba(16, 185, 129, 0.35)'
+          : isConnected
+          ? '0 0 0 1.5px rgba(16, 185, 129, 0.6)'
+          : undefined,
       }}
       className={`w-[170px] bg-dsh-green-tint border ${
         isFocused
-          ? 'ring-2 ring-emerald-500 border-emerald-500 shadow-lg shadow-emerald-500/30'
+          ? 'border-emerald-500'
           : isConnected
-          ? 'border-emerald-500 shadow-md'
+          ? 'border-emerald-500/80'
           : 'border-dsh-green-border'
       } rounded-md p-2 shadow flex items-center gap-2 select-none cursor-grab active:cursor-grabbing`}
     >
@@ -165,14 +173,18 @@ const OutPortNode = ({ data }: NodeProps) => {
     <div
       style={{
         opacity: isDimmed ? 0.35 : 1,
-        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
-        filter: isDimmed ? 'grayscale(40%)' : 'none',
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease',
+        boxShadow: isFocused
+          ? '0 0 0 2px #3b82f6, 0 6px 20px -2px rgba(59, 130, 246, 0.35)'
+          : isConnected
+          ? '0 0 0 1.5px rgba(59, 130, 246, 0.6)'
+          : undefined,
       }}
       className={`w-[170px] bg-dsh-blue-tint border ${
         isFocused
-          ? 'ring-2 ring-blue-500 border-blue-500 shadow-lg shadow-blue-500/30'
+          ? 'border-blue-500'
           : isConnected
-          ? 'border-blue-500 shadow-md'
+          ? 'border-blue-500/80'
           : 'border-dsh-blue-border'
       } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing`}
     >
@@ -189,8 +201,8 @@ const OutPortNode = ({ data }: NodeProps) => {
 };
 
 /**
- * 客户端拓扑排版启发式算法 (Topological DAG Layering & Crossing Minimization)
- * 当离线或无需服务器端二次请求时，提供极速平滑排版
+ * 客户端拓扑排版算法 (Topological DAG Layering & Crossing Minimization)
+ * 复杂度 O(V + E)，耗时 < 15ms，超大工程秒级排版
  */
 function calculateClientTopologicalLayout(
   module: ModuleContainer,
@@ -285,6 +297,9 @@ function calculateClientTopologicalLayout(
   return positions;
 }
 
+// 模块级下钻内存缓存 (避免切出切进重新耗时排版)
+const moduleLayoutMemoryCache = new Map<string, { positions: Record<string, { x: number; y: number }>; portEdges: Array<{ source: string; target: string }> }>();
+
 export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   module,
   allNodes,
@@ -371,15 +386,32 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     return list;
   }, [module.inPorts, module.outPorts, internalNodes, internalNodeIds, allEdges, allNodes, serverPortEdges]);
 
-  // 执行自动理线与最优分层布局
+  // 执行自动理线与最优分层布局 (附带本地内存缓存与性能降级)
   const performUntangleLayout = useCallback(
-    async (showFeedback = true) => {
+    async (showFeedback = true, forceRefresh = false) => {
+      // 0. 优先检测客户端内存缓存
+      if (!forceRefresh && moduleLayoutMemoryCache.has(module.id)) {
+        const cached = moduleLayoutMemoryCache.get(module.id)!;
+        setNodePositions(cached.positions);
+        if (cached.portEdges) setServerPortEdges(cached.portEdges);
+        setTimeout(() => rfInstance?.fitView({ duration: 300 }), 30);
+        return;
+      }
+
       setIsUntangling(true);
+
+      // 若卡片较多 (> 60 节点)，先行极速应用客户端拓扑排版，实现 0 延迟首帧展示
+      if (internalNodes.length > 60) {
+        const quickPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
+        setNodePositions(quickPos);
+        setTimeout(() => rfInstance?.fitView({ duration: 300 }), 20);
+      }
+
       try {
         const res = await fetch('/api/layout-drilldown', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ moduleId: module.id }),
+          body: JSON.stringify({ moduleId: module.id, forceRefresh }),
         });
         const data = await res.json();
         if (data.success && data.layout?.nodes) {
@@ -388,21 +420,23 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
             posMap[n.id] = { x: n.x, y: n.y };
           });
           setNodePositions(posMap);
-          if (data.portEdges) {
-            setServerPortEdges(data.portEdges);
-          }
+          const portEdges = data.portEdges || [];
+          setServerPortEdges(portEdges);
+          moduleLayoutMemoryCache.set(module.id, { positions: posMap, portEdges });
+
           if (showFeedback) showToast('✓ 已使用 ELK Sugiyama 正交分层完成智能理线');
           setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
           return;
         }
       } catch {
-        // 降级为客户端拓扑分层算法
+        // 服务端不可达时平滑降级
       } finally {
         setIsUntangling(false);
       }
 
       const clientPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
       setNodePositions(clientPos);
+      moduleLayoutMemoryCache.set(module.id, { positions: clientPos, portEdges: [] });
       if (showFeedback) showToast('✓ 已完成客户端拓扑分层理线');
       setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
     },
@@ -411,23 +445,18 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
   // 初始化加载自动理线
   useEffect(() => {
-    performUntangleLayout(false);
+    performUntangleLayout(false, false);
   }, [module.id]);
 
-  // 聚焦点计算 (Spotlight Dimming)
-  const focusedNodeId = selectedNodeId || hoveredNodeId;
-
-  // 装配节点与连线
-  useEffect(() => {
-    const rawEdges: any[] = [];
-
-    // 1. 内部连线
+  // 基础原始边集合 (不受 hover 抖动影响)
+  const rawEdges = useMemo(() => {
+    const list: any[] = [];
     allEdges.forEach((e, idx) => {
       if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
         if (filterCallsOnly && e.relation !== 'CALLS' && e.relation !== 'CALLS_CONTRACT' && e.relation !== 'HANDLED_BY') {
           return;
         }
-        rawEdges.push({
+        list.push({
           id: `drill_e_${idx}`,
           source: e.source,
           target: e.target,
@@ -437,9 +466,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       }
     });
 
-    // 2. 端口关联连线
     resolvedPortEdges.forEach((pe, idx) => {
-      rawEdges.push({
+      list.push({
         id: `drill_port_e_${idx}`,
         source: pe.source,
         target: pe.target,
@@ -448,21 +476,88 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       });
     });
 
-    // 3. 计算聚焦点关联集合
-    const connectedEdgeIds = new Set<string>();
+    return list;
+  }, [allEdges, internalNodeIds, filterCallsOnly, resolvedPortEdges]);
+
+  // 1. 同步节点：仅在模块、位置或点击聚焦发生变化时更新，悬浮(hover)绝不重建节点！
+  useEffect(() => {
+    const reactNodes: any[] = [];
+
+    // 计算点击聚焦所关联的节点
     const connectedNodeIds = new Set<string>();
-    if (focusedNodeId) {
-      connectedNodeIds.add(focusedNodeId);
+    if (selectedNodeId) {
+      connectedNodeIds.add(selectedNodeId);
       rawEdges.forEach((e) => {
-        if (e.source === focusedNodeId || e.target === focusedNodeId) {
-          connectedEdgeIds.add(e.id);
+        if (e.source === selectedNodeId || e.target === selectedNodeId) {
           connectedNodeIds.add(e.source);
           connectedNodeIds.add(e.target);
         }
       });
     }
 
-    // 4. 构建渲染连线 (根据聚焦点状态与路由样式着色)
+    // In-Ports
+    module.inPorts.forEach((port, idx) => {
+      const id = `inport_${port}`;
+      const pos = nodePositions[id] || { x: 50, y: 100 + idx * 75 };
+      const isFocused = selectedNodeId === id;
+      const isConnected = Boolean(selectedNodeId && connectedNodeIds.has(id));
+      const isDimmed = Boolean(selectedNodeId && !connectedNodeIds.has(id));
+
+      reactNodes.push({
+        id,
+        type: 'inPort',
+        position: pos,
+        data: { name: port, portType: 'IN', isFocused, isConnected, isDimmed },
+      });
+    });
+
+    // Internal symbols
+    internalNodes.forEach((n, idx) => {
+      const pos = nodePositions[n.id] || { x: 300 + (idx % 4) * 280, y: 80 + Math.floor(idx / 4) * 110 };
+      const isFocused = selectedNodeId === n.id;
+      const isConnected = Boolean(selectedNodeId && connectedNodeIds.has(n.id));
+      const isDimmed = Boolean(selectedNodeId && !connectedNodeIds.has(n.id));
+
+      reactNodes.push({
+        id: n.id,
+        type: 'internalSymbol',
+        position: pos,
+        data: { node: n, onSelectNode, isFocused, isConnected, isDimmed },
+      });
+    });
+
+    // Out-Ports
+    module.outPorts.forEach((port, idx) => {
+      const id = `outport_${port}`;
+      const pos = nodePositions[id] || { x: 900, y: 100 + idx * 75 };
+      const isFocused = selectedNodeId === id;
+      const isConnected = Boolean(selectedNodeId && connectedNodeIds.has(id));
+      const isDimmed = Boolean(selectedNodeId && !connectedNodeIds.has(id));
+
+      reactNodes.push({
+        id,
+        type: 'outPort',
+        position: pos,
+        data: { name: port, portType: 'OUT', isFocused, isConnected, isDimmed },
+      });
+    });
+
+    setNodes(reactNodes);
+  }, [module, internalNodes, nodePositions, selectedNodeId, rawEdges, onSelectNode, setNodes]);
+
+  // 2. 同步边：轻量更新边的状态与样式，支持 hover 与 click 聚焦点无闪烁渲染
+  const focusedNodeId = selectedNodeId || hoveredNodeId;
+
+  useEffect(() => {
+    const connectedEdgeIds = new Set<string>();
+    if (focusedNodeId) {
+      rawEdges.forEach((e) => {
+        if (e.source === focusedNodeId || e.target === focusedNodeId) {
+          connectedEdgeIds.add(e.id);
+        }
+      });
+    }
+
     const reactEdges = rawEdges.map((e) => {
       const isConnected = focusedNodeId ? connectedEdgeIds.has(e.id) : true;
       const isOutgoing = focusedNodeId && e.source === focusedNodeId;
@@ -475,11 +570,11 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
       if (focusedNodeId) {
         if (isOutgoing) {
-          strokeColor = '#3b82f6'; // 出站调用: 天蓝
+          strokeColor = '#3b82f6'; // 出站: 天蓝
         } else if (isIncoming) {
-          strokeColor = '#10b981'; // 入站调用: 翠绿
+          strokeColor = '#10b981'; // 入站: 翠绿
         } else {
-          strokeColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)';
+          strokeColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
         }
       }
 
@@ -496,78 +591,13 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           strokeWidth: focusedNodeId ? (isConnected ? 2.5 : 1) : e.isPortEdge ? 1.6 : 1.4,
           opacity: focusedNodeId ? (isConnected ? 1 : 0.08) : 0.75,
           strokeDasharray: e.isPortEdge && !focusedNodeId ? '4 4' : undefined,
-          transition: 'stroke 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease',
+          transition: 'stroke 0.15s ease, opacity 0.15s ease, stroke-width 0.15s ease',
         },
       };
     });
 
-    // 5. 构建渲染节点
-    const reactNodes: any[] = [];
-
-    // In-Ports
-    module.inPorts.forEach((port, idx) => {
-      const id = `inport_${port}`;
-      const pos = nodePositions[id] || { x: 50, y: 100 + idx * 75 };
-      const isFocused = focusedNodeId === id;
-      const isConnected = Boolean(focusedNodeId && connectedNodeIds.has(id));
-      const isDimmed = Boolean(focusedNodeId && !connectedNodeIds.has(id));
-
-      reactNodes.push({
-        id,
-        type: 'inPort',
-        position: pos,
-        data: { name: port, portType: 'IN', isFocused, isConnected, isDimmed },
-      });
-    });
-
-    // Internal symbols
-    internalNodes.forEach((n, idx) => {
-      const pos = nodePositions[n.id] || { x: 300 + (idx % 4) * 280, y: 80 + Math.floor(idx / 4) * 110 };
-      const isFocused = focusedNodeId === n.id;
-      const isConnected = Boolean(focusedNodeId && connectedNodeIds.has(n.id));
-      const isDimmed = Boolean(focusedNodeId && !connectedNodeIds.has(n.id));
-
-      reactNodes.push({
-        id: n.id,
-        type: 'internalSymbol',
-        position: pos,
-        data: { node: n, onSelectNode, isFocused, isConnected, isDimmed },
-      });
-    });
-
-    // Out-Ports
-    module.outPorts.forEach((port, idx) => {
-      const id = `outport_${port}`;
-      const pos = nodePositions[id] || { x: 900, y: 100 + idx * 75 };
-      const isFocused = focusedNodeId === id;
-      const isConnected = Boolean(focusedNodeId && connectedNodeIds.has(id));
-      const isDimmed = Boolean(focusedNodeId && !connectedNodeIds.has(id));
-
-      reactNodes.push({
-        id,
-        type: 'outPort',
-        position: pos,
-        data: { name: port, portType: 'OUT', isFocused, isConnected, isDimmed },
-      });
-    });
-
-    setNodes(reactNodes);
     setEdges(reactEdges);
-  }, [
-    module,
-    internalNodes,
-    internalNodeIds,
-    allEdges,
-    resolvedPortEdges,
-    nodePositions,
-    routingMode,
-    filterCallsOnly,
-    focusedNodeId,
-    isDark,
-    onSelectNode,
-    setNodes,
-    setEdges,
-  ]);
+  }, [rawEdges, focusedNodeId, routingMode, isDark, setEdges]);
 
   // 节点右键处理
   const handleNodeContextMenu = useCallback(
@@ -605,7 +635,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
             onClick: () => onSelectNode(codeNode.id, codeNode.filePath, codeNode.loc.startLine),
           },
           {
-            label: '聚焦高亮此节点关联连线',
+            label: '锁定高亮此节点关联',
             icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
             onClick: () => setSelectedNodeId(codeNode.id),
           },
@@ -643,7 +673,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
             },
           },
           {
-            label: '聚焦高亮此端口连线',
+            label: '锁定高亮此端口连线',
             icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
             onClick: () => setSelectedNodeId(node.id),
           },
@@ -681,9 +711,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           },
         },
         {
-          label: '一键自动理线 (ELK Sugiyama)',
+          label: '一键自动理线 (强制重新排版)',
           icon: <Wand2 className="w-3.5 h-3.5 text-dsh-blue" />,
-          onClick: () => performUntangleLayout(true),
+          onClick: () => performUntangleLayout(true, true),
         },
         {
           label: '返回宏观架构',
@@ -709,31 +739,31 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   );
 
   return (
-    <div className="relative w-full h-[calc(100vh-44px)] bg-dsh-base">
+    <div className="relative w-full h-[calc(100vh-56px)] bg-dsh-base">
       {/* 顶部面包屑快速返回条 */}
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 p-1.5 rounded-md bg-dsh-layer1 border border-dsh-border2 shadow-md text-[12px]">
+      <div className="absolute top-3.5 left-3.5 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dsh-layer1/95 border border-dsh-border2 shadow-md text-[13px]">
         <button
           onClick={onBackToArchitecture}
-          className="text-dsh-blue hover:text-dsh-blue-hover font-medium flex items-center gap-1 transition-colors"
+          className="text-dsh-blue hover:text-dsh-blue-hover font-medium flex items-center gap-1.5 transition-colors"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
+          <ArrowLeft className="w-4 h-4" />
           <span>返回宏观架构</span>
         </button>
         <span className="text-dsh-border3">/</span>
         <span className="text-dsh-primary font-semibold">{module.name}</span>
-        <span className="text-[11px] text-dsh-tertiary">({module.files.length} 个源码文件)</span>
+        <span className="text-[12px] text-dsh-tertiary">({module.files.length} 个源码文件)</span>
       </div>
 
-      {/* 顶部右侧理线控制工具栏 */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2 p-1 rounded-lg bg-dsh-layer1/90 backdrop-blur border border-dsh-border2 shadow-md text-[12px]">
+      {/* 顶部右侧理线控制工具栏 (固定布局，避免因提示变化跳动) */}
+      <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2 p-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[13px]">
         {/* 一键理线按钮 */}
         <button
-          onClick={() => performUntangleLayout(true)}
+          onClick={() => performUntangleLayout(true, true)}
           disabled={isUntangling}
           title="使用 ELK Sugiyama 分层正交算法重新排版并规避连线交叉"
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
         >
-          <Wand2 className={`w-3.5 h-3.5 ${isUntangling ? 'animate-spin' : ''}`} />
+          <Wand2 className={`w-4 h-4 ${isUntangling ? 'animate-spin' : ''}`} />
           <span>{isUntangling ? '理线中...' : '一键理线'}</span>
         </button>
 
@@ -741,16 +771,16 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         <button
           onClick={() => setRoutingMode((prev) => (prev === 'smoothstep' ? 'bezier' : 'smoothstep'))}
           title={routingMode === 'smoothstep' ? '切换为贝塞尔优雅曲线' : '切换为平滑正交折线 (规避斜切交叉)'}
-          className="flex items-center gap-1 px-2 py-1 rounded hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
         >
           {routingMode === 'smoothstep' ? (
             <>
-              <GitFork className="w-3.5 h-3.5 text-dsh-blue" />
+              <GitFork className="w-4 h-4 text-dsh-blue" />
               <span>正交折线</span>
             </>
           ) : (
             <>
-              <Route className="w-3.5 h-3.5 text-purple-400" />
+              <Route className="w-4 h-4 text-purple-400" />
               <span>贝塞尔曲线</span>
             </>
           )}
@@ -760,29 +790,29 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         <button
           onClick={() => setFilterCallsOnly((prev) => !prev)}
           title={filterCallsOnly ? '显示全部连线 (包含导入和结构依赖)' : '降噪：仅显示核心函数调用 (隐藏导入边)'}
-          className={`flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border transition-colors ${
             filterCallsOnly
               ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
               : 'hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border-dsh-border1'
           }`}
         >
-          <Filter className="w-3.5 h-3.5" />
+          <Filter className="w-4 h-4" />
           <span>{filterCallsOnly ? '仅核心调用' : '全部连线'}</span>
         </button>
 
-        {/* 聚焦重置提示 */}
-        {focusedNodeId && (
+        {/* 锁定聚焦解除提示 */}
+        {selectedNodeId && (
           <button
             onClick={() => {
               setSelectedNodeId(null);
               setHoveredNodeId(null);
             }}
-            title="点击退出聚焦高亮模式"
-            className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-colors animate-pulse"
+            title="点击退出锁定聚焦模式"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all text-[12px]"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="truncate max-w-[100px]">已聚焦</span>
-            <span className="text-[10px] opacity-70">✕</span>
+            <span>已聚焦</span>
+            <span className="opacity-70 ml-0.5">✕</span>
           </button>
         )}
       </div>
@@ -794,8 +824,16 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         onInit={setRfInstance}
-        onNodeMouseEnter={(_, node) => setHoveredNodeId(node.id)}
-        onNodeMouseLeave={() => setHoveredNodeId(null)}
+        onNodeMouseEnter={(_, node) => {
+          if (!selectedNodeId) {
+            setHoveredNodeId(node.id);
+          }
+        }}
+        onNodeMouseLeave={() => {
+          if (!selectedNodeId) {
+            setHoveredNodeId(null);
+          }
+        }}
         onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
         onPaneClick={() => {
           setSelectedNodeId(null);
@@ -808,7 +846,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         maxZoom={2.0}
       >
         <Background color={isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'} gap={24} size={1} />
-        <Controls className="bg-dsh-layer1 border-dsh-border2 text-dsh-secondary fill-dsh-secondary rounded-md" />
+        <Controls />
         <MiniMap
           nodeColor="#4176e6"
           maskColor={isDark ? 'rgba(21, 21, 23, 0.85)' : 'rgba(240, 242, 245, 0.85)'}

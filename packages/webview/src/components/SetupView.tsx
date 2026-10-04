@@ -51,7 +51,18 @@ export const SetupView: React.FC<SetupViewProps> = ({
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
 
   useEffect(() => {
-    setCurrentWsRoot(workspaceRoot);
+    let effectiveWs = workspaceRoot;
+    if ((!effectiveWs || effectiveWs === '当前工作区') && typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const sid = searchParams.get('sessionId');
+      if (sid && typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem(`dsh_cg_ws_${sid}`);
+        if (saved && saved.trim()) {
+          effectiveWs = saved.trim();
+        }
+      }
+    }
+    setCurrentWsRoot(effectiveWs);
   }, [workspaceRoot]);
 
   // 当工作区路径变更时，自动发起快速工程画像嗅探

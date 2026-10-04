@@ -90,6 +90,12 @@ function CodeGraphViewPanel(props) {
   const sessionCwd = typeof props?.useSessions === "function" && props?.sessionId ? props.useSessions((s) => s?.byId?.[props?.sessionId]?.cwd) : void 0;
   const workspaces = typeof props?.useWorkspaces === "function" ? props.useWorkspaces((s) => s?.items) : void 0;
   const activeWorkspace = import_react.default.useMemo(() => {
+    if (props?.sessionId && typeof localStorage !== "undefined") {
+      const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+      if (boundWs && boundWs.trim()) {
+        return boundWs.trim();
+      }
+    }
     if (props?.activeWorkspace) return props.activeWorkspace;
     if (sessionCwd) return sessionCwd;
     if (Array.isArray(workspaces) && workspaces.length > 0) {
@@ -114,7 +120,7 @@ function CodeGraphViewPanel(props) {
       }
     }
     return "";
-  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId, key]);
   const isDark = useHostTheme();
   const iframeRef = import_react.default.useRef(null);
   import_react.default.useEffect(() => {
@@ -128,6 +134,20 @@ function CodeGraphViewPanel(props) {
       );
     }
   }, [isDark]);
+  import_react.default.useEffect(() => {
+    const handleMsg = (e) => {
+      if (e.data?.type === "codegraph:set-session-workspace" && e.data?.workspaceRoot) {
+        const targetSid = e.data.sessionId || props?.sessionId;
+        const targetWs = e.data.workspaceRoot;
+        if (targetSid && targetWs && typeof localStorage !== "undefined") {
+          localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
+          setKey((prev) => prev + 1);
+        }
+      }
+    };
+    window.addEventListener("message", handleMsg);
+    return () => window.removeEventListener("message", handleMsg);
+  }, [props?.sessionId]);
   const handleIframeLoad = () => {
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
@@ -149,9 +169,12 @@ function CodeGraphViewPanel(props) {
     if (activeWorkspace) {
       params.set("workspace", activeWorkspace);
     }
+    if (props?.sessionId) {
+      params.set("sessionId", props.sessionId);
+    }
     params.set("theme", isDark ? "dark" : "light");
     return `${base}/?${params.toString()}`;
-  }, [activeWorkspace, key, isDark]);
+  }, [activeWorkspace, props?.sessionId, key, isDark]);
   const checkStatus = import_react.default.useCallback(async () => {
     setStatus("checking");
     try {

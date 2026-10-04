@@ -110475,6 +110475,9 @@ var ElkLayoutEngine = class {
       sources: [c.source],
       targets: [c.target]
     }));
+    const totalNodes = children.length;
+    const crossingStrategy = totalNodes > 50 ? "MEDIAN" : "LAYER_SWEEP";
+    const maxIterations = totalNodes > 50 ? "2" : "4";
     const rootGraph = {
       id: "module_detail_root",
       layoutOptions: {
@@ -110482,8 +110485,10 @@ var ElkLayoutEngine = class {
         "elk.direction": "RIGHT",
         "elk.spacing.nodeNode": "40",
         "elk.layered.spacing.nodeNodeBetweenLayers": "90",
-        "elk.edgeRouting": "ORTHOGONAL",
-        "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+        "elk.edgeRouting": "NONE",
+        // 连线由前端 React Flow smoothstep 原生绘制，无需在服务端浪费大量 CPU 遍历正交网格
+        "elk.layered.crossingMinimization.strategy": crossingStrategy,
+        "elk.layered.crossingMinimization.greedySwitchCrossingMinimization.maxIterations": maxIterations,
         "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
         "elk.layered.cycleBreaking.strategy": "DEPTH_FIRST"
       },
@@ -110525,6 +110530,7 @@ var CodeGraphServer = class {
   workspaceRoot;
   staticDir;
   isScanning = false;
+  drilldownCache = /* @__PURE__ */ new Map();
   constructor(options) {
     this.port = options.port || 3333;
     this.workspaceRoot = path8.resolve(options.workspaceRoot);
@@ -110580,9 +110586,11 @@ var CodeGraphServer = class {
     const resolved = path8.resolve(workspaceRoot);
     if (this.workspaceRoot !== resolved) {
       this.workspaceRoot = resolved;
+      this.drilldownCache.clear();
       this.core.setWorkspaceRoot(this.workspaceRoot, scopePath || ".");
       console.log(`[CodeGraph] \u5DE5\u4F5C\u533A\u5DF2\u52A8\u6001\u5207\u6362\u81F3: ${this.workspaceRoot}`);
     } else if (scopePath) {
+      this.drilldownCache.clear();
       this.core.setScopePath(scopePath);
     }
   }
@@ -110723,6 +110731,17 @@ var CodeGraphServer = class {
         res.end(JSON.stringify({ error: "\u7F3A\u5C11 moduleId \u53C2\u6570" }));
         return;
       }
+      if (!body2?.forceRefresh && this.drilldownCache.has(moduleId)) {
+        const cached = this.drilldownCache.get(moduleId);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          success: true,
+          layout: cached.layout,
+          portEdges: cached.portEdges,
+          fromCache: true
+        }));
+        return;
+      }
       let last = this.core.getLastResult();
       if (!last) {
         const cached = this.core.loadFromCache();
@@ -110778,6 +110797,7 @@ var CodeGraphServer = class {
         outPorts: targetModule.outPorts,
         portEdges
       });
+      this.drilldownCache.set(moduleId, { layout, portEdges });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         success: true,
@@ -110887,6 +110907,7 @@ var CodeGraphServer = class {
         });
         const archLayout = await ElkLayoutEngine.layoutArchitecture(graphResult.architectureView.modules, graphResult.architectureView.buses);
         this.core.saveToCache({ architecture: archLayout });
+        this.drilldownCache.clear();
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           success: true,
@@ -110904,6 +110925,7 @@ var CodeGraphServer = class {
       const updated = await this.core.updateIncremental();
       const archLayout = await ElkLayoutEngine.layoutArchitecture(updated.architectureView.modules, updated.architectureView.buses);
       this.core.saveToCache({ architecture: archLayout });
+      this.drilldownCache.clear();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         success: true,

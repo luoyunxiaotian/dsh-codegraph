@@ -140,3 +140,56 @@ body {
   stroke-dasharray: 4 4;
   animation: dshFlowDash 1.2s linear infinite;
 }
+
+/* React Flow 控制面板 (放大/缩小/自适应/锁定) 高对比度重绘 */
+.react-flow__controls {
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--dsw-alias-border-l3) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background-color: var(--dsw-alias-bg-layer-1) !important;
+  border: 1px solid var(--dsw-alias-border-l3) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.react-flow__controls-button {
+  background-color: var(--dsw-alias-bg-layer-1) !important;
+  border-bottom: 1px solid var(--dsw-alias-border-l2) !important;
+  width: 34px !important;
+  height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  color: var(--dsw-alias-label-primary) !important;
+  box-sizing: border-box !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--dsw-alias-bg-layer-2) !important;
+  color: #4176e6 !important;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor !important;
+  width: 15px !important;
+  height: 15px !important;
+  max-width: 15px !important;
+  max-height: 15px !important;
+}
+
+/* 零位移卡片聚焦阴影 (避免触发布局位移与鼠标移出闪烁) */
+.card-spotlight-focus {
+  box-shadow: 0 0 0 2px #3b82f6, 0 6px 20px -2px rgba(59, 130, 246, 0.35) !important;
+  border-color: #3b82f6 !important;
+}
+
+.card-spotlight-connected {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.6), 0 4px 12px -2px rgba(59, 130, 246, 0.15) !important;
+  border-color: rgba(59, 130, 246, 0.7) !important;
+}
+

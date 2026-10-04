@@ -133,8 +133,14 @@ function CodeGraphViewPanel(props: any) {
     ? props.useWorkspaces((s: any) => s?.items)
     : undefined;
 
-  // 2. 动态感知工作区根目录
+  // 2. 动态感知工作区根目录 (优先支持会话专属自定义路径持久化记忆)
   const activeWorkspace = React.useMemo(() => {
+    if (props?.sessionId && typeof localStorage !== 'undefined') {
+      const boundWs = localStorage.getItem(`dsh_cg_ws_${props.sessionId}`);
+      if (boundWs && boundWs.trim()) {
+        return boundWs.trim();
+      }
+    }
     if (props?.activeWorkspace) return props.activeWorkspace;
     if (sessionCwd) return sessionCwd;
     if (Array.isArray(workspaces) && workspaces.length > 0) {
@@ -161,7 +167,7 @@ function CodeGraphViewPanel(props: any) {
       } catch {}
     }
     return '';
-  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+  }, [props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId, key]);
 
   // 3. 宿主主题与 iframe 交互
   const isDark = useHostTheme();
@@ -178,6 +184,22 @@ function CodeGraphViewPanel(props: any) {
       );
     }
   }, [isDark]);
+
+  // 监听来自 Webview 的会话工作区变更通知
+  React.useEffect(() => {
+    const handleMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'codegraph:set-session-workspace' && e.data?.workspaceRoot) {
+        const targetSid = e.data.sessionId || props?.sessionId;
+        const targetWs = e.data.workspaceRoot;
+        if (targetSid && targetWs && typeof localStorage !== 'undefined') {
+          localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
+          setKey((prev) => prev + 1);
+        }
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => window.removeEventListener('message', handleMsg);
+  }, [props?.sessionId]);
 
   const handleIframeLoad = () => {
     if (iframeRef.current?.contentWindow) {
@@ -202,9 +224,12 @@ function CodeGraphViewPanel(props: any) {
     if (activeWorkspace) {
       params.set('workspace', activeWorkspace);
     }
+    if (props?.sessionId) {
+      params.set('sessionId', props.sessionId);
+    }
     params.set('theme', isDark ? 'dark' : 'light');
     return `${base}/?${params.toString()}`;
-  }, [activeWorkspace, key, isDark]);
+  }, [activeWorkspace, props?.sessionId, key, isDark]);
 
   // 4. 状态检测与向 CodeGraph 后台同步当前工作区
   const checkStatus = React.useCallback(async () => {

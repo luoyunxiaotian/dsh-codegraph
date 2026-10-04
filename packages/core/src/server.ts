@@ -19,6 +19,7 @@ export class CodeGraphServer {
   private workspaceRoot: string;
   private staticDir?: string;
   private isScanning: boolean = false;
+  private drilldownCache: Map<string, any> = new Map();
 
   constructor(options: ServerOptions) {
     this.port = options.port || 3333;
@@ -81,9 +82,11 @@ export class CodeGraphServer {
     const resolved = path.resolve(workspaceRoot);
     if (this.workspaceRoot !== resolved) {
       this.workspaceRoot = resolved;
+      this.drilldownCache.clear();
       this.core.setWorkspaceRoot(this.workspaceRoot, scopePath || '.');
       console.log(`[CodeGraph] 工作区已动态切换至: ${this.workspaceRoot}`);
     } else if (scopePath) {
+      this.drilldownCache.clear();
       this.core.setScopePath(scopePath);
     }
   }
@@ -254,6 +257,21 @@ export class CodeGraphServer {
         return;
       }
 
+      // 快速缓存命中检测 (0ms 返回，避免重复耗时排版)
+      if (!body?.forceRefresh && this.drilldownCache.has(moduleId)) {
+        const cached = this.drilldownCache.get(moduleId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            success: true,
+            layout: cached.layout,
+            portEdges: cached.portEdges,
+            fromCache: true,
+          })
+        );
+        return;
+      }
+
       let last = this.core.getLastResult();
       if (!last) {
         const cached = this.core.loadFromCache();
@@ -333,6 +351,9 @@ export class CodeGraphServer {
           portEdges,
         }
       );
+
+      // 写入内存缓存
+      this.drilldownCache.set(moduleId, { layout, portEdges });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
@@ -471,6 +492,7 @@ export class CodeGraphServer {
 
         // 自动持久化保存至 .codegraph/graph-cache.json
         this.core.saveToCache({ architecture: archLayout });
+        this.drilldownCache.clear();
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
@@ -497,6 +519,7 @@ export class CodeGraphServer {
 
       // 自动持久化保存更新后的图谱和布局
       this.core.saveToCache({ architecture: archLayout });
+      this.drilldownCache.clear();
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(

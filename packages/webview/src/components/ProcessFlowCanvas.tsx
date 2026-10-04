@@ -313,15 +313,15 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
   }
 
   return (
-    <div className="relative w-full h-[calc(100vh-44px)] bg-dsh-base">
+    <div className="relative w-full h-[calc(100vh-56px)] bg-dsh-base">
       {/* 顶部流程选择栏 */}
-      <div className="absolute top-3 left-3 z-10 flex items-center gap-2 p-1.5 rounded-md bg-dsh-layer1 border border-dsh-border2 shadow-md">
-        <GitBranch className="w-3.5 h-3.5 text-dsh-blue ml-1" />
-        <span className="text-[12px] text-dsh-secondary font-medium">业务流程:</span>
+      <div className="absolute top-3.5 left-3.5 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dsh-layer1 border border-dsh-border2 shadow-md">
+        <GitBranch className="w-4 h-4 text-dsh-blue ml-0.5" />
+        <span className="text-[13px] text-dsh-secondary font-medium">业务流程:</span>
         <select
           value={selectedFlowIndex}
           onChange={(e) => setSelectedFlowIndex(Number(e.target.value))}
-          className="bg-dsh-platform border border-dsh-border2 rounded px-2 py-0.5 text-[12px] text-dsh-primary focus:outline-none cursor-pointer"
+          className="bg-dsh-platform border border-dsh-border2 rounded px-2.5 py-1 text-[13px] text-dsh-primary focus:outline-none cursor-pointer"
         >
           {flows.map((f, i) => (
             <option key={f.flowId} value={i} className="bg-dsh-layer1 text-dsh-primary">
@@ -346,7 +346,7 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
         maxZoom={2.0}
       >
         <Background color={isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'} gap={24} size={1} />
-        <Controls className="bg-dsh-layer1 border-dsh-border2 text-dsh-secondary fill-dsh-secondary rounded-md" />
+        <Controls />
         <MiniMap
           nodeColor="#4176e6"
           maskColor={isDark ? 'rgba(21, 21, 23, 0.85)' : 'rgba(240, 242, 245, 0.85)'}

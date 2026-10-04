@@ -77,18 +77,22 @@ const ModuleCardNode = ({ data }: NodeProps) => {
       onDoubleClick={() => onDrillDown(mod.id)}
       style={{
         opacity: isDimmed ? 0.35 : 1,
-        transition: 'opacity 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
-        filter: isDimmed ? 'grayscale(40%)' : 'none',
+        transition: 'opacity 0.2s ease, box-shadow 0.2s ease',
+        boxShadow: isFocused
+          ? '0 0 0 2px #3b82f6, 0 8px 24px -2px rgba(59, 130, 246, 0.35)'
+          : isConnected
+          ? '0 0 0 1.5px rgba(59, 130, 246, 0.6), 0 4px 14px -2px rgba(59, 130, 246, 0.15)'
+          : undefined,
       }}
       className={`w-[270px] bg-dsh-layer1 border ${
         isFocused
-          ? 'ring-2 ring-dsh-blue border-dsh-blue shadow-xl shadow-blue-500/30'
+          ? 'border-dsh-blue'
           : isConnected
-          ? 'border-dsh-blue/80 shadow-md shadow-blue-500/15'
+          ? 'border-dsh-blue/80'
           : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue/80'
-      } active:border-dsh-blue rounded-md shadow-lg p-3.5 transition-all hover:shadow-black/40 cursor-grab active:cursor-grabbing group select-none`}
+      } rounded-md shadow-lg p-3.5 transition-all cursor-grab active:cursor-grabbing group select-none`}
     >
       {/* 桩点 */}
       <Handle type="target" position={Position.Left} className="opacity-0" />
@@ -131,7 +135,7 @@ const ModuleCardNode = ({ data }: NodeProps) => {
       {/* 模块交互职责人话简述 */}
       {(mod as any).story?.purposeDescription && (
         <div
-          className="text-[10px] text-dsh-secondary bg-dsh-base/60 p-1.5 rounded border border-dsh-border1/60 mb-2 leading-relaxed"
+          className="text-[11px] text-dsh-secondary bg-dsh-base/60 p-2 rounded border border-dsh-border1/60 mb-2.5 leading-relaxed"
           title={(mod as any).story.purposeDescription}
         >
           {(mod as any).story.purposeDescription}
@@ -142,7 +146,7 @@ const ModuleCardNode = ({ data }: NodeProps) => {
       <div className="space-y-1 mb-2.5">
         {mod.files.slice(0, 3).map((f, i) => (
           <div key={i} className="flex items-center gap-1.5 text-[11px] text-dsh-tertiary truncate">
-            <FileCode className="w-3 h-3 text-dsh-dimmed shrink-0" />
+            <FileCode className="w-3.5 h-3.5 text-dsh-dimmed shrink-0" />
             <span className="truncate font-mono">{f.split(/[/\\]/).pop()}</span>
           </div>
         ))}
@@ -156,12 +160,12 @@ const ModuleCardNode = ({ data }: NodeProps) => {
       {/* 端口与交互总线摘要 */}
       <div className="pt-2 border-t border-dsh-border1 flex items-center justify-between text-[11px]">
         <span className="flex items-center gap-1 text-dsh-green" title={mod.inPorts.join(', ')}>
-          <ArrowLeftCircle className="w-3 h-3" />
+          <ArrowLeftCircle className="w-3.5 h-3.5" />
           <span>{mod.inPorts.length} In-Ports</span>
         </span>
         <span className="flex items-center gap-1 text-dsh-blue" title={mod.outPorts.join(', ')}>
           <span>{mod.outPorts.length} Out-Ports</span>
-          <ArrowRightCircle className="w-3 h-3" />
+          <ArrowRightCircle className="w-3.5 h-3.5" />
         </span>
       </div>
 
@@ -175,7 +179,7 @@ const ModuleCardNode = ({ data }: NodeProps) => {
   );
 };
 
-// DeepSeek Harness 风格总线边 (支持平滑正交与聚焦点高亮)
+// DeepSeek Harness 风格总线边
 const BusEdge = ({
   id,
   sourceX,
@@ -265,16 +269,13 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     items: ContextMenuItem[];
   } | null>(null);
 
-  // 初始化或当布局/模块更新时同步节点位置与聚焦点样式
+  // 1. 同步节点：仅在模块、布局或点击选中变更时更新，悬浮(hover)绝不重建节点！
   useEffect(() => {
-    // 计算聚焦点相连的边与模块
-    const connectedBusIds = new Set<string>();
     const connectedModIds = new Set<string>();
-    if (focusedModuleId) {
-      connectedModIds.add(focusedModuleId);
+    if (selectedModuleId) {
+      connectedModIds.add(selectedModuleId);
       buses.forEach((b) => {
-        if (b.sourceModule === focusedModuleId || b.targetModule === focusedModuleId) {
-          connectedBusIds.add(b.id);
+        if (b.sourceModule === selectedModuleId || b.targetModule === selectedModuleId) {
           connectedModIds.add(b.sourceModule);
           connectedModIds.add(b.targetModule);
         }
@@ -283,9 +284,9 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
 
     const computedNodes = modules.map((m) => {
       const layoutPos = currentLayout?.nodes.find((n) => n.id === m.id);
-      const isFocused = focusedModuleId === m.id;
-      const isConnected = Boolean(focusedModuleId && connectedModIds.has(m.id));
-      const isDimmed = Boolean(focusedModuleId && !connectedModIds.has(m.id));
+      const isFocused = selectedModuleId === m.id;
+      const isConnected = Boolean(selectedModuleId && connectedModIds.has(m.id));
+      const isDimmed = Boolean(selectedModuleId && !connectedModIds.has(m.id));
 
       return {
         id: m.id,
@@ -303,6 +304,20 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         },
       };
     });
+
+    setNodes(computedNodes);
+  }, [modules, currentLayout, selectedModuleId, buses, onDrillDown, setNodes]);
+
+  // 2. 同步边：轻量更新边的状态与样式，支持 hover/click 聚焦点无闪烁渲染
+  useEffect(() => {
+    const connectedBusIds = new Set<string>();
+    if (focusedModuleId) {
+      buses.forEach((b) => {
+        if (b.sourceModule === focusedModuleId || b.targetModule === focusedModuleId) {
+          connectedBusIds.add(b.id);
+        }
+      });
+    }
 
     const computedEdges = buses.map((b) => {
       const isConnected = focusedModuleId ? connectedBusIds.has(b.id) : true;
@@ -332,7 +347,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           stroke: strokeColor,
           strokeWidth: focusedModuleId ? (isConnected ? 3 : 1) : 2,
           opacity: focusedModuleId ? (isConnected ? 1 : 0.08) : 0.85,
-          transition: 'stroke 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease',
+          transition: 'stroke 0.15s ease, opacity 0.15s ease, stroke-width 0.15s ease',
         },
         data: {
           callCount: b.callCount,
@@ -344,9 +359,8 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
       };
     });
 
-    setNodes(computedNodes);
     setEdges(computedEdges);
-  }, [modules, buses, currentLayout, focusedModuleId, routingMode, isDark, onDrillDown, setNodes, setEdges]);
+  }, [buses, focusedModuleId, routingMode, isDark, setEdges]);
 
   // 重置 / 一键排版为算法分层布局
   const handleResetLayout = useCallback(async () => {
@@ -415,7 +429,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           onClick: () => onDrillDown(mod.id),
         },
         {
-          label: '聚焦高亮该模块及总线',
+          label: '锁定高亮该模块及总线',
           icon: <Sparkles className="w-3.5 h-3.5 text-amber-400" />,
           onClick: () => setSelectedModuleId(mod.id),
         },
@@ -481,17 +495,17 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
   );
 
   return (
-    <div className="w-full h-[calc(100vh-44px)] bg-dsh-base relative">
-      {/* 顶部右侧理线与连线控制工具栏 */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2 p-1 rounded-lg bg-dsh-layer1/90 backdrop-blur border border-dsh-border2 shadow-md text-[12px]">
+    <div className="w-full h-[calc(100vh-56px)] bg-dsh-base relative">
+      {/* 顶部右侧理线与连线控制工具栏 (固定布局，避免因提示变化跳动) */}
+      <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2 p-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[13px]">
         {/* 一键理线按钮 */}
         <button
           onClick={handleResetLayout}
           disabled={isUntangling}
           title="使用 ELK Sugiyama 正交分层算法重新排列模块并最小化总线交叉"
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
         >
-          <Wand2 className={`w-3.5 h-3.5 ${isUntangling ? 'animate-spin' : ''}`} />
+          <Wand2 className={`w-4 h-4 ${isUntangling ? 'animate-spin' : ''}`} />
           <span>{isUntangling ? '理线中...' : '一键理线'}</span>
         </button>
 
@@ -499,34 +513,34 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         <button
           onClick={() => setRoutingMode((prev) => (prev === 'smoothstep' ? 'bezier' : 'smoothstep'))}
           title={routingMode === 'smoothstep' ? '切换为贝塞尔优雅曲线' : '切换为平滑正交折线 (规避斜切交叉)'}
-          className="flex items-center gap-1 px-2 py-1 rounded hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
         >
           {routingMode === 'smoothstep' ? (
             <>
-              <GitFork className="w-3.5 h-3.5 text-dsh-blue" />
+              <GitFork className="w-4 h-4 text-dsh-blue" />
               <span>正交折线</span>
             </>
           ) : (
             <>
-              <Route className="w-3.5 h-3.5 text-purple-400" />
+              <Route className="w-4 h-4 text-purple-400" />
               <span>贝塞尔曲线</span>
             </>
           )}
         </button>
 
-        {/* 聚焦重置提示 */}
-        {focusedModuleId && (
+        {/* 锁定聚焦解除提示 */}
+        {selectedModuleId && (
           <button
             onClick={() => {
               setSelectedModuleId(null);
               setHoveredModuleId(null);
             }}
-            title="点击退出聚焦高亮模式"
-            className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-colors animate-pulse"
+            title="点击退出锁定聚焦模式"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all text-[12px]"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="truncate max-w-[100px]">已聚焦</span>
-            <span className="text-[10px] opacity-70">✕</span>
+            <span>已聚焦</span>
+            <span className="opacity-70 ml-0.5">✕</span>
           </button>
         )}
       </div>
@@ -539,8 +553,16 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={setRfInstance}
-        onNodeMouseEnter={(_, node) => setHoveredModuleId(node.id)}
-        onNodeMouseLeave={() => setHoveredModuleId(null)}
+        onNodeMouseEnter={(_, node) => {
+          if (!selectedModuleId) {
+            setHoveredModuleId(node.id);
+          }
+        }}
+        onNodeMouseLeave={() => {
+          if (!selectedModuleId) {
+            setHoveredModuleId(null);
+          }
+        }}
         onNodeClick={(_, node) => setSelectedModuleId((prev) => (prev === node.id ? null : node.id))}
         onPaneClick={() => {
           setSelectedModuleId(null);
@@ -553,7 +575,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         maxZoom={2.5}
       >
         <Background color={isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'} gap={24} size={1} />
-        <Controls className="bg-dsh-layer1 border-dsh-border2 text-dsh-secondary fill-dsh-secondary rounded-md" />
+        <Controls />
         <MiniMap
           nodeColor="#4176e6"
           maskColor={isDark ? 'rgba(21, 21, 23, 0.85)' : 'rgba(240, 242, 245, 0.85)'}

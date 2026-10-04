@@ -211,6 +211,11 @@ export class ElkLayoutEngine {
       targets: [c.target],
     }));
 
+    const totalNodes = children.length;
+    // 自适应分级：小型模块精细扫层，中大型模块采用启发式极速排序，大幅缩短布局延迟
+    const crossingStrategy = totalNodes > 50 ? 'MEDIAN' : 'LAYER_SWEEP';
+    const maxIterations = totalNodes > 50 ? '2' : '4';
+
     const rootGraph: ElkNode = {
       id: 'module_detail_root',
       layoutOptions: {
@@ -218,8 +223,9 @@ export class ElkLayoutEngine {
         'elk.direction': 'RIGHT',
         'elk.spacing.nodeNode': '40',
         'elk.layered.spacing.nodeNodeBetweenLayers': '90',
-        'elk.edgeRouting': 'ORTHOGONAL',
-        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.edgeRouting': 'NONE', // 连线由前端 React Flow smoothstep 原生绘制，无需在服务端浪费大量 CPU 遍历正交网格
+        'elk.layered.crossingMinimization.strategy': crossingStrategy,
+        'elk.layered.crossingMinimization.greedySwitchCrossingMinimization.maxIterations': maxIterations,
         'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
         'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
       },

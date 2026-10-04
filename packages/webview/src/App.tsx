@@ -35,14 +35,23 @@ export const App: React.FC = () => {
   const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
   const [isScopeDrawerOpen, setIsScopeDrawerOpen] = useState<boolean>(false);
 
-  // 初始化检查后端状态与 URL 参数
+  // 初始化检查后端状态与 URL 参数 (优先关联当前会话专属路径)
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const queryWs = searchParams.get('workspace');
     const queryScope = searchParams.get('scope');
+    const sessionId = searchParams.get('sessionId') || '';
 
     const init = async () => {
+      // 1. 优先读取当前会话绑定的自定义工作区
       let targetWs = queryWs;
+      if (sessionId && typeof localStorage !== 'undefined') {
+        const boundWs = localStorage.getItem(`dsh_cg_ws_${sessionId}`);
+        if (boundWs && boundWs.trim()) {
+          targetWs = boundWs.trim();
+        }
+      }
+
       if (targetWs) {
         setWorkspaceRoot(targetWs);
         try {
@@ -116,6 +125,9 @@ export const App: React.FC = () => {
     setIsLoading(true);
     const targetWs = customWs || workspaceRoot;
     const targetScope = customScope || scopePath;
+    const searchParams = new URLSearchParams(window.location.search);
+    const sessionId = searchParams.get('sessionId') || '';
+
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
@@ -138,7 +150,23 @@ export const App: React.FC = () => {
         setIsInitialized(true);
         setCacheTime('已同步保存');
         if (customScope) setScopePath(customScope);
-        if (customWs) setWorkspaceRoot(customWs);
+        if (targetWs) {
+          setWorkspaceRoot(targetWs);
+          // 与当前会话强绑定持久化，并通知宿主同步保存
+          if (sessionId && typeof localStorage !== 'undefined') {
+            localStorage.setItem(`dsh_cg_ws_${sessionId}`, targetWs);
+          }
+          if (typeof window !== 'undefined' && window.parent) {
+            window.parent.postMessage(
+              {
+                type: 'codegraph:set-session-workspace',
+                sessionId,
+                workspaceRoot: targetWs,
+              },
+              '*'
+            );
+          }
+        }
       } else {
         const errorMsg = data.error || '扫描返回异常';
         showToast(`❌ ${errorMsg}`);
