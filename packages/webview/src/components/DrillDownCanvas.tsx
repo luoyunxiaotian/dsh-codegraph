@@ -90,8 +90,18 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
         className="absolute top-0 left-0 right-0 h-[3.5px]"
         style={{ backgroundColor: accentColor }}
       />
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
+      {/* 5 档动态引脚插槽：按上下游位置物理分散连线，杜绝端子点单点重叠打结 */}
+      <Handle type="target" position={Position.Left} id="target-2" style={{ top: '50%', opacity: 0 }} />
+      <Handle type="target" position={Position.Left} id="target-0" style={{ top: '18%', opacity: 0 }} />
+      <Handle type="target" position={Position.Left} id="target-1" style={{ top: '34%', opacity: 0 }} />
+      <Handle type="target" position={Position.Left} id="target-3" style={{ top: '66%', opacity: 0 }} />
+      <Handle type="target" position={Position.Left} id="target-4" style={{ top: '82%', opacity: 0 }} />
+
+      <Handle type="source" position={Position.Right} id="source-2" style={{ top: '50%', opacity: 0 }} />
+      <Handle type="source" position={Position.Right} id="source-0" style={{ top: '18%', opacity: 0 }} />
+      <Handle type="source" position={Position.Right} id="source-1" style={{ top: '34%', opacity: 0 }} />
+      <Handle type="source" position={Position.Right} id="source-3" style={{ top: '66%', opacity: 0 }} />
+      <Handle type="source" position={Position.Right} id="source-4" style={{ top: '82%', opacity: 0 }} />
 
       {/* 单套统一 DOM 架构：文字与色块同一生命周期，零重排零掉层，卡片绝对不消失 */}
       <div className="flex-1 flex flex-col justify-between pt-1">
@@ -165,7 +175,10 @@ const InPortNode = React.memo(({ data }: NodeProps) => {
     >
       {/* 顶部实体色彩指示条 */}
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-500" />
-      <Handle type="source" position={Position.Right} />
+      {/* 3 档动态引脚插槽 */}
+      <Handle type="source" position={Position.Right} id="source-1" style={{ top: '50%', opacity: 0 }} />
+      <Handle type="source" position={Position.Right} id="source-0" style={{ top: '25%', opacity: 0 }} />
+      <Handle type="source" position={Position.Right} id="source-2" style={{ top: '75%', opacity: 0 }} />
 
       <div className="w-full flex items-center gap-2 pt-0.5">
         <ArrowLeftCircle className="node-icon w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -208,7 +221,10 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
     >
       {/* 顶部实体色彩指示条 */}
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-blue-500" />
-      <Handle type="target" position={Position.Left} />
+      {/* 3 档动态引脚插槽 */}
+      <Handle type="target" position={Position.Left} id="target-1" style={{ top: '50%', opacity: 0 }} />
+      <Handle type="target" position={Position.Left} id="target-0" style={{ top: '25%', opacity: 0 }} />
+      <Handle type="target" position={Position.Left} id="target-2" style={{ top: '75%', opacity: 0 }} />
 
       <div className="w-full flex items-center justify-between pt-0.5">
         <div className="truncate flex-1">
@@ -255,9 +271,9 @@ function calculateClientTopologicalLayout(
     }
   });
 
-  // 2. 自适应计算目标纵横比与最大行数 (紧凑矩阵，杜绝几千像素孤岛连线)
+  // 2. 自适应计算目标纵横比与最大行数 (无限画布呼吸感，适度展开)
   const totalN = internalNodes.length;
-  const maxRows = totalN > 300 ? 32 : totalN > 150 ? 22 : totalN > 50 ? 15 : 8;
+  const maxRows = totalN > 300 ? 26 : totalN > 150 ? 18 : totalN > 50 ? 14 : 8;
   const MAX_STAGES = totalN > 200 ? 5 : totalN > 60 ? 4 : 3;
 
   // 3. Kahn 拓扑分层 (带环路安全截断)
@@ -347,12 +363,12 @@ function calculateClientTopologicalLayout(
     }
   }
 
-  // 6. 坐标网格化分配与多列折叠 (紧凑间距，杜绝空洞)
+  // 6. 坐标网格化分配与多列折叠 (无限画布呼吸通道，为并行导线留出充足间距)
   const CARD_WIDTH = 220;
   const CARD_HEIGHT = 85;
-  const COL_GAP = 28;
-  const ROW_GAP = 18;
-  const STAGE_GAP = 40;
+  const COL_GAP = 80;
+  const ROW_GAP = 36;
+  const STAGE_GAP = 120;
 
   let currentX = 260;
 
@@ -389,7 +405,7 @@ function calculateClientTopologicalLayout(
   return positions;
 }
 
-// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储，升级为 v4 版本)
+// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储，升级为 v6 版本)
 interface PersistedDrillLayout {
   positions: Record<string, { x: number; y: number }>;
   portEdges: Array<{ source: string; target: string }>;
@@ -407,13 +423,13 @@ function isLayoutValid(layout: PersistedDrillLayout | null | undefined, minExpec
   for (const id in layout.positions) {
     if (layout.positions[id].x > maxX) maxX = layout.positions[id].x;
   }
-  if (maxX > 5000) return false;
+  if (maxX > 12000) return false;
   return true;
 }
 
 function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string): PersistedDrillLayout | null {
   try {
-    const key = `dsh_cg_drill_v5_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v6_${workspaceRoot || 'default'}_${moduleId}`;
     const raw = localStorage.getItem(key);
     if (raw) {
       return JSON.parse(raw);
@@ -426,7 +442,7 @@ function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string)
 
 function savePersistedLayout(workspaceRoot: string | undefined, moduleId: string, data: PersistedDrillLayout) {
   try {
-    const key = `dsh_cg_drill_v5_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v6_${workspaceRoot || 'default'}_${moduleId}`;
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
     console.warn('Failed to save drilldown layout to localStorage', e);
@@ -591,7 +607,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         if (
           data.success &&
           data.layout?.nodes &&
-          (!data.layout.width || data.layout.width < 5500) &&
+          (!data.layout.width || data.layout.width < 12000) &&
           data.layout.nodes.length >= Math.min(internalNodes.length, 10)
         ) {
           const posMap: Record<string, { x: number; y: number }> = {};
@@ -778,6 +794,84 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     }
   }, [nodes.length, rfInstance]);
 
+  // 动态引脚分配算法 (Multi-Pin Dynamic Assignment)
+  // 根据来源/目标节点的相对垂直(Y)坐标智能指派引脚，杜绝端子点单点粘连与连线缠绕
+  const { edgeSourceHandle, edgeTargetHandle } = useMemo(() => {
+    const sMap: Record<string, string> = {};
+    const tMap: Record<string, string> = {};
+
+    const targetGroups: Record<string, any[]> = {};
+    const sourceGroups: Record<string, any[]> = {};
+
+    rawEdges.forEach((e) => {
+      if (!targetGroups[e.target]) targetGroups[e.target] = [];
+      targetGroups[e.target].push(e);
+
+      if (!sourceGroups[e.source]) sourceGroups[e.source] = [];
+      sourceGroups[e.source].push(e);
+    });
+
+    // 目标端子 (入边)：按源节点的 Y 坐标自上而下排序并均匀映射到 target-0 ~ target-4
+    Object.entries(targetGroups).forEach(([targetId, group]) => {
+      const isOutPort = targetId.startsWith('outport_');
+      const maxSlots = isOutPort ? 3 : 5;
+
+      group.sort((a, b) => {
+        const yA = nodePositions[a.source]?.y ?? 0;
+        const yB = nodePositions[b.source]?.y ?? 0;
+        return yA - yB;
+      });
+
+      const count = group.length;
+      group.forEach((e, idx) => {
+        let slot = 0;
+        if (maxSlots === 3) {
+          if (count === 1) slot = 1;
+          else if (count === 2) slot = idx === 0 ? 0 : 2;
+          else slot = Math.min(2, Math.floor((idx / (count - 1)) * 2));
+        } else {
+          if (count === 1) slot = 2;
+          else if (count === 2) slot = idx === 0 ? 1 : 3;
+          else if (count === 3) slot = idx === 0 ? 0 : idx === 1 ? 2 : 4;
+          else if (count === 4) slot = idx === 0 ? 0 : idx === 1 ? 1 : idx === 2 ? 3 : 4;
+          else slot = Math.min(4, Math.floor((idx / (count - 1)) * 4));
+        }
+        tMap[e.id] = `target-${slot}`;
+      });
+    });
+
+    // 源端子 (出边)：按目标节点的 Y 坐标自上而下排序并均匀映射到 source-0 ~ source-4
+    Object.entries(sourceGroups).forEach(([sourceId, group]) => {
+      const isInPort = sourceId.startsWith('inport_');
+      const maxSlots = isInPort ? 3 : 5;
+
+      group.sort((a, b) => {
+        const yA = nodePositions[a.target]?.y ?? 0;
+        const yB = nodePositions[b.target]?.y ?? 0;
+        return yA - yB;
+      });
+
+      const count = group.length;
+      group.forEach((e, idx) => {
+        let slot = 0;
+        if (maxSlots === 3) {
+          if (count === 1) slot = 1;
+          else if (count === 2) slot = idx === 0 ? 0 : 2;
+          else slot = Math.min(2, Math.floor((idx / (count - 1)) * 2));
+        } else {
+          if (count === 1) slot = 2;
+          else if (count === 2) slot = idx === 0 ? 1 : 3;
+          else if (count === 3) slot = idx === 0 ? 0 : idx === 1 ? 2 : 4;
+          else if (count === 4) slot = idx === 0 ? 0 : idx === 1 ? 1 : idx === 2 ? 3 : 4;
+          else slot = Math.min(4, Math.floor((idx / (count - 1)) * 4));
+        }
+        sMap[e.id] = `source-${slot}`;
+      });
+    });
+
+    return { edgeSourceHandle: sMap, edgeTargetHandle: tMap };
+  }, [rawEdges, nodePositions]);
+
   // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画，未选中时全量静态化且沉底
   useEffect(() => {
     const connectedEdgeIds = new Set<string>();
@@ -814,8 +908,10 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         id: e.id,
         source: e.source,
         target: e.target,
+        sourceHandle: edgeSourceHandle[e.id] || (e.source.startsWith('inport_') ? 'source-1' : 'source-2'),
+        targetHandle: edgeTargetHandle[e.id] || (e.target.startsWith('outport_') ? 'target-1' : 'target-2'),
         type: routingMode === 'smoothstep' ? 'smoothstep' : 'default',
-        pathOptions: routingMode === 'smoothstep' ? { borderRadius: 16 } : undefined,
+        pathOptions: routingMode === 'smoothstep' ? { borderRadius: 12, offset: 20 } : undefined,
         animated: Boolean(selectedNodeId && isConnected), // 仅在选中卡片后播放虚线流动动画！未选中时绝不播放
         zIndex: selectedNodeId ? (isConnected ? 5 : 0) : 0, // 连线层级永远在卡片(zIndex>=10)底层，彻底避免覆盖卡片内容
         style: {
@@ -828,7 +924,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     });
 
     setEdges(reactEdges);
-  }, [rawEdges, selectedNodeId, routingMode, isDark, setEdges]);
+  }, [rawEdges, selectedNodeId, routingMode, isDark, edgeSourceHandle, edgeTargetHandle, setEdges]);
 
   // 节点右键处理
   const handleNodeContextMenu = useCallback(
@@ -1063,6 +1159,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        onlyRenderVisibleElements={true}
         onInit={(instance) => {
           setRfInstance(instance);
           rfInstanceRef.current = instance;

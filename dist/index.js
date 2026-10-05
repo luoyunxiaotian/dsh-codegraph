@@ -110460,7 +110460,7 @@ var ElkLayoutEngine = class {
       }
     });
     const totalN = internalNodes.length;
-    const maxRows = totalN > 300 ? 32 : totalN > 150 ? 22 : totalN > 50 ? 15 : 8;
+    const maxRows = totalN > 300 ? 26 : totalN > 150 ? 18 : totalN > 50 ? 14 : 8;
     const MAX_STAGES = totalN > 200 ? 5 : totalN > 60 ? 4 : 3;
     const rawRank = {};
     const inDegreeWork = { ...inDegree };
@@ -110541,9 +110541,9 @@ var ElkLayoutEngine = class {
     }
     const CARD_WIDTH = 220;
     const CARD_HEIGHT = 85;
-    const COL_GAP = 28;
-    const ROW_GAP = 18;
-    const STAGE_GAP = 40;
+    const COL_GAP = 80;
+    const ROW_GAP = 36;
+    const STAGE_GAP = 120;
     const positions = {};
     let currentX = 260;
     let maxY = 500;
@@ -110819,7 +110819,7 @@ var CodeGraphServer = class {
       if (!body2?.forceRefresh) {
         if (this.drilldownCache.has(moduleId)) {
           const cached = this.drilldownCache.get(moduleId);
-          if (cached?.layout?.width && cached.layout.width < 5500) {
+          if (cached?.version === "v6" && cached?.layout?.width && cached.layout.width < 12e3) {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({
               success: true,
@@ -110831,7 +110831,7 @@ var CodeGraphServer = class {
           }
         }
         const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 5500) {
+        if (diskCache && diskCache?.version === "v6" && diskCache?.layout?.width && diskCache.layout.width < 12e3) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
@@ -110898,11 +110898,11 @@ var CodeGraphServer = class {
         outPorts: targetModule.outPorts,
         portEdges
       });
-      this.drilldownCache.set(moduleId, { layout, portEdges });
+      this.drilldownCache.set(moduleId, { layout, portEdges, version: "v6" });
       try {
         const currentLayout = this.core.getLastLayout() || {};
         const drilldowns = currentLayout.drilldowns || {};
-        drilldowns[moduleId] = { layout, portEdges };
+        drilldowns[moduleId] = { layout, portEdges, version: "v6" };
         this.core.setLastLayout({ ...currentLayout, drilldowns });
         this.core.saveToCache({ ...currentLayout, drilldowns });
       } catch (err2) {

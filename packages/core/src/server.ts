@@ -257,11 +257,11 @@ export class CodeGraphServer {
         return;
       }
 
-      // 快速缓存命中检测 (0ms 返回，避免重复耗时排版；自动过滤旧版万像素畸变布局)
+      // 快速缓存命中检测 (0ms 返回，避免重复耗时排版；自动过滤旧版万像素畸变布局与窄间距v5布局)
       if (!body?.forceRefresh) {
         if (this.drilldownCache.has(moduleId)) {
           const cached = this.drilldownCache.get(moduleId);
-          if (cached?.layout?.width && cached.layout.width < 5500) {
+          if (cached?.version === 'v6' && cached?.layout?.width && cached.layout.width < 12000) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
@@ -277,7 +277,7 @@ export class CodeGraphServer {
 
         // 检测核心引擎与磁盘持久化缓存
         const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 5500) {
+        if (diskCache && diskCache?.version === 'v6' && diskCache?.layout?.width && diskCache.layout.width < 12000) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
@@ -373,11 +373,11 @@ export class CodeGraphServer {
       );
 
       // 写入内存缓存与磁盘持久化缓存
-      this.drilldownCache.set(moduleId, { layout, portEdges });
+      this.drilldownCache.set(moduleId, { layout, portEdges, version: 'v6' });
       try {
         const currentLayout = this.core.getLastLayout() || {};
         const drilldowns = currentLayout.drilldowns || {};
-        drilldowns[moduleId] = { layout, portEdges };
+        drilldowns[moduleId] = { layout, portEdges, version: 'v6' };
         this.core.setLastLayout({ ...currentLayout, drilldowns });
         this.core.saveToCache({ ...currentLayout, drilldowns });
       } catch (err) {

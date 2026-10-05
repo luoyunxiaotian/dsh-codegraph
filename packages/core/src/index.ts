@@ -51,7 +51,7 @@ export class CodeGraphCore {
   private symbolTable: SymbolTable;
   private watcher: DualTrackWatcher;
   private lastGraphResult?: FullGraphResult;
-  private lastLayout?: { architecture?: any };
+  private lastLayout?: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[]; version?: string }> };
   private forceArchetype?: ArchetypeType;
   private projects: DetectedProjectProfile[] = [];
   private selectedProjectIds: string[] = [];
@@ -385,18 +385,18 @@ export class CodeGraphCore {
     return this.lastGraphResult;
   }
 
-  public getLastLayout(): { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[] }> } | undefined {
+  public getLastLayout(): { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[]; version?: string }> } | undefined {
     return this.lastLayout;
   }
 
-  public setLastLayout(layout: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[] }> }): void {
+  public setLastLayout(layout: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[]; version?: string }> }): void {
     this.lastLayout = layout;
   }
 
   /**
    * 将当前图谱及布局缓存至本地 .codegraph/graph-cache.json
    */
-  public saveToCache(layout?: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[] }> }): void {
+  public saveToCache(layout?: { architecture?: any; drilldowns?: Record<string, { layout: any; portEdges: any[]; version?: string }> }): void {
     if (layout) {
       this.lastLayout = layout;
     }
