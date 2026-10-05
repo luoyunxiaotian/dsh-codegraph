@@ -167,14 +167,108 @@ body {
   display: none !important;
 }
 
+/* LOD 极简模式下卡片强化外框与实体对比度，杜绝小缩放比例下被抗锯齿吞噬 */
+.rf-lod-compact .node-compact-card {
+  border-width: 2px !important;
+  border-style: solid !important;
+  border-radius: 6px !important;
+}
+
+/* 浅色主题下 LOD 外框与底色 */
+.rf-lod-compact .node-compact-card {
+  background-color: #ffffff !important;
+  border-color: rgba(71, 85, 105, 0.45) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 深色主题下 LOD 外框与底色：提高卡片与背景的明度差，强化高对比白透边框 */
+[data-theme="dark"] .rf-lod-compact .node-compact-card,
+body[data-ds-dark-theme] .rf-lod-compact .node-compact-card,
+.dark .rf-lod-compact .node-compact-card {
+  background-color: #27272a !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+}
+
+/* 悬浮预览：提升层级并高亮外框 */
+.rf-lod-compact .node-compact-card:hover {
+  z-index: 40 !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px #3b82f6, 0 8px 24px -2px rgba(59, 130, 246, 0.4) !important;
+}
+
+/* 聚焦与关联卡片在 LOD 模式下更要醒目高亮 */
+.rf-lod-compact .node-compact-card.node-focused {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px #3b82f6, 0 8px 24px -2px rgba(59, 130, 246, 0.6) !important;
+}
+
+.rf-lod-compact .node-compact-card.node-connected {
+  border-color: rgba(59, 130, 246, 0.9) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.8), 0 4px 14px -2px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* LOD 极简色块专用样式：100% 实体纯色，杜绝 Tailwind 变量透明度语法失效 */
+.node-skeleton-badge-class {
+  background-color: #f59e0b !important;
+}
+.node-skeleton-badge-func {
+  background-color: #3b82f6 !important;
+}
+.node-skeleton-badge-contract {
+  background-color: #818cf8 !important;
+}
+.node-skeleton-badge-inport {
+  background-color: #10b981 !important;
+}
+.node-skeleton-badge-outport {
+  background-color: #3b82f6 !important;
+}
+
+/* 标题色块：浅色深灰，深色亮灰 */
+.node-skeleton-title {
+  background-color: #475569 !important;
+}
+[data-theme="dark"] .node-skeleton-title,
+body[data-ds-dark-theme] .node-skeleton-title,
+.dark .node-skeleton-title {
+  background-color: #e2e8f0 !important;
+}
+
+/* 次要信息/文件路径色块 */
+.node-skeleton-sub {
+  background-color: #94a3b8 !important;
+}
+[data-theme="dark"] .node-skeleton-sub,
+body[data-ds-dark-theme] .node-skeleton-sub,
+.dark .node-skeleton-sub {
+  background-color: #64748b !important;
+}
+
+.node-skeleton-meta {
+  background-color: #cbd5e1 !important;
+}
+[data-theme="dark"] .node-skeleton-meta,
+body[data-ds-dark-theme] .node-skeleton-meta,
+.dark .node-skeleton-meta {
+  background-color: #475569 !important;
+}
+
+/* 连线：默认非缩放描边 (vector-effect)，保证小缩放比下连线不被抗锯齿吞噬 */
 .react-flow__edge-path {
   stroke: var(--dsw-rf-edge);
-  stroke-width: 1;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: #4176e6;
   stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.rf-lod-compact .react-flow__edge-path {
+  vector-effect: non-scaling-stroke !important;
 }
 
 .react-flow__handle {

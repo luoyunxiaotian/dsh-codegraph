@@ -56,8 +56,6 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
   const isClass = node.entityType === 'CLASS';
   const isContract = node.entityType === 'CONTRACT_ENDPOINT' || node.entityType === 'CONTRACT_TOPIC';
 
-  const accentBg = isContract ? 'bg-indigo-400' : isClass ? 'bg-amber-400' : 'bg-blue-400';
-
   return (
     <div
       onClick={() => onSelectNode(node.id, node.filePath, node.loc.startLine)}
@@ -127,16 +125,32 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
       </div>
 
       {/* 2. LOD 极简同色色块模式 (在视口缩小且非选中时激活，外框不消失，文字图标转为同色几何色块) */}
-      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-0.5">
+      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1">
         <div className="flex items-center justify-between">
-          <div className={`h-2 rounded-sm w-12 ${accentBg} opacity-70`} />
-          <div className="h-1.5 rounded-sm w-6 bg-dsh-border2 opacity-40" />
+          <div
+            className={`h-3 w-16 rounded ${
+              isContract
+                ? 'node-skeleton-badge-contract'
+                : isClass
+                ? 'node-skeleton-badge-class'
+                : 'node-skeleton-badge-func'
+            }`}
+          />
+          <div className="h-2.5 w-8 rounded node-skeleton-meta" />
         </div>
         <div className="flex items-center gap-2 my-1">
-          <div className={`w-3.5 h-3.5 rounded-sm ${accentBg} opacity-80 shrink-0`} />
-          <div className="h-2.5 rounded-sm w-28 bg-dsh-primary/40" />
+          <div
+            className={`w-4 h-4 rounded shrink-0 ${
+              isContract
+                ? 'node-skeleton-badge-contract'
+                : isClass
+                ? 'node-skeleton-badge-class'
+                : 'node-skeleton-badge-func'
+            }`}
+          />
+          <div className="h-3.5 w-32 rounded node-skeleton-title" />
         </div>
-        <div className="h-1.5 rounded-sm w-20 bg-dsh-tertiary/25 mt-0.5 border-t border-dsh-border1/40 pt-1" />
+        <div className="h-2.5 w-24 rounded node-skeleton-sub mt-0.5 border-t border-dsh-border1/40 pt-1" />
       </div>
     </div>
   );
@@ -183,10 +197,10 @@ const InPortNode = React.memo(({ data }: NodeProps) => {
 
       {/* LOD 极简色块 */}
       <div className="node-skeleton-detail w-full flex items-center gap-2">
-        <div className="w-3.5 h-3.5 rounded-full bg-emerald-500/70 shrink-0" />
-        <div className="flex-1 space-y-1">
-          <div className="w-12 h-1.5 rounded-sm bg-emerald-500/50" />
-          <div className="w-20 h-2 rounded-sm bg-dsh-primary/30" />
+        <div className="w-4 h-4 rounded-full node-skeleton-badge-inport shrink-0" />
+        <div className="flex-1 space-y-1.5">
+          <div className="w-14 h-2.5 rounded node-skeleton-badge-inport opacity-85" />
+          <div className="w-24 h-3 rounded node-skeleton-title" />
         </div>
       </div>
     </div>
@@ -234,11 +248,11 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
 
       {/* LOD 极简色块 */}
       <div className="node-skeleton-detail w-full flex items-center justify-between">
-        <div className="flex-1 space-y-1">
-          <div className="w-12 h-1.5 rounded-sm bg-blue-500/50" />
-          <div className="w-20 h-2 rounded-sm bg-dsh-primary/30" />
+        <div className="flex-1 space-y-1.5">
+          <div className="w-14 h-2.5 rounded node-skeleton-badge-outport opacity-85" />
+          <div className="w-24 h-3 rounded node-skeleton-title" />
         </div>
-        <div className="w-3.5 h-3.5 rounded-full bg-blue-500/70 shrink-0 ml-1" />
+        <div className="w-4 h-4 rounded-full node-skeleton-badge-outport shrink-0 ml-1" />
       </div>
     </div>
   );
@@ -774,10 +788,10 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       const isOutgoing = selectedNodeId && e.source === selectedNodeId;
       const isIncoming = selectedNodeId && e.target === selectedNodeId;
 
-      // 默认常态：极细淡灰/淡紫，不透明度收敛至 0.22~0.25，沉于卡片最底层，绝不遮挡文字
-      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(100, 116, 139, 0.25)';
+      // 默认常态：极细淡灰/淡紫，不透明度收敛至 0.32~0.35，沉于卡片最底层，绝不遮挡文字
+      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.32)' : 'rgba(100, 116, 139, 0.35)';
       if (e.isPortEdge) {
-        strokeColor = isDark ? 'rgba(129, 140, 248, 0.35)' : 'rgba(99, 102, 241, 0.35)';
+        strokeColor = isDark ? 'rgba(129, 140, 248, 0.45)' : 'rgba(99, 102, 241, 0.45)';
       }
 
       if (selectedNodeId) {
@@ -800,8 +814,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         zIndex: selectedNodeId ? (isConnected ? 5 : 0) : 0, // 连线层级永远在卡片(zIndex>=10)底层，彻底避免覆盖卡片内容
         style: {
           stroke: strokeColor,
-          strokeWidth: selectedNodeId ? (isConnected ? 2.2 : 0.8) : 1,
-          opacity: selectedNodeId ? (isConnected ? 1 : 0.05) : (isDark ? 0.22 : 0.25),
+          strokeWidth: selectedNodeId ? (isConnected ? 2.4 : 1) : 1.2,
+          opacity: selectedNodeId ? (isConnected ? 1 : 0.05) : (isDark ? 0.35 : 0.38),
+          vectorEffect: 'non-scaling-stroke',
         },
       };
     });

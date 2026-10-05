@@ -182,19 +182,23 @@ const ModuleCardNode = React.memo(({ data }: NodeProps) => {
       <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1">
         <div className="flex items-center justify-between pb-2 mb-2 border-b border-dsh-border1/40">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-blue-500/30 shrink-0" />
-            <div className="w-24 h-3 rounded-sm bg-dsh-primary/40" />
+            <div
+              className={`w-5 h-5 rounded shrink-0 ${
+                isContract ? 'node-skeleton-badge-contract' : 'node-skeleton-badge-func'
+              }`}
+            />
+            <div className="w-28 h-3.5 rounded node-skeleton-title" />
           </div>
-          <div className="w-12 h-2 rounded-sm bg-dsh-layer2 border border-dsh-border2/40" />
+          <div className="w-14 h-2.5 rounded node-skeleton-meta" />
         </div>
         <div className="space-y-2 my-2">
-          <div className="w-44 h-2 rounded-sm bg-dsh-secondary/25" />
-          <div className="w-36 h-2 rounded-sm bg-dsh-tertiary/20" />
-          <div className="w-28 h-2 rounded-sm bg-dsh-tertiary/15" />
+          <div className="w-48 h-2.5 rounded node-skeleton-sub" />
+          <div className="w-36 h-2.5 rounded node-skeleton-sub opacity-80" />
+          <div className="w-28 h-2.5 rounded node-skeleton-sub opacity-60" />
         </div>
         <div className="pt-2 border-t border-dsh-border1/40 flex items-center justify-between">
-          <div className="w-16 h-2 rounded-sm bg-emerald-500/40" />
-          <div className="w-16 h-2 rounded-sm bg-blue-500/40" />
+          <div className="w-16 h-2.5 rounded node-skeleton-badge-inport opacity-80" />
+          <div className="w-16 h-2.5 rounded node-skeleton-badge-outport opacity-80" />
         </div>
       </div>
     </div>
@@ -231,7 +235,7 @@ const BusEdge = ({
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={style} />
+      <BaseEdge id={id} path={edgePath} style={{ ...style, vectorEffect: 'non-scaling-stroke' }} />
       {!isDimmed && (
         <EdgeLabelRenderer>
           <div
@@ -379,7 +383,8 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         style: {
           stroke: strokeColor,
           strokeWidth: selectedModuleId ? (isConnected ? 2.5 : 1) : 1.2,
-          opacity: selectedModuleId ? (isConnected ? 1 : 0.06) : 0.4,
+          opacity: selectedModuleId ? (isConnected ? 1 : 0.06) : (isDark ? 0.38 : 0.42),
+          vectorEffect: 'non-scaling-stroke',
         },
         data: {
           callCount: b.callCount,
