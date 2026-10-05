@@ -55,6 +55,7 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
 
   const isClass = node.entityType === 'CLASS';
   const isContract = node.entityType === 'CONTRACT_ENDPOINT' || node.entityType === 'CONTRACT_TOPIC';
+  const accentColor = isContract ? '#818cf8' : isClass ? '#f59e0b' : '#3b82f6';
 
   return (
     <div
@@ -69,7 +70,7 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6), 0 4px 12px -2px rgba(59, 130, 246, 0.15)'
           : undefined,
       }}
-      className={`node-compact-card w-[220px] h-[85px] box-border bg-dsh-layer1 border ${
+      className={`node-compact-card relative w-[220px] h-[85px] box-border bg-dsh-layer1 border ${
         isFocused
           ? 'border-dsh-blue node-focused'
           : isConnected
@@ -79,11 +80,16 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
           : 'border-dsh-border2 hover:border-dsh-blue'
       } rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none flex flex-col justify-between overflow-hidden`}
     >
+      {/* 顶部实体色彩指示条 (微缩视野下提供极致辨识度，确保框架和身份永不消失) */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[3.5px]"
+        style={{ backgroundColor: accentColor }}
+      />
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
 
       {/* 1. 全量精细模式 (默认正常缩放，或在卡片被选中/直连时强制保持) */}
-      <div className="node-full-detail flex-1 flex flex-col justify-between">
+      <div className="node-full-detail flex-1 flex flex-col justify-between pt-1">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1">
             <span
@@ -125,7 +131,7 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
       </div>
 
       {/* 2. LOD 极简同色色块模式 (在视口缩小且非选中时激活，外框不消失，文字图标转为同色几何色块) */}
-      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1">
+      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1 pt-1.5">
         <div className="flex items-center justify-between">
           <div
             className={`h-3 w-16 rounded ${
@@ -174,7 +180,7 @@ const InPortNode = React.memo(({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(16, 185, 129, 0.6)'
           : undefined,
       }}
-      className={`node-compact-card w-[170px] h-[52px] box-border bg-dsh-green-tint border ${
+      className={`node-compact-card relative w-[170px] h-[52px] box-border bg-dsh-green-tint border ${
         isFocused
           ? 'border-emerald-500 node-focused'
           : isConnected
@@ -182,10 +188,12 @@ const InPortNode = React.memo(({ data }: NodeProps) => {
           : 'border-dsh-green-border'
       } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden`}
     >
+      {/* 顶部实体色彩指示条 */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-500" />
       <Handle type="source" position={Position.Right} />
 
       {/* 精细全量详情 */}
-      <div className="node-full-detail w-full flex items-center gap-2">
+      <div className="node-full-detail w-full flex items-center gap-2 pt-0.5">
         <ArrowLeftCircle className="w-3.5 h-3.5 text-dsh-green shrink-0" />
         <div className="truncate flex-1">
           <div className="text-[9px] text-dsh-green font-bold uppercase tracking-tight">📥 IN-PORT</div>
@@ -196,7 +204,7 @@ const InPortNode = React.memo(({ data }: NodeProps) => {
       </div>
 
       {/* LOD 极简色块 */}
-      <div className="node-skeleton-detail w-full flex items-center gap-2">
+      <div className="node-skeleton-detail w-full flex items-center gap-2 pt-0.5">
         <div className="w-4 h-4 rounded-full node-skeleton-badge-inport shrink-0" />
         <div className="flex-1 space-y-1.5">
           <div className="w-14 h-2.5 rounded node-skeleton-badge-inport opacity-85" />
@@ -225,7 +233,7 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6)'
           : undefined,
       }}
-      className={`node-compact-card w-[170px] h-[52px] box-border bg-dsh-blue-tint border ${
+      className={`node-compact-card relative w-[170px] h-[52px] box-border bg-dsh-blue-tint border ${
         isFocused
           ? 'border-blue-500 node-focused'
           : isConnected
@@ -233,10 +241,12 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
           : 'border-dsh-blue-border'
       } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden`}
     >
+      {/* 顶部实体色彩指示条 */}
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-blue-500" />
       <Handle type="target" position={Position.Left} />
 
       {/* 精细全量详情 */}
-      <div className="node-full-detail w-full flex items-center justify-between">
+      <div className="node-full-detail w-full flex items-center justify-between pt-0.5">
         <div className="truncate flex-1">
           <div className="text-[9px] text-dsh-blue font-bold uppercase tracking-tight">📤 OUT-PORT</div>
           <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
@@ -247,7 +257,7 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
       </div>
 
       {/* LOD 极简色块 */}
-      <div className="node-skeleton-detail w-full flex items-center justify-between">
+      <div className="node-skeleton-detail w-full flex items-center justify-between pt-0.5">
         <div className="flex-1 space-y-1.5">
           <div className="w-14 h-2.5 rounded node-skeleton-badge-outport opacity-85" />
           <div className="w-24 h-3 rounded node-skeleton-title" />
@@ -259,8 +269,8 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
 });
 
 /**
- * 客户端拓扑排版算法 (Kahn Topological DAG Layering + Barycenter Crossing Minimization)
- * 复杂度 O(V + E)，耗时 < 15ms，彻底杜绝环路依赖无限循环卡死！
+ * 客户端拓扑排版算法 (Kahn Topological DAG Layering + 2D Compact Matrix Folding)
+ * 复杂度 O(V + E)，耗时 < 15ms，彻底杜绝极端万像素超宽长蛇阵，收敛至 16:9 ~ 4:3 黄金视口！
  */
 function calculateClientTopologicalLayout(
   module: ModuleContainer,
@@ -272,12 +282,7 @@ function calculateClientTopologicalLayout(
 
   const internalIds = new Set(internalNodes.map((n) => n.id));
 
-  // 1. In-Ports 固定排布在最左列 X=50
-  module.inPorts.forEach((port, idx) => {
-    positions[`inport_${port}`] = { x: 50, y: 80 + idx * 70 };
-  });
-
-  // 2. 构建内部有向图 (Adjacency & in-degrees，自动过滤自环)
+  // 1. 构建内部有向图 (Adjacency & in-degrees，自动过滤自环)
   const adj: Record<string, string[]> = {};
   const revAdj: Record<string, string[]> = {};
   const inDegree: Record<string, number> = {};
@@ -295,78 +300,85 @@ function calculateClientTopologicalLayout(
     }
   });
 
-  // 3. 安全分层：采用 Kahn 拓扑分层 + 环路安全截断 (绝对杜绝无限循环死锁)
-  const rank: Record<string, number> = {};
+  // 2. 自适应计算目标纵横比与最大行数
+  const totalN = internalNodes.length;
+  const maxRows = totalN > 300 ? 28 : totalN > 150 ? 20 : totalN > 50 ? 14 : 8;
+  const MAX_STAGES = totalN > 200 ? 8 : totalN > 60 ? 6 : 4;
+
+  // 3. Kahn 拓扑分层 (带环路安全截断)
+  const rawRank: Record<string, number> = {};
   const inDegreeWork = { ...inDegree };
   let currentLayer: string[] = [];
 
-  // 入度为 0 的节点作为第 0 层 (Entry/Root)
   internalNodes.forEach((n) => {
     if ((inDegreeWork[n.id] || 0) === 0) {
-      rank[n.id] = 0;
+      rawRank[n.id] = 0;
       currentLayer.push(n.id);
     }
   });
 
-  // 若无入度为 0 的节点（全图成环），选取第一个节点作为起点，打破死锁
   if (currentLayer.length === 0 && internalNodes.length > 0) {
-    const firstId = internalNodes[0].id;
-    rank[firstId] = 0;
-    currentLayer.push(firstId);
+    rawRank[internalNodes[0].id] = 0;
+    currentLayer.push(internalNodes[0].id);
   }
 
-  let layerIndex = 0;
-  const maxSafeDepth = Math.min(internalNodes.length, 30);
-
-  while (currentLayer.length > 0 && layerIndex < maxSafeDepth) {
+  let layerIdx = 0;
+  const maxSearchDepth = 25;
+  while (currentLayer.length > 0 && layerIdx < maxSearchDepth) {
     const nextLayer: string[] = [];
     currentLayer.forEach((u) => {
       (adj[u] || []).forEach((v) => {
         inDegreeWork[v] = (inDegreeWork[v] || 1) - 1;
-        if (inDegreeWork[v] <= 0 && rank[v] === undefined) {
-          rank[v] = layerIndex + 1;
+        if (inDegreeWork[v] <= 0 && rawRank[v] === undefined) {
+          rawRank[v] = layerIdx + 1;
           nextLayer.push(v);
         }
       });
     });
     currentLayer = nextLayer;
-    layerIndex++;
+    layerIdx++;
   }
 
-  // 对处于环路中未被拓扑遍历到的剩余节点，平滑分派到后置层，保证 100% 覆盖
+  // 4. 映射收敛至主阶段列数 [0, MAX_STAGES - 1]，环路与未遍历节点均匀落入中间处理阶段
+  const rank: Record<string, number> = {};
+  const maxRawRank = Math.max(1, ...Object.values(rawRank));
   let unassignedCount = 0;
+
   internalNodes.forEach((n) => {
-    if (rank[n.id] === undefined) {
-      rank[n.id] = layerIndex + Math.floor(unassignedCount / 8);
+    if (rawRank[n.id] !== undefined) {
+      const mapped = Math.min(
+        MAX_STAGES - 1,
+        Math.floor((rawRank[n.id] / maxRawRank) * (MAX_STAGES - 1))
+      );
+      rank[n.id] = mapped;
+    } else {
+      const mid = 1 + (unassignedCount % Math.max(1, MAX_STAGES - 2));
+      rank[n.id] = mid;
       unassignedCount++;
     }
   });
 
-  // 4. 按层分组
+  // 5. 按层分组与重心排序
   const layers: Record<number, CodeNode[]> = {};
+  for (let s = 0; s < MAX_STAGES; s++) layers[s] = [];
   internalNodes.forEach((n) => {
     const r = rank[n.id] || 0;
-    if (!layers[r]) layers[r] = [];
     layers[r].push(n);
   });
 
-  const sortedLayerRanks = Object.keys(layers).map(Number).sort((a, b) => a - b);
-
-  // 5. 跨层重心启发式排序 (Barycenter Crossing Minimization)
   const nodeYIndex = new Map<string, number>();
-  sortedLayerRanks.forEach((r) => {
-    layers[r].sort((a, b) => {
+  for (let s = 0; s < MAX_STAGES; s++) {
+    layers[s].sort((a, b) => {
       const fComp = (a.filePath || '').localeCompare(b.filePath || '');
       if (fComp !== 0) return fComp;
       return a.name.localeCompare(b.name);
     });
-    layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
-  });
+    layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+  }
 
-  for (let pass = 0; pass < 3; pass++) {
-    for (let i = 1; i < sortedLayerRanks.length; i++) {
-      const r = sortedLayerRanks[i];
-      layers[r].sort((a, b) => {
+  for (let pass = 0; pass < 2; pass++) {
+    for (let s = 1; s < MAX_STAGES; s++) {
+      layers[s].sort((a, b) => {
         const getBary = (nId: string) => {
           const preds = revAdj[nId] || [];
           if (preds.length === 0) return nodeYIndex.get(nId) ?? 0;
@@ -376,69 +388,75 @@ function calculateClientTopologicalLayout(
         };
         return getBary(a.id) - getBary(b.id);
       });
-      layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
-    }
-
-    for (let i = sortedLayerRanks.length - 2; i >= 0; i--) {
-      const r = sortedLayerRanks[i];
-      layers[r].sort((a, b) => {
-        const getBary = (nId: string) => {
-          const succs = adj[nId] || [];
-          if (succs.length === 0) return nodeYIndex.get(nId) ?? 0;
-          let sum = 0;
-          succs.forEach((s) => { sum += (nodeYIndex.get(s) ?? 0); });
-          return sum / succs.length;
-        };
-        return getBary(a.id) - getBary(b.id);
-      });
-      layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+      layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
     }
   }
 
-  // 6. 排布各层内部节点 (规避超高纵向堆叠，根据节点总数自适应列容量)
-  const maxPerCol = internalNodes.length > 100 ? 16 : internalNodes.length > 30 ? 12 : 8;
+  // 6. 坐标网格化分配与多列折叠
   const CARD_WIDTH = 220;
   const CARD_HEIGHT = 85;
-  const X_GAP = 60;
-  const Y_GAP = 25;
-  let currentLayerBaseX = 300;
+  const COL_GAP = 35;
+  const ROW_GAP = 22;
+  const STAGE_GAP = 70;
 
-  sortedLayerRanks.forEach((r) => {
-    const nodesInLayer = layers[r] || [];
-    const cols = Math.ceil(nodesInLayer.length / maxPerCol) || 1;
+  let currentX = 260;
 
-    nodesInLayer.forEach((n, idx) => {
-      const colOffset = Math.floor(idx / maxPerCol);
-      const rowIdx = idx % maxPerCol;
-      positions[n.id] = {
-        x: currentLayerBaseX + colOffset * (CARD_WIDTH + 35),
-        y: 80 + rowIdx * (CARD_HEIGHT + Y_GAP),
-      };
-    });
-
-    currentLayerBaseX += cols * (CARD_WIDTH + 35) + X_GAP;
+  // In-Ports 排布在最左列 X=50
+  module.inPorts.forEach((port, idx) => {
+    positions[`inport_${port}`] = { x: 50, y: 80 + idx * 65 };
   });
 
-  // 7. Out-Ports 固定排布在最右列
-  const rightX = Math.max(currentLayerBaseX, 850);
+  for (let s = 0; s < MAX_STAGES; s++) {
+    const nodesInStage = layers[s];
+    if (nodesInStage.length === 0) continue;
+
+    const cols = Math.ceil(nodesInStage.length / maxRows) || 1;
+
+    nodesInStage.forEach((n, idx) => {
+      const colIdx = Math.floor(idx / maxRows);
+      const rowIdx = idx % maxRows;
+      const x = currentX + colIdx * (CARD_WIDTH + COL_GAP);
+      const y = 80 + rowIdx * (CARD_HEIGHT + ROW_GAP);
+      positions[n.id] = { x, y };
+    });
+
+    currentX += cols * (CARD_WIDTH + COL_GAP) + STAGE_GAP;
+  }
+
+  // Out-Ports 排布在最右列
+  const rightX = Math.max(currentX, 850);
   module.outPorts.forEach((port, idx) => {
-    positions[`outport_${port}`] = { x: rightX, y: 80 + idx * 70 };
+    positions[`outport_${port}`] = { x: rightX, y: 80 + idx * 65 };
   });
 
   return positions;
 }
 
-// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储)
+// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储，并附带 v3 版本与完整度自愈校验)
 interface PersistedDrillLayout {
   positions: Record<string, { x: number; y: number }>;
   portEdges: Array<{ source: string; target: string }>;
+  width?: number;
+  height?: number;
 }
 
 const moduleLayoutMemoryCache = new Map<string, PersistedDrillLayout>();
 
+function isLayoutValid(layout: PersistedDrillLayout | null | undefined, minExpectedCount: number): boolean {
+  if (!layout?.positions) return false;
+  const count = Object.keys(layout.positions).length;
+  if (count < Math.max(1, minExpectedCount)) return false;
+  let maxX = 0;
+  for (const id in layout.positions) {
+    if (layout.positions[id].x > maxX) maxX = layout.positions[id].x;
+  }
+  if (maxX > 7500) return false;
+  return true;
+}
+
 function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string): PersistedDrillLayout | null {
   try {
-    const key = `dsh_cg_drill_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v3_${workspaceRoot || 'default'}_${moduleId}`;
     const raw = localStorage.getItem(key);
     if (raw) {
       return JSON.parse(raw);
@@ -451,7 +469,7 @@ function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string)
 
 function savePersistedLayout(workspaceRoot: string | undefined, moduleId: string, data: PersistedDrillLayout) {
   try {
-    const key = `dsh_cg_drill_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v3_${workspaceRoot || 'default'}_${moduleId}`;
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
     console.warn('Failed to save drilldown layout to localStorage', e);
@@ -501,17 +519,17 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
   // 首帧立即根据内存/LocalStorage/极速Kahn拓扑排版初始化坐标，杜绝首帧白屏与跳动
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>(() => {
-    const mem = moduleLayoutMemoryCache.get(module.id);
-    if (mem && Object.keys(mem.positions).length > 0) return mem.positions;
-    const stored = getPersistedLayout(workspaceRoot, module.id);
-    if (stored && stored.positions && Object.keys(stored.positions).length > 0) {
-      moduleLayoutMemoryCache.set(module.id, stored);
-      return stored.positions;
-    }
     const moduleFiles = new Set(module.files);
     const iNodes = Object.values(allNodes).filter(
       (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
     );
+    const mem = moduleLayoutMemoryCache.get(module.id);
+    if (mem && isLayoutValid(mem, iNodes.length)) return mem.positions;
+    const stored = getPersistedLayout(workspaceRoot, module.id);
+    if (stored && isLayoutValid(stored, iNodes.length)) {
+      moduleLayoutMemoryCache.set(module.id, stored);
+      return stored.positions;
+    }
     return calculateClientTopologicalLayout(module, iNodes, allEdges);
   });
   const [serverPortEdges, setServerPortEdges] = useState<Array<{ source: string; target: string }>>(() => {
@@ -584,19 +602,21 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       // 0. 优先检测客户端内存缓存
       if (!forceRefresh && moduleLayoutMemoryCache.has(module.id)) {
         const cached = moduleLayoutMemoryCache.get(module.id)!;
-        setNodePositions(cached.positions);
-        if (cached.portEdges) setServerPortEdges(cached.portEdges);
-        setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
-        return;
+        if (isLayoutValid(cached, internalNodes.length)) {
+          setNodePositions(cached.positions);
+          if (cached.portEdges) setServerPortEdges(cached.portEdges);
+          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
+          return;
+        }
       }
 
       // 0.1 优先检测本地持久化缓存 (LocalStorage)
       if (!forceRefresh) {
         const persisted = getPersistedLayout(workspaceRoot, module.id);
-        if (persisted && persisted.positions && Object.keys(persisted.positions).length > 0) {
-          setNodePositions(persisted.positions);
-          if (persisted.portEdges) setServerPortEdges(persisted.portEdges);
-          moduleLayoutMemoryCache.set(module.id, persisted);
+        if (isLayoutValid(persisted, internalNodes.length)) {
+          setNodePositions(persisted!.positions);
+          if (persisted!.portEdges) setServerPortEdges(persisted!.portEdges);
+          moduleLayoutMemoryCache.set(module.id, persisted!);
           setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
           return;
         }
@@ -611,7 +631,12 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           body: JSON.stringify({ moduleId: module.id, forceRefresh }),
         });
         const data = await res.json();
-        if (data.success && data.layout?.nodes && (!data.layout.width || data.layout.width < 30000)) {
+        if (
+          data.success &&
+          data.layout?.nodes &&
+          (!data.layout.width || data.layout.width < 7500) &&
+          data.layout.nodes.length >= Math.min(internalNodes.length, 10)
+        ) {
           const posMap: Record<string, { x: number; y: number }> = {};
           data.layout.nodes.forEach((n: any) => {
             posMap[n.id] = { x: n.x, y: n.y };
@@ -647,7 +672,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   // 模块切换或首次载入时，优先应用缓存或触发自动理线
   useEffect(() => {
     const mem = moduleLayoutMemoryCache.get(module.id);
-    if (mem && Object.keys(mem.positions).length > 0) {
+    if (mem && isLayoutValid(mem, internalNodes.length)) {
       setNodePositions(mem.positions);
       if (mem.portEdges) setServerPortEdges(mem.portEdges);
       setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 40);
@@ -655,7 +680,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     }
 
     const stored = getPersistedLayout(workspaceRoot, module.id);
-    if (stored && stored.positions && Object.keys(stored.positions).length > 0) {
+    if (stored && isLayoutValid(stored, internalNodes.length)) {
       setNodePositions(stored.positions);
       if (stored.portEdges) setServerPortEdges(stored.portEdges);
       moduleLayoutMemoryCache.set(module.id, stored);
@@ -664,7 +689,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     }
 
     performUntangleLayout(false, false);
-  }, [module.id, workspaceRoot, performUntangleLayout]);
+  }, [module.id, workspaceRoot, internalNodes.length, performUntangleLayout]);
 
   // 基础原始边集合 (不受 hover 抖动影响)
   const rawEdges = useMemo(() => {
@@ -788,10 +813,10 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       const isOutgoing = selectedNodeId && e.source === selectedNodeId;
       const isIncoming = selectedNodeId && e.target === selectedNodeId;
 
-      // 默认常态：极细淡灰/淡紫，不透明度收敛至 0.32~0.35，沉于卡片最底层，绝不遮挡文字
-      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.32)' : 'rgba(100, 116, 139, 0.35)';
+      // 默认常态：极细淡灰/淡紫，提升至 0.65 描边对比度，沉于卡片最底层(zIndex 0)，绝不遮挡文字
+      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.65)' : 'rgba(100, 116, 139, 0.65)';
       if (e.isPortEdge) {
-        strokeColor = isDark ? 'rgba(129, 140, 248, 0.45)' : 'rgba(99, 102, 241, 0.45)';
+        strokeColor = isDark ? 'rgba(129, 140, 248, 0.75)' : 'rgba(99, 102, 241, 0.75)';
       }
 
       if (selectedNodeId) {
@@ -815,7 +840,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         style: {
           stroke: strokeColor,
           strokeWidth: selectedNodeId ? (isConnected ? 2.4 : 1) : 1.2,
-          opacity: selectedNodeId ? (isConnected ? 1 : 0.05) : (isDark ? 0.35 : 0.38),
+          opacity: selectedNodeId ? (isConnected ? 1 : 0.05) : 0.65,
           vectorEffect: 'non-scaling-stroke',
         },
       };

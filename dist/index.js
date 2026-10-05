@@ -110459,28 +110459,31 @@ var ElkLayoutEngine = class {
         outDegree[e.source] = (outDegree[e.source] || 0) + 1;
       }
     });
-    const rank = {};
+    const totalN = internalNodes.length;
+    const maxRows = totalN > 300 ? 28 : totalN > 150 ? 20 : totalN > 50 ? 14 : 8;
+    const MAX_STAGES = totalN > 200 ? 8 : totalN > 60 ? 6 : 4;
+    const rawRank = {};
     const inDegreeWork = { ...inDegree };
     let currentLayer = [];
     internalNodes.forEach((n) => {
       if ((inDegreeWork[n.id] || 0) === 0) {
-        rank[n.id] = 0;
+        rawRank[n.id] = 0;
         currentLayer.push(n.id);
       }
     });
     if (currentLayer.length === 0 && internalNodes.length > 0) {
-      rank[internalNodes[0].id] = 0;
+      rawRank[internalNodes[0].id] = 0;
       currentLayer.push(internalNodes[0].id);
     }
     let layerIdx = 0;
-    const maxDepth = Math.min(internalNodes.length, 30);
-    while (currentLayer.length > 0 && layerIdx < maxDepth) {
+    const maxSearchDepth = 25;
+    while (currentLayer.length > 0 && layerIdx < maxSearchDepth) {
       const nextLayer = [];
       currentLayer.forEach((u) => {
         (adj[u] || []).forEach((v) => {
           inDegreeWork[v] = (inDegreeWork[v] || 1) - 1;
-          if (inDegreeWork[v] <= 0 && rank[v] === void 0) {
-            rank[v] = layerIdx + 1;
+          if (inDegreeWork[v] <= 0 && rawRank[v] === void 0) {
+            rawRank[v] = layerIdx + 1;
             nextLayer.push(v);
           }
         });
@@ -110488,35 +110491,39 @@ var ElkLayoutEngine = class {
       currentLayer = nextLayer;
       layerIdx++;
     }
-    let unassigned = 0;
+    const rank = {};
+    const maxRawRank = Math.max(1, ...Object.values(rawRank));
+    let unassignedCount = 0;
     internalNodes.forEach((n) => {
-      if (rank[n.id] === void 0) {
-        rank[n.id] = layerIdx + Math.floor(unassigned / 8);
-        unassigned++;
+      if (rawRank[n.id] !== void 0) {
+        const mapped = Math.min(MAX_STAGES - 1, Math.floor(rawRank[n.id] / maxRawRank * (MAX_STAGES - 1)));
+        rank[n.id] = mapped;
+      } else {
+        const mid = 1 + unassignedCount % Math.max(1, MAX_STAGES - 2);
+        rank[n.id] = mid;
+        unassignedCount++;
       }
     });
     const layers = {};
+    for (let s = 0; s < MAX_STAGES; s++)
+      layers[s] = [];
     internalNodes.forEach((n) => {
       const r = rank[n.id] || 0;
-      if (!layers[r])
-        layers[r] = [];
       layers[r].push(n);
     });
-    const sortedLayerRanks = Object.keys(layers).map(Number).sort((a, b) => a - b);
     const nodeYIndex = /* @__PURE__ */ new Map();
-    sortedLayerRanks.forEach((r) => {
-      layers[r].sort((a, b) => {
+    for (let s = 0; s < MAX_STAGES; s++) {
+      layers[s].sort((a, b) => {
         const fComp = (a.filePath || "").localeCompare(b.filePath || "");
         if (fComp !== 0)
           return fComp;
         return a.name.localeCompare(b.name);
       });
-      layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
-    });
-    for (let pass = 0; pass < 3; pass++) {
-      for (let i2 = 1; i2 < sortedLayerRanks.length; i2++) {
-        const r = sortedLayerRanks[i2];
-        layers[r].sort((a, b) => {
+      layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      for (let s = 1; s < MAX_STAGES; s++) {
+        layers[s].sort((a, b) => {
           const getBary = (nId) => {
             const preds = revAdj[nId] || [];
             if (preds.length === 0)
@@ -110529,60 +110536,49 @@ var ElkLayoutEngine = class {
           };
           return getBary(a.id) - getBary(b.id);
         });
-        layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
-      }
-      for (let i2 = sortedLayerRanks.length - 2; i2 >= 0; i2--) {
-        const r = sortedLayerRanks[i2];
-        layers[r].sort((a, b) => {
-          const getBary = (nId) => {
-            const succs = adj[nId] || [];
-            if (succs.length === 0)
-              return nodeYIndex.get(nId) ?? 0;
-            let sum = 0;
-            succs.forEach((s) => {
-              sum += nodeYIndex.get(s) ?? 0;
-            });
-            return sum / succs.length;
-          };
-          return getBary(a.id) - getBary(b.id);
-        });
-        layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+        layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
       }
     }
-    const MAX_PER_COL = internalNodes.length > 100 ? 16 : internalNodes.length > 30 ? 12 : 8;
     const CARD_WIDTH = 220;
     const CARD_HEIGHT = 85;
-    const X_GAP = 60;
-    const Y_GAP = 25;
+    const COL_GAP = 35;
+    const ROW_GAP = 22;
+    const STAGE_GAP = 70;
     const positions = {};
-    let currentX = 300;
+    let currentX = 260;
+    let maxY = 500;
     const inPortsList = options?.inPorts || [];
     inPortsList.forEach((port, idx) => {
       const pId = typeof port === "string" ? `inport_${port}` : port.id;
-      positions[pId] = { x: 50, y: 80 + idx * 70, width: 170, height: 52 };
+      const y = 80 + idx * 65;
+      positions[pId] = { x: 50, y, width: 170, height: 52 };
+      if (y + 52 > maxY)
+        maxY = y + 52;
     });
-    sortedLayerRanks.forEach((r) => {
-      const nodesInLayer = layers[r] || [];
-      const cols = Math.ceil(nodesInLayer.length / MAX_PER_COL) || 1;
-      nodesInLayer.forEach((n, idx) => {
-        const colIdx = Math.floor(idx / MAX_PER_COL);
-        const rowIdx = idx % MAX_PER_COL;
-        const x = currentX + colIdx * (CARD_WIDTH + 35);
-        const y = 80 + rowIdx * (CARD_HEIGHT + Y_GAP);
+    for (let s = 0; s < MAX_STAGES; s++) {
+      const nodesInStage = layers[s];
+      if (nodesInStage.length === 0)
+        continue;
+      const cols = Math.ceil(nodesInStage.length / maxRows) || 1;
+      nodesInStage.forEach((n, idx) => {
+        const colIdx = Math.floor(idx / maxRows);
+        const rowIdx = idx % maxRows;
+        const x = currentX + colIdx * (CARD_WIDTH + COL_GAP);
+        const y = 80 + rowIdx * (CARD_HEIGHT + ROW_GAP);
         positions[n.id] = { x, y, width: CARD_WIDTH, height: CARD_HEIGHT };
+        if (y + CARD_HEIGHT > maxY)
+          maxY = y + CARD_HEIGHT;
       });
-      currentX += cols * (CARD_WIDTH + 35) + X_GAP;
-    });
+      currentX += cols * (CARD_WIDTH + COL_GAP) + STAGE_GAP;
+    }
     const rightX = Math.max(currentX, 850);
     const outPortsList = options?.outPorts || [];
     outPortsList.forEach((port, idx) => {
       const pId = typeof port === "string" ? `outport_${port}` : port.id;
-      positions[pId] = { x: rightX, y: 80 + idx * 70, width: 170, height: 52 };
-    });
-    let maxY = 600;
-    Object.values(positions).forEach((p) => {
-      if (p.y + p.height > maxY)
-        maxY = p.y + p.height;
+      const y = 80 + idx * 65;
+      positions[pId] = { x: rightX, y, width: 170, height: 52 };
+      if (y + 52 > maxY)
+        maxY = y + 52;
     });
     const layoutedNodes = Object.entries(positions).map(([id, p]) => ({
       id,
@@ -110600,8 +110596,8 @@ var ElkLayoutEngine = class {
     return {
       nodes: layoutedNodes,
       edges: layoutedEdges,
-      width: rightX + 240,
-      height: maxY + 100
+      width: rightX + 220,
+      height: maxY + 80
     };
   }
 };
@@ -110822,17 +110818,19 @@ var CodeGraphServer = class {
       if (!body2?.forceRefresh) {
         if (this.drilldownCache.has(moduleId)) {
           const cached = this.drilldownCache.get(moduleId);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            success: true,
-            layout: cached.layout,
-            portEdges: cached.portEdges,
-            fromCache: true
-          }));
-          return;
+          if (cached?.layout?.width && cached.layout.width < 7500) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              success: true,
+              layout: cached.layout,
+              portEdges: cached.portEdges,
+              fromCache: true
+            }));
+            return;
+          }
         }
         const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache) {
+        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 7500) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({

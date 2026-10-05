@@ -257,25 +257,27 @@ export class CodeGraphServer {
         return;
       }
 
-      // 快速缓存命中检测 (0ms 返回，避免重复耗时排版)
+      // 快速缓存命中检测 (0ms 返回，避免重复耗时排版；自动过滤旧版万像素畸变布局)
       if (!body?.forceRefresh) {
         if (this.drilldownCache.has(moduleId)) {
           const cached = this.drilldownCache.get(moduleId);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              success: true,
-              layout: cached.layout,
-              portEdges: cached.portEdges,
-              fromCache: true,
-            })
-          );
-          return;
+          if (cached?.layout?.width && cached.layout.width < 7500) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                success: true,
+                layout: cached.layout,
+                portEdges: cached.portEdges,
+                fromCache: true,
+              })
+            );
+            return;
+          }
         }
 
         // 检测核心引擎与磁盘持久化缓存
         const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache) {
+        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 7500) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(

@@ -177,17 +177,30 @@ body {
 /* 浅色主题下 LOD 外框与底色 */
 .rf-lod-compact .node-compact-card {
   background-color: #ffffff !important;
-  border-color: rgba(71, 85, 105, 0.45) !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(71, 85, 105, 0.7) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 4px 14px rgba(0, 0, 0, 0.1) !important;
 }
 
-/* 深色主题下 LOD 外框与底色：提高卡片与背景的明度差，强化高对比白透边框 */
+/* 深色主题下 LOD 外框与底色：采用 Slate-800 明亮灰蓝与高对比亮框，杜绝缩放被背景吞噬 */
 [data-theme="dark"] .rf-lod-compact .node-compact-card,
 body[data-ds-dark-theme] .rf-lod-compact .node-compact-card,
 .dark .rf-lod-compact .node-compact-card {
-  background-color: #27272a !important;
-  border-color: rgba(255, 255, 255, 0.35) !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.18) !important;
+  background-color: #1e293b !important;
+  border-color: rgba(148, 163, 184, 0.75) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* 端口卡片在 LOD 模式下的专属实体对比度 */
+[data-theme="dark"] .rf-lod-compact .node-compact-card.bg-dsh-green-tint,
+.dark .rf-lod-compact .node-compact-card.bg-dsh-green-tint {
+  background-color: #064e3b !important;
+  border-color: #10b981 !important;
+}
+
+[data-theme="dark"] .rf-lod-compact .node-compact-card.bg-dsh-blue-tint,
+.dark .rf-lod-compact .node-compact-card.bg-dsh-blue-tint {
+  background-color: #1e3a8a !important;
+  border-color: #3b82f6 !important;
 }
 
 /* 悬浮预览：提升层级并高亮外框 */
@@ -225,33 +238,33 @@ body[data-ds-dark-theme] .rf-lod-compact .node-compact-card,
   background-color: #3b82f6 !important;
 }
 
-/* 标题色块：浅色深灰，深色亮灰 */
+/* 标题色块：浅色深灰，深色亮白灰 */
 .node-skeleton-title {
-  background-color: #475569 !important;
+  background-color: #334155 !important;
 }
 [data-theme="dark"] .node-skeleton-title,
 body[data-ds-dark-theme] .node-skeleton-title,
 .dark .node-skeleton-title {
-  background-color: #e2e8f0 !important;
+  background-color: #f8fafc !important;
 }
 
 /* 次要信息/文件路径色块 */
 .node-skeleton-sub {
-  background-color: #94a3b8 !important;
+  background-color: #64748b !important;
 }
 [data-theme="dark"] .node-skeleton-sub,
 body[data-ds-dark-theme] .node-skeleton-sub,
 .dark .node-skeleton-sub {
-  background-color: #64748b !important;
+  background-color: #94a3b8 !important;
 }
 
 .node-skeleton-meta {
-  background-color: #cbd5e1 !important;
+  background-color: #94a3b8 !important;
 }
 [data-theme="dark"] .node-skeleton-meta,
 body[data-ds-dark-theme] .node-skeleton-meta,
 .dark .node-skeleton-meta {
-  background-color: #475569 !important;
+  background-color: #64748b !important;
 }
 
 /* 连线：默认非缩放描边 (vector-effect)，保证小缩放比下连线不被抗锯齿吞噬 */

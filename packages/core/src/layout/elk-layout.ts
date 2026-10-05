@@ -190,32 +190,37 @@ export class ElkLayoutEngine {
       }
     });
 
-    // 1. Kahn 拓扑分层 + 环路安全截断 (Cycle Breaking)
-    const rank: Record<string, number> = {};
+    // 1. 自适应计算目标纵横比与最大行数 (杜绝万像素单行长蛇阵，收敛至 16:9 ~ 4:3 黄金视口)
+    const totalN = internalNodes.length;
+    const maxRows = totalN > 300 ? 28 : totalN > 150 ? 20 : totalN > 50 ? 14 : 8;
+    const MAX_STAGES = totalN > 200 ? 8 : totalN > 60 ? 6 : 4;
+
+    // 2. Kahn 拓扑分层 (带环路安全截断)
+    const rawRank: Record<string, number> = {};
     const inDegreeWork = { ...inDegree };
     let currentLayer: string[] = [];
 
     internalNodes.forEach((n) => {
       if ((inDegreeWork[n.id] || 0) === 0) {
-        rank[n.id] = 0;
+        rawRank[n.id] = 0;
         currentLayer.push(n.id);
       }
     });
 
     if (currentLayer.length === 0 && internalNodes.length > 0) {
-      rank[internalNodes[0].id] = 0;
+      rawRank[internalNodes[0].id] = 0;
       currentLayer.push(internalNodes[0].id);
     }
 
     let layerIdx = 0;
-    const maxDepth = Math.min(internalNodes.length, 30);
-    while (currentLayer.length > 0 && layerIdx < maxDepth) {
+    const maxSearchDepth = 25;
+    while (currentLayer.length > 0 && layerIdx < maxSearchDepth) {
       const nextLayer: string[] = [];
       currentLayer.forEach((u) => {
         (adj[u] || []).forEach((v) => {
           inDegreeWork[v] = (inDegreeWork[v] || 1) - 1;
-          if (inDegreeWork[v] <= 0 && rank[v] === undefined) {
-            rank[v] = layerIdx + 1;
+          if (inDegreeWork[v] <= 0 && rawRank[v] === undefined) {
+            rawRank[v] = layerIdx + 1;
             nextLayer.push(v);
           }
         });
@@ -224,43 +229,47 @@ export class ElkLayoutEngine {
       layerIdx++;
     }
 
-    // 环路残留节点平滑分派
-    let unassigned = 0;
+    // 3. 映射收敛至主阶段列数 [0, MAX_STAGES - 1]，环路与未遍历节点均匀落入中间处理阶段
+    const rank: Record<string, number> = {};
+    const maxRawRank = Math.max(1, ...Object.values(rawRank));
+    let unassignedCount = 0;
+
     internalNodes.forEach((n) => {
-      if (rank[n.id] === undefined) {
-        rank[n.id] = layerIdx + Math.floor(unassigned / 8);
-        unassigned++;
+      if (rawRank[n.id] !== undefined) {
+        const mapped = Math.min(
+          MAX_STAGES - 1,
+          Math.floor((rawRank[n.id] / maxRawRank) * (MAX_STAGES - 1))
+        );
+        rank[n.id] = mapped;
+      } else {
+        const mid = 1 + (unassignedCount % Math.max(1, MAX_STAGES - 2));
+        rank[n.id] = mid;
+        unassignedCount++;
       }
     });
 
-    // 2. 按层分组
+    // 4. 按层分组
     const layers: Record<number, CodeNode[]> = {};
+    for (let s = 0; s < MAX_STAGES; s++) layers[s] = [];
     internalNodes.forEach((n) => {
       const r = rank[n.id] || 0;
-      if (!layers[r]) layers[r] = [];
       layers[r].push(n);
     });
 
-    const sortedLayerRanks = Object.keys(layers).map(Number).sort((a, b) => a - b);
-
-    // 3. 跨层重心启发式排序 (Barycenter Crossing Minimization)
-    // 初始同层排版：优先同源文件聚类保持代码内聚性
+    // 跨层重心启发式排序 (Barycenter Crossing Minimization) + 同源文件局部聚类
     const nodeYIndex = new Map<string, number>();
-    sortedLayerRanks.forEach((r) => {
-      layers[r].sort((a, b) => {
+    for (let s = 0; s < MAX_STAGES; s++) {
+      layers[s].sort((a, b) => {
         const fComp = (a.filePath || '').localeCompare(b.filePath || '');
         if (fComp !== 0) return fComp;
         return a.name.localeCompare(b.name);
       });
-      layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
-    });
+      layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+    }
 
-    // 3 轮正反向重心平滑扫层，将有调用关系的节点在纵向(Y轴)尽量拉平对齐，大幅消减交叉线
-    for (let pass = 0; pass < 3; pass++) {
-      // 正向扫层 (基于前驱节点对齐)
-      for (let i = 1; i < sortedLayerRanks.length; i++) {
-        const r = sortedLayerRanks[i];
-        layers[r].sort((a, b) => {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let s = 1; s < MAX_STAGES; s++) {
+        layers[s].sort((a, b) => {
           const getBary = (nId: string) => {
             const preds = revAdj[nId] || [];
             if (preds.length === 0) return nodeYIndex.get(nId) ?? 0;
@@ -270,69 +279,56 @@ export class ElkLayoutEngine {
           };
           return getBary(a.id) - getBary(b.id);
         });
-        layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
-      }
-
-      // 反向扫层 (基于后继节点对齐)
-      for (let i = sortedLayerRanks.length - 2; i >= 0; i--) {
-        const r = sortedLayerRanks[i];
-        layers[r].sort((a, b) => {
-          const getBary = (nId: string) => {
-            const succs = adj[nId] || [];
-            if (succs.length === 0) return nodeYIndex.get(nId) ?? 0;
-            let sum = 0;
-            succs.forEach((s) => { sum += (nodeYIndex.get(s) ?? 0); });
-            return sum / succs.length;
-          };
-          return getBary(a.id) - getBary(b.id);
-        });
-        layers[r].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+        layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
       }
     }
 
-    // 4. 坐标映射与自适应多列折叠 (每列自适应上限 8~16 行，保持黄金宽高比)
-    const MAX_PER_COL = internalNodes.length > 100 ? 16 : internalNodes.length > 30 ? 12 : 8;
+    // 5. 坐标网格化分配与多列折叠
     const CARD_WIDTH = 220;
     const CARD_HEIGHT = 85;
-    const X_GAP = 60;
-    const Y_GAP = 25;
+    const COL_GAP = 35;
+    const ROW_GAP = 22;
+    const STAGE_GAP = 70;
 
     const positions: Record<string, { x: number; y: number; width: number; height: number }> = {};
-    let currentX = 300;
+    let currentX = 260;
+    let maxY = 500;
 
-    // In-Ports 放置在左侧 X=50
+    // In-Ports 排布在最左列 X=50
     const inPortsList = options?.inPorts || [];
     inPortsList.forEach((port, idx) => {
       const pId = typeof port === 'string' ? `inport_${port}` : port.id;
-      positions[pId] = { x: 50, y: 80 + idx * 70, width: 170, height: 52 };
+      const y = 80 + idx * 65;
+      positions[pId] = { x: 50, y, width: 170, height: 52 };
+      if (y + 52 > maxY) maxY = y + 52;
     });
 
-    sortedLayerRanks.forEach((r) => {
-      const nodesInLayer = layers[r] || [];
-      const cols = Math.ceil(nodesInLayer.length / MAX_PER_COL) || 1;
+    for (let s = 0; s < MAX_STAGES; s++) {
+      const nodesInStage = layers[s];
+      if (nodesInStage.length === 0) continue;
 
-      nodesInLayer.forEach((n, idx) => {
-        const colIdx = Math.floor(idx / MAX_PER_COL);
-        const rowIdx = idx % MAX_PER_COL;
-        const x = currentX + colIdx * (CARD_WIDTH + 35);
-        const y = 80 + rowIdx * (CARD_HEIGHT + Y_GAP);
+      const cols = Math.ceil(nodesInStage.length / maxRows) || 1;
+
+      nodesInStage.forEach((n, idx) => {
+        const colIdx = Math.floor(idx / maxRows);
+        const rowIdx = idx % maxRows;
+        const x = currentX + colIdx * (CARD_WIDTH + COL_GAP);
+        const y = 80 + rowIdx * (CARD_HEIGHT + ROW_GAP);
         positions[n.id] = { x, y, width: CARD_WIDTH, height: CARD_HEIGHT };
+        if (y + CARD_HEIGHT > maxY) maxY = y + CARD_HEIGHT;
       });
 
-      currentX += cols * (CARD_WIDTH + 35) + X_GAP;
-    });
+      currentX += cols * (CARD_WIDTH + COL_GAP) + STAGE_GAP;
+    }
 
-    // Out-Ports 放置在最右侧
+    // Out-Ports 排布在最右列
     const rightX = Math.max(currentX, 850);
     const outPortsList = options?.outPorts || [];
     outPortsList.forEach((port, idx) => {
       const pId = typeof port === 'string' ? `outport_${port}` : port.id;
-      positions[pId] = { x: rightX, y: 80 + idx * 70, width: 170, height: 52 };
-    });
-
-    let maxY = 600;
-    Object.values(positions).forEach((p) => {
-      if (p.y + p.height > maxY) maxY = p.y + p.height;
+      const y = 80 + idx * 65;
+      positions[pId] = { x: rightX, y, width: 170, height: 52 };
+      if (y + 52 > maxY) maxY = y + 52;
     });
 
     const layoutedNodes: LayoutedNode[] = Object.entries(positions).map(([id, p]) => ({
@@ -353,8 +349,8 @@ export class ElkLayoutEngine {
     return {
       nodes: layoutedNodes,
       edges: layoutedEdges,
-      width: rightX + 240,
-      height: maxY + 100,
+      width: rightX + 220,
+      height: maxY + 80,
     };
   }
 }
