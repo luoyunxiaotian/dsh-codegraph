@@ -31,6 +31,7 @@ import {
   Maximize2,
   Workflow,
   BookOpen,
+  Wand2,
 } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard } from '../utils/chatBridge.js';
@@ -38,11 +39,12 @@ import { useTheme } from '../context/ThemeContext.js';
 
 interface ProcessFlowCanvasProps {
   flows: ProcessFlow[];
+  workspaceRoot?: string;
   onSelectNode: (nodeId: string, filePath: string, line: number) => void;
 }
 
 // DeepSeek Harness 风格时序步骤卡片
-const FlowStepNode = ({ data }: NodeProps) => {
+const FlowStepNode = React.memo(({ data }: NodeProps) => {
   const step = data.step as ProcessFlowStep;
   const onSelectNode = data.onSelectNode as (id: string, path: string, line: number) => void;
 
@@ -101,7 +103,7 @@ const FlowStepNode = ({ data }: NodeProps) => {
       </div>
     </div>
   );
-};
+});
 
 // 带条件标签的时序平滑连线
 const FlowSmoothEdge = ({
@@ -147,7 +149,30 @@ const FlowSmoothEdge = ({
   );
 };
 
-export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onSelectNode }) => {
+// 业务流程卡片坐标持久化 (Memory + LocalStorage, 按 flowId 隔离)
+const flowPositionsMemoryCache = new Map<string, Record<string, { x: number; y: number }>>();
+
+function getPersistedFlowPositions(workspaceRoot: string | undefined, flowId: string): Record<string, { x: number; y: number }> | null {
+  try {
+    const key = `dsh_cg_flow_pos_${workspaceRoot || 'default'}_${flowId}`;
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.warn('Failed to read flow positions from localStorage', e);
+  }
+  return null;
+}
+
+function savePersistedFlowPositions(workspaceRoot: string | undefined, flowId: string, pos: Record<string, { x: number; y: number }>) {
+  try {
+    const key = `dsh_cg_flow_pos_${workspaceRoot || 'default'}_${flowId}`;
+    localStorage.setItem(key, JSON.stringify(pos));
+  } catch (e) {
+    console.warn('Failed to save flow positions to localStorage', e);
+  }
+}
+
+export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, workspaceRoot, onSelectNode }) => {
   const { isDark } = useTheme();
   const [selectedFlowIndex, setSelectedFlowIndex] = useState<number>(0);
   const currentFlow = flows[selectedFlowIndex] || flows[0];
@@ -159,6 +184,52 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
 
+  // 步骤卡片当前绝对坐标池 (优先读取内存/LocalStorage，无则使用默认排版)
+  const [stepPositions, setStepPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  // 首次或切换业务流程时加载当前流程的坐标
+  useEffect(() => {
+    if (!currentFlow) return;
+    const memKey = `${workspaceRoot || 'default'}_${currentFlow.flowId}`;
+    const mem = flowPositionsMemoryCache.get(memKey);
+    if (mem && Object.keys(mem).length > 0) {
+      setStepPositions(mem);
+      return;
+    }
+    const stored = getPersistedFlowPositions(workspaceRoot, currentFlow.flowId);
+    if (stored && Object.keys(stored).length > 0) {
+      flowPositionsMemoryCache.set(memKey, stored);
+      setStepPositions(stored);
+      return;
+    }
+    // 默认排版
+    const initial: Record<string, { x: number; y: number }> = {};
+    currentFlow.steps.forEach((s, idx) => {
+      initial[s.id] = {
+        x: 350 + (idx % 2 === 1 ? 60 : -60) * (idx > 3 ? 1 : 0),
+        y: 60 + idx * 110,
+      };
+    });
+    setStepPositions(initial);
+  }, [currentFlow?.flowId, workspaceRoot]);
+
+  // 重置当前流程排版
+  const handleResetFlowLayout = useCallback(() => {
+    if (!currentFlow) return;
+    const initial: Record<string, { x: number; y: number }> = {};
+    currentFlow.steps.forEach((s, idx) => {
+      initial[s.id] = {
+        x: 350 + (idx % 2 === 1 ? 60 : -60) * (idx > 3 ? 1 : 0),
+        y: 60 + idx * 110,
+      };
+    });
+    setStepPositions(initial);
+    const memKey = `${workspaceRoot || 'default'}_${currentFlow.flowId}`;
+    flowPositionsMemoryCache.set(memKey, initial);
+    savePersistedFlowPositions(workspaceRoot, currentFlow.flowId, initial);
+    rfInstance?.fitView({ duration: 300 });
+  }, [currentFlow, workspaceRoot, rfInstance]);
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -166,6 +237,7 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
     items: ContextMenuItem[];
   } | null>(null);
 
+  // 同步节点与连线：从 stepPositions 稳定读取坐标，点击查看源码/抽屉时绝不归位！
   useEffect(() => {
     if (!currentFlow) {
       setNodes([]);
@@ -173,18 +245,23 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
       return;
     }
 
-    const flowNodes = currentFlow.steps.map((s, idx) => ({
-      id: s.id,
-      type: 'flowStep',
-      position: {
+    const flowNodes = currentFlow.steps.map((s, idx) => {
+      const defaultPos = {
         x: 350 + (idx % 2 === 1 ? 60 : -60) * (idx > 3 ? 1 : 0),
         y: 60 + idx * 110,
-      },
-      data: {
-        step: s,
-        onSelectNode,
-      },
-    }));
+      };
+      const pos = stepPositions[s.id] || defaultPos;
+
+      return {
+        id: s.id,
+        type: 'flowStep',
+        position: pos,
+        data: {
+          step: s,
+          onSelectNode,
+        },
+      };
+    });
 
     const flowEdges = currentFlow.edges.map((e, idx) => ({
       id: `flow_e_${idx}`,
@@ -196,7 +273,7 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [currentFlow, onSelectNode, setNodes, setEdges]);
+  }, [currentFlow, stepPositions, onSelectNode, setNodes, setEdges]);
 
   // 步骤卡片右键菜单
   const handleNodeContextMenu = useCallback(
@@ -315,7 +392,7 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
   return (
     <div className="relative w-full h-[calc(100vh-56px)] bg-dsh-base">
       {/* 顶部流程选择栏 */}
-      <div className="absolute top-3.5 left-3.5 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dsh-layer1 border border-dsh-border2 shadow-md">
+      <div className="absolute top-3.5 left-3.5 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md">
         <GitBranch className="w-4 h-4 text-dsh-blue ml-0.5" />
         <span className="text-[13px] text-dsh-secondary font-medium">业务流程:</span>
         <select
@@ -329,6 +406,24 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
             </option>
           ))}
         </select>
+
+        <button
+          onClick={handleResetFlowLayout}
+          title="恢复当前流程的默认分层排版"
+          className="ml-2 flex items-center gap-1.5 px-2.5 py-1 rounded bg-dsh-layer2 hover:bg-dsh-border1 text-dsh-secondary hover:text-dsh-primary text-[12px] border border-dsh-border1 transition-colors"
+        >
+          <Wand2 className="w-3.5 h-3.5 text-dsh-blue" />
+          <span>恢复默认排版</span>
+        </button>
+
+        <button
+          onClick={() => rfInstance?.fitView({ duration: 300 })}
+          title="将当前时序链居中适屏"
+          className="flex items-center gap-1.5 px-2 py-1 rounded bg-dsh-layer2 hover:bg-dsh-border1 text-dsh-secondary hover:text-dsh-primary text-[12px] border border-dsh-border1 transition-colors"
+        >
+          <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>适屏</span>
+        </button>
       </div>
 
       <ReactFlow
@@ -338,10 +433,25 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, onS
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onlyRenderVisibleElements={true}
         onInit={setRfInstance}
+        onNodeDragStop={(_, node) => {
+          if (!currentFlow) return;
+          setStepPositions((prev) => {
+            const updated = {
+              ...prev,
+              [node.id]: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
+            };
+            const memKey = `${workspaceRoot || 'default'}_${currentFlow.flowId}`;
+            flowPositionsMemoryCache.set(memKey, updated);
+            savePersistedFlowPositions(workspaceRoot, currentFlow.flowId, updated);
+            return updated;
+          });
+        }}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView
+        nodeDragThreshold={2}
         minZoom={0.3}
         maxZoom={2.0}
       >

@@ -43,6 +43,7 @@ interface ArchitectureCanvasProps {
   modules: ModuleContainer[];
   buses: ModuleBus[];
   layout?: LayoutResult;
+  workspaceRoot?: string;
   onDrillDown: (moduleId: string) => void;
 }
 
@@ -235,10 +236,34 @@ const BusEdge = ({
   );
 };
 
+// 宏观架构卡片位置持久化缓存 (Memory + LocalStorage)
+const archPositionsMemoryCache = new Map<string, Record<string, { x: number; y: number }>>();
+
+function getPersistedArchPositions(workspaceRoot?: string): Record<string, { x: number; y: number }> | null {
+  try {
+    const key = `dsh_cg_arch_pos_${workspaceRoot || 'default'}`;
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.warn('Failed to read architecture positions from localStorage', e);
+  }
+  return null;
+}
+
+function savePersistedArchPositions(workspaceRoot: string | undefined, pos: Record<string, { x: number; y: number }>) {
+  try {
+    const key = `dsh_cg_arch_pos_${workspaceRoot || 'default'}`;
+    localStorage.setItem(key, JSON.stringify(pos));
+  } catch (e) {
+    console.warn('Failed to save architecture positions to localStorage', e);
+  }
+}
+
 export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
   modules,
   buses,
   layout,
+  workspaceRoot,
   onDrillDown,
 }) => {
   const { isDark } = useTheme();
@@ -269,9 +294,45 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
 
   const [currentLayout, setCurrentLayout] = useState<LayoutResult | undefined>(layout);
 
+  // 模块卡片坐标池 (优先读取内存/LocalStorage，无则使用当前计算布局)
+  const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>(() => {
+    const mem = archPositionsMemoryCache.get(workspaceRoot || 'default');
+    if (mem && Object.keys(mem).length > 0) return mem;
+    const stored = getPersistedArchPositions(workspaceRoot);
+    if (stored && Object.keys(stored).length > 0) {
+      archPositionsMemoryCache.set(workspaceRoot || 'default', stored);
+      return stored;
+    }
+    const initial: Record<string, { x: number; y: number }> = {};
+    if (layout?.nodes) {
+      layout.nodes.forEach((n) => {
+        initial[n.id] = { x: n.x, y: n.y };
+      });
+    }
+    return initial;
+  });
+
+  // 当外部 layout 传入且当前缺少部分模块坐标时同步补充
   useEffect(() => {
     setCurrentLayout(layout);
-  }, [layout]);
+    if (layout?.nodes && layout.nodes.length > 0) {
+      setNodePositions((prev) => {
+        const updated = { ...prev };
+        let hasNew = false;
+        layout.nodes.forEach((n) => {
+          if (!updated[n.id]) {
+            updated[n.id] = { x: n.x, y: n.y };
+            hasNew = true;
+          }
+        });
+        if (hasNew) {
+          archPositionsMemoryCache.set(workspaceRoot || 'default', updated);
+          savePersistedArchPositions(workspaceRoot, updated);
+        }
+        return updated;
+      });
+    }
+  }, [layout, workspaceRoot]);
 
   // 2. 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
@@ -281,7 +342,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     items: ContextMenuItem[];
   } | null>(null);
 
-  // 1. 同步节点：仅在模块、布局或点击选中变更时更新，悬浮(hover)绝不重建节点！
+  // 1. 同步节点：仅在模块、坐标池或点击选中变更时更新，从 nodePositions 稳定读取坐标，点击绝不重置归位！
   useEffect(() => {
     const connectedModIds = new Set<string>();
     if (selectedModuleId) {
@@ -296,6 +357,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
 
     const computedNodes = modules.map((m) => {
       const layoutPos = currentLayout?.nodes.find((n) => n.id === m.id);
+      const pos = nodePositions[m.id] || (layoutPos ? { x: layoutPos.x, y: layoutPos.y } : { x: 100, y: 100 });
       const isFocused = selectedModuleId === m.id;
       const isConnected = Boolean(selectedModuleId && connectedModIds.has(m.id));
       const isDimmed = Boolean(selectedModuleId && !connectedModIds.has(m.id));
@@ -303,10 +365,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
       return {
         id: m.id,
         type: 'moduleCard',
-        position: {
-          x: layoutPos ? layoutPos.x : 100,
-          y: layoutPos ? layoutPos.y : 100,
-        },
+        position: pos,
         zIndex: isFocused ? 30 : isConnected ? 20 : 10,
         data: {
           module: m,
@@ -319,7 +378,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     });
 
     setNodes(computedNodes);
-  }, [modules, currentLayout, selectedModuleId, buses, onDrillDown, setNodes]);
+  }, [modules, nodePositions, currentLayout, selectedModuleId, buses, onDrillDown, setNodes]);
 
   // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画
   useEffect(() => {
@@ -382,8 +441,16 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
       const res = await fetch('/api/layout-architecture', { method: 'POST' });
       const data = await res.json();
       if (data.success && data.layout?.architecture) {
-        setCurrentLayout(data.layout.architecture);
-        showToast('✓ 已使用 ELK Sugiyama 正交分层完成智能理线');
+        const arch = data.layout.architecture;
+        const newPos: Record<string, { x: number; y: number }> = {};
+        arch.nodes.forEach((n: any) => {
+          newPos[n.id] = { x: n.x, y: n.y };
+        });
+        setNodePositions(newPos);
+        archPositionsMemoryCache.set(workspaceRoot || 'default', newPos);
+        savePersistedArchPositions(workspaceRoot, newPos);
+        setCurrentLayout(arch);
+        showToast('✓ 已使用 ELK Sugiyama 正交分层完成智能理线并自动保存');
         setTimeout(() => rfInstance?.fitView({ duration: 400 }), 50);
         return;
       }
@@ -394,22 +461,17 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     }
 
     if (currentLayout) {
-      setNodes((prevNodes: Node[]) =>
-        prevNodes.map((n) => {
-          const layoutPos = currentLayout.nodes.find((ln) => ln.id === n.id);
-          return {
-            ...n,
-            position: {
-              x: layoutPos ? layoutPos.x : 100,
-              y: layoutPos ? layoutPos.y : 100,
-            },
-          };
-        })
-      );
+      const newPos: Record<string, { x: number; y: number }> = {};
+      currentLayout.nodes.forEach((n: any) => {
+        newPos[n.id] = { x: n.x, y: n.y };
+      });
+      setNodePositions(newPos);
+      archPositionsMemoryCache.set(workspaceRoot || 'default', newPos);
+      savePersistedArchPositions(workspaceRoot, newPos);
       rfInstance?.fitView({ duration: 300 });
       showToast('✓ 已恢复标准正交分层排版');
     }
-  }, [currentLayout, rfInstance, setNodes]);
+  }, [currentLayout, workspaceRoot, rfInstance]);
 
   // 卡片右键处理
   const handleNodeContextMenu = useCallback(
@@ -564,6 +626,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onlyRenderVisibleElements={true}
         onInit={(instance) => {
           setRfInstance(instance);
           const initialCompact = instance.getZoom() < 0.55;
@@ -574,6 +637,17 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         onNodeClick={(_, node) => setSelectedModuleId((prev) => (prev === node.id ? null : node.id))}
         onNodeDoubleClick={(_, node) => onDrillDown(node.id)}
         onPaneClick={() => setSelectedModuleId(null)}
+        onNodeDragStop={(_, node) => {
+          setNodePositions((prev) => {
+            const updated = {
+              ...prev,
+              [node.id]: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
+            };
+            archPositionsMemoryCache.set(workspaceRoot || 'default', updated);
+            savePersistedArchPositions(workspaceRoot, updated);
+            return updated;
+          });
+        }}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView

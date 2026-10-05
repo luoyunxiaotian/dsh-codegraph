@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { SetupView } from './components/SetupView.js';
 import { TopBar } from './components/TopBar.js';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas.js';
@@ -229,17 +229,20 @@ export const App: React.FC = () => {
   };
 
   // 模块下钻
-  const handleDrillDown = (moduleId: string) => {
+  const handleDrillDown = useCallback((moduleId: string) => {
     setSelectedModuleId(moduleId);
     setCurrentView('drilldown');
-  };
+  }, []);
 
   // 点击符号查看源码
-  const handleSelectNode = (nodeId: string) => {
-    if (graphData && graphData.allNodes[nodeId]) {
-      setActiveCodeNode(graphData.allNodes[nodeId]);
-    }
-  };
+  const handleSelectNode = useCallback(
+    (nodeId: string) => {
+      if (graphData && graphData.allNodes[nodeId]) {
+        setActiveCodeNode(graphData.allNodes[nodeId]);
+      }
+    },
+    [graphData]
+  );
 
   // 原型手动切换
   const handleArchetypeChange = (newArch: ArchetypeType) => {
@@ -305,6 +308,7 @@ export const App: React.FC = () => {
             modules={graphData.architectureView.modules}
             buses={graphData.architectureView.buses}
             layout={layoutData}
+            workspaceRoot={workspaceRoot}
             onDrillDown={handleDrillDown}
           />
         )}
@@ -312,6 +316,7 @@ export const App: React.FC = () => {
         {currentView === 'flow' && (
           <ProcessFlowCanvas
             flows={graphData.processFlows}
+            workspaceRoot={workspaceRoot}
             onSelectNode={handleSelectNode}
           />
         )}
