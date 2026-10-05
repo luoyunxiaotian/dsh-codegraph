@@ -250,7 +250,6 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
 
   // 连线与聚焦点控制
   const [routingMode, setRoutingMode] = useState<'smoothstep' | 'bezier'>('smoothstep');
-  const [hoveredModuleId, setHoveredModuleId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [isUntangling, setIsUntangling] = useState<boolean>(false);
   const [currentLayout, setCurrentLayout] = useState<LayoutResult | undefined>(layout);
@@ -258,8 +257,6 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
   useEffect(() => {
     setCurrentLayout(layout);
   }, [layout]);
-
-  const focusedModuleId = selectedModuleId || hoveredModuleId;
 
   // 2. 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
@@ -295,6 +292,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           x: layoutPos ? layoutPos.x : 100,
           y: layoutPos ? layoutPos.y : 100,
         },
+        zIndex: isFocused ? 30 : isConnected ? 20 : 10,
         data: {
           module: m,
           onDrillDown,
@@ -308,25 +306,25 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     setNodes(computedNodes);
   }, [modules, currentLayout, selectedModuleId, buses, onDrillDown, setNodes]);
 
-  // 2. 同步边：轻量更新边的状态与样式，支持 hover/click 聚焦点无闪烁渲染
+  // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画
   useEffect(() => {
     const connectedBusIds = new Set<string>();
-    if (focusedModuleId) {
+    if (selectedModuleId) {
       buses.forEach((b) => {
-        if (b.sourceModule === focusedModuleId || b.targetModule === focusedModuleId) {
+        if (b.sourceModule === selectedModuleId || b.targetModule === selectedModuleId) {
           connectedBusIds.add(b.id);
         }
       });
     }
 
     const computedEdges = buses.map((b) => {
-      const isConnected = focusedModuleId ? connectedBusIds.has(b.id) : true;
-      const isOutgoing = focusedModuleId && b.sourceModule === focusedModuleId;
-      const isIncoming = focusedModuleId && b.targetModule === focusedModuleId;
-      const isDimmed = Boolean(focusedModuleId && !isConnected);
+      const isConnected = selectedModuleId ? connectedBusIds.has(b.id) : true;
+      const isOutgoing = selectedModuleId && b.sourceModule === selectedModuleId;
+      const isIncoming = selectedModuleId && b.targetModule === selectedModuleId;
+      const isDimmed = Boolean(selectedModuleId && !isConnected);
 
-      let strokeColor = isDark ? 'rgba(99, 102, 241, 0.65)' : 'rgba(79, 70, 229, 0.65)';
-      if (focusedModuleId) {
+      let strokeColor = isDark ? 'rgba(99, 102, 241, 0.35)' : 'rgba(79, 70, 229, 0.35)';
+      if (selectedModuleId) {
         if (isOutgoing) {
           strokeColor = '#3b82f6';
         } else if (isIncoming) {
@@ -341,26 +339,25 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         source: b.sourceModule,
         target: b.targetModule,
         type: 'busEdge',
-        animated: Boolean(focusedModuleId && isConnected),
-        zIndex: focusedModuleId ? (isConnected ? 20 : 1) : 5,
+        animated: Boolean(selectedModuleId && isConnected), // 仅在选中对应模块时播放虚线流动动画
+        zIndex: selectedModuleId ? (isConnected ? 5 : 0) : 0, // 连线沉于底层，绝不遮挡卡片
         style: {
           stroke: strokeColor,
-          strokeWidth: focusedModuleId ? (isConnected ? 3 : 1) : 2,
-          opacity: focusedModuleId ? (isConnected ? 1 : 0.08) : 0.85,
-          transition: 'stroke 0.15s ease, opacity 0.15s ease, stroke-width 0.15s ease',
+          strokeWidth: selectedModuleId ? (isConnected ? 2.5 : 1) : 1.2,
+          opacity: selectedModuleId ? (isConnected ? 1 : 0.06) : 0.4,
         },
         data: {
           callCount: b.callCount,
           symbols: b.symbols,
           routingMode,
-          isFocused: focusedModuleId && isConnected,
+          isFocused: selectedModuleId && isConnected,
           isDimmed,
         },
       };
     });
 
     setEdges(computedEdges);
-  }, [buses, focusedModuleId, routingMode, isDark, setEdges]);
+  }, [buses, selectedModuleId, routingMode, isDark, setEdges]);
 
   // 重置 / 一键排版为算法分层布局
   const handleResetLayout = useCallback(async () => {
@@ -533,7 +530,6 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
           <button
             onClick={() => {
               setSelectedModuleId(null);
-              setHoveredModuleId(null);
             }}
             title="点击退出锁定聚焦模式"
             className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all text-[12px]"
@@ -553,25 +549,15 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={setRfInstance}
-        onNodeMouseEnter={(_, node) => {
-          if (!selectedModuleId) {
-            setHoveredModuleId(node.id);
-          }
-        }}
-        onNodeMouseLeave={() => {
-          if (!selectedModuleId) {
-            setHoveredModuleId(null);
-          }
-        }}
         onNodeClick={(_, node) => setSelectedModuleId((prev) => (prev === node.id ? null : node.id))}
         onNodeDoubleClick={(_, node) => onDrillDown(node.id)}
-        onPaneClick={() => {
-          setSelectedModuleId(null);
-          setHoveredModuleId(null);
-        }}
+        onPaneClick={() => setSelectedModuleId(null)}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView
+        onlyRenderVisibleElements={true}
+        nodeDragThreshold={2}
+        elevateNodesOnSelect={true}
         minZoom={0.2}
         maxZoom={2.5}
       >

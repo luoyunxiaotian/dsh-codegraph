@@ -103,21 +103,37 @@ body {
   background: var(--dsw-scrollbar-hover);
 }
 
-/* React Flow 全局自适应背景 */
+/* React Flow 全局自适应背景与层级优化 (保证连线永远在卡片底层，绝不遮挡卡片内容) */
 .react-flow__background {
   background-color: var(--dsw-alias-bg-base) !important;
 }
 
-.react-flow__edge-path {
-  stroke: var(--dsw-rf-edge) !important;
-  stroke-width: 1.5 !important;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+.react-flow__edges {
+  z-index: 1 !important;
+  pointer-events: none;
 }
 
-.react-flow__edge.selected .react-flow__edge-path,
-.react-flow__edge:hover .react-flow__edge-path {
-  stroke: #4176e6 !important;
-  stroke-width: 2.5 !important;
+.react-flow__nodes {
+  z-index: 10 !important;
+}
+
+/* 硬件加速图层，大幅提升大图谱 (500+ 卡片) 拖拽、平移与缩放跟手率 */
+.react-flow__viewport {
+  will-change: transform;
+}
+
+.react-flow__node {
+  will-change: transform;
+}
+
+.react-flow__edge-path {
+  stroke: var(--dsw-rf-edge);
+  stroke-width: 1;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #4176e6;
+  stroke-width: 2.2;
 }
 
 .react-flow__handle {
@@ -136,7 +152,7 @@ body {
 }
 
 .flow-running-edge .react-flow__edge-path {
-  stroke: #4176e6 !important;
+  stroke: #4176e6;
   stroke-dasharray: 4 4;
   animation: dshFlowDash 1.2s linear infinite;
 }

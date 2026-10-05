@@ -426,7 +426,6 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   // 连线与理线控制状态
   const [routingMode, setRoutingMode] = useState<'smoothstep' | 'bezier'>('smoothstep');
   const [filterCallsOnly, setFilterCallsOnly] = useState<boolean>(false);
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isUntangling, setIsUntangling] = useState<boolean>(false);
 
@@ -658,6 +657,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         position: pos,
         width: 170,
         height: 52,
+        zIndex: isFocused ? 30 : isConnected ? 20 : 10,
         data: { name: port, portType: 'IN', isFocused, isConnected, isDimmed },
       });
     });
@@ -675,6 +675,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         position: pos,
         width: 220,
         height: 85,
+        zIndex: isFocused ? 30 : isConnected ? 20 : 10,
         data: { node: n, onSelectNode, isFocused, isConnected, isDimmed },
       });
     });
@@ -693,6 +694,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         position: pos,
         width: 170,
         height: 52,
+        zIndex: isFocused ? 30 : isConnected ? 20 : 10,
         data: { name: port, portType: 'OUT', isFocused, isConnected, isDimmed },
       });
     });
@@ -700,36 +702,35 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     setNodes(reactNodes);
   }, [module, internalNodes, nodePositions, selectedNodeId, rawEdges, onSelectNode, setNodes]);
 
-  // 2. 同步边：轻量更新边的状态与样式，支持 hover 与 click 聚焦点无闪烁渲染
-  const focusedNodeId = selectedNodeId || hoveredNodeId;
-
+  // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画，未选中时全量静态化且沉底
   useEffect(() => {
     const connectedEdgeIds = new Set<string>();
-    if (focusedNodeId) {
+    if (selectedNodeId) {
       rawEdges.forEach((e) => {
-        if (e.source === focusedNodeId || e.target === focusedNodeId) {
+        if (e.source === selectedNodeId || e.target === selectedNodeId) {
           connectedEdgeIds.add(e.id);
         }
       });
     }
 
     const reactEdges = rawEdges.map((e) => {
-      const isConnected = focusedNodeId ? connectedEdgeIds.has(e.id) : true;
-      const isOutgoing = focusedNodeId && e.source === focusedNodeId;
-      const isIncoming = focusedNodeId && e.target === focusedNodeId;
+      const isConnected = selectedNodeId ? connectedEdgeIds.has(e.id) : true;
+      const isOutgoing = selectedNodeId && e.source === selectedNodeId;
+      const isIncoming = selectedNodeId && e.target === selectedNodeId;
 
-      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.45)';
+      // 默认常态：极细淡灰/淡紫，不透明度收敛至 0.22~0.25，沉于卡片最底层，绝不遮挡文字
+      let strokeColor = isDark ? 'rgba(148, 163, 184, 0.22)' : 'rgba(100, 116, 139, 0.25)';
       if (e.isPortEdge) {
-        strokeColor = isDark ? '#818cf8' : '#6366f1';
+        strokeColor = isDark ? 'rgba(129, 140, 248, 0.35)' : 'rgba(99, 102, 241, 0.35)';
       }
 
-      if (focusedNodeId) {
+      if (selectedNodeId) {
         if (isOutgoing) {
           strokeColor = '#3b82f6'; // 出站: 天蓝
         } else if (isIncoming) {
           strokeColor = '#10b981'; // 入站: 翠绿
         } else {
-          strokeColor = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+          strokeColor = isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)';
         }
       }
 
@@ -739,20 +740,18 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         target: e.target,
         type: routingMode === 'smoothstep' ? 'smoothstep' : 'default',
         pathOptions: routingMode === 'smoothstep' ? { borderRadius: 16 } : undefined,
-        animated: Boolean(focusedNodeId && isConnected),
-        zIndex: focusedNodeId ? (isConnected ? 20 : 1) : 5,
+        animated: Boolean(selectedNodeId && isConnected), // 仅在选中卡片后播放虚线流动动画！未选中时绝不播放
+        zIndex: selectedNodeId ? (isConnected ? 5 : 0) : 0, // 连线层级永远在卡片(zIndex>=10)底层，彻底避免覆盖卡片内容
         style: {
           stroke: strokeColor,
-          strokeWidth: focusedNodeId ? (isConnected ? 2.5 : 1) : e.isPortEdge ? 1.6 : 1.4,
-          opacity: focusedNodeId ? (isConnected ? 1 : 0.08) : 0.75,
-          strokeDasharray: e.isPortEdge && !focusedNodeId ? '4 4' : undefined,
-          transition: 'stroke 0.15s ease, opacity 0.15s ease, stroke-width 0.15s ease',
+          strokeWidth: selectedNodeId ? (isConnected ? 2.2 : 0.8) : 1,
+          opacity: selectedNodeId ? (isConnected ? 1 : 0.05) : (isDark ? 0.22 : 0.25),
         },
       };
     });
 
     setEdges(reactEdges);
-  }, [rawEdges, focusedNodeId, routingMode, isDark, setEdges]);
+  }, [rawEdges, selectedNodeId, routingMode, isDark, setEdges]);
 
   // 节点右键处理
   const handleNodeContextMenu = useCallback(
@@ -960,7 +959,6 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           <button
             onClick={() => {
               setSelectedNodeId(null);
-              setHoveredNodeId(null);
             }}
             title="点击退出锁定聚焦模式"
             className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all text-[12px]"
@@ -985,21 +983,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
             instance.fitView({ padding: 0.15, duration: 250 });
           }, 30);
         }}
-        onNodeMouseEnter={(_, node) => {
-          if (!selectedNodeId) {
-            setHoveredNodeId(node.id);
-          }
-        }}
-        onNodeMouseLeave={() => {
-          if (!selectedNodeId) {
-            setHoveredNodeId(null);
-          }
-        }}
         onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
-        onPaneClick={() => {
-          setSelectedNodeId(null);
-          setHoveredNodeId(null);
-        }}
+        onPaneClick={() => setSelectedNodeId(null)}
         onNodeDragStop={(_, node) => {
           setNodePositions((prev) => {
             const updated = {
@@ -1017,6 +1002,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onPaneContextMenu={handlePaneContextMenu}
         fitView
         fitViewOptions={{ padding: 0.15 }}
+        onlyRenderVisibleElements={true}
+        nodeDragThreshold={2}
+        elevateNodesOnSelect={true}
         minZoom={0.05}
         maxZoom={2.0}
       >
