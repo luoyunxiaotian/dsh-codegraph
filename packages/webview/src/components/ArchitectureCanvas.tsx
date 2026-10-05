@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -14,7 +14,6 @@ import {
   EdgeLabelRenderer,
   useNodesState,
   useEdgesState,
-  ReactFlowInstance,
   Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -47,7 +46,7 @@ interface ArchitectureCanvasProps {
   onDrillDown: (moduleId: string) => void;
 }
 
-const ModuleCardNode = ({ data }: NodeProps) => {
+const ModuleCardNode = React.memo(({ data }: NodeProps) => {
   const mod = data.module as ModuleContainer;
   const onDrillDown = data.onDrillDown as (id: string) => void;
   const isFocused = Boolean(data.isFocused);
@@ -84,100 +83,123 @@ const ModuleCardNode = ({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6), 0 4px 14px -2px rgba(59, 130, 246, 0.15)'
           : undefined,
       }}
-      className={`w-[270px] bg-dsh-layer1 border ${
+      className={`node-compact-card w-[270px] box-border bg-dsh-layer1 border ${
         isFocused
-          ? 'border-dsh-blue'
+          ? 'border-dsh-blue node-focused'
           : isConnected
-          ? 'border-dsh-blue/80'
+          ? 'border-dsh-blue/80 node-connected'
           : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue/80'
-      } rounded-md shadow-lg p-3.5 transition-all cursor-grab active:cursor-grabbing group select-none`}
+      } rounded-md shadow-lg p-3.5 transition-all cursor-grab active:cursor-grabbing group select-none flex flex-col justify-between overflow-hidden`}
     >
       {/* 桩点 */}
       <Handle type="target" position={Position.Left} className="opacity-0" />
       <Handle type="source" position={Position.Right} className="opacity-0" />
 
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-dsh-border1">
-        <div className="flex items-center gap-2 truncate">
-          <div
-            className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
-              isContract
-                ? 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400'
-                : 'bg-dsh-blue-tint border border-dsh-blue-border text-dsh-blue'
-            }`}
-          >
-            {isContract ? <Globe className="w-3.5 h-3.5" /> : <Box className="w-3.5 h-3.5" />}
-          </div>
-          <span className="text-[13px] font-semibold text-dsh-primary truncate" title={mod.name}>
-            {mod.name}
-          </span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0 ml-1">
-          {platformBadge && (
-            <span className={`text-[9px] px-1 py-0.2 rounded border font-medium ${platformBadge.cls}`}>
-              {platformBadge.label}
+      {/* 精细全量详情 */}
+      <div className="node-full-detail flex-1 flex flex-col justify-between">
+        {/* 标题栏 */}
+        <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-dsh-border1">
+          <div className="flex items-center gap-2 truncate">
+            <div
+              className={`w-5 h-5 rounded flex items-center justify-center shrink-0 ${
+                isContract
+                  ? 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400'
+                  : 'bg-dsh-blue-tint border border-dsh-blue-border text-dsh-blue'
+              }`}
+            >
+              {isContract ? <Globe className="w-3.5 h-3.5" /> : <Box className="w-3.5 h-3.5" />}
+            </div>
+            <span className="text-[13px] font-semibold text-dsh-primary truncate" title={mod.name}>
+              {mod.name}
             </span>
-          )}
-          <span
-            className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
-              isContract
-                ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
-                : 'bg-dsh-layer2 text-dsh-secondary border-dsh-border2'
-            }`}
-          >
-            {isContract ? '契约中枢' : `${mod.files.length} 文件`}
-          </span>
-        </div>
-      </div>
-
-      {/* 模块交互职责人话简述 */}
-      {(mod as any).story?.purposeDescription && (
-        <div
-          className="text-[11px] text-dsh-secondary bg-dsh-base/60 p-2 rounded border border-dsh-border1/60 mb-2.5 leading-relaxed"
-          title={(mod as any).story.purposeDescription}
-        >
-          {(mod as any).story.purposeDescription}
-        </div>
-      )}
-
-      {/* 文件列表摘要 */}
-      <div className="space-y-1 mb-2.5">
-        {mod.files.slice(0, 3).map((f, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-[11px] text-dsh-tertiary truncate">
-            <FileCode className="w-3.5 h-3.5 text-dsh-dimmed shrink-0" />
-            <span className="truncate font-mono">{f.split(/[/\\]/).pop()}</span>
           </div>
-        ))}
-        {mod.files.length > 3 && (
-          <div className="text-[10px] text-dsh-dimmed pl-4">
-            + 另有 {mod.files.length - 3} 个文件...
+          <div className="flex items-center gap-1 shrink-0 ml-1">
+            {platformBadge && (
+              <span className={`text-[9px] px-1 py-0.2 rounded border font-medium ${platformBadge.cls}`}>
+                {platformBadge.label}
+              </span>
+            )}
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${
+                isContract
+                  ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                  : 'bg-dsh-layer2 text-dsh-secondary border-dsh-border2'
+              }`}
+            >
+              {isContract ? '契约中枢' : `${mod.files.length} 文件`}
+            </span>
+          </div>
+        </div>
+
+        {/* 模块交互职责人话简述 */}
+        {(mod as any).story?.purposeDescription && (
+          <div
+            className="text-[11px] text-dsh-secondary bg-dsh-base/60 p-2 rounded border border-dsh-border1/60 mb-2.5 leading-relaxed"
+            title={(mod as any).story.purposeDescription}
+          >
+            {(mod as any).story.purposeDescription}
           </div>
         )}
+
+        {/* 文件列表摘要 */}
+        <div className="space-y-1 mb-2.5">
+          {mod.files.slice(0, 3).map((f, i) => (
+            <div key={i} className="flex items-center gap-1.5 text-[11px] text-dsh-tertiary truncate">
+              <FileCode className="w-3.5 h-3.5 text-dsh-dimmed shrink-0" />
+              <span className="truncate font-mono">{f.split(/[/\\]/).pop()}</span>
+            </div>
+          ))}
+          {mod.files.length > 3 && (
+            <div className="text-[10px] text-dsh-dimmed pl-4">
+              + 另有 {mod.files.length - 3} 个文件...
+            </div>
+          )}
+        </div>
+
+        {/* 端口与交互总线摘要 */}
+        <div className="pt-2 border-t border-dsh-border1 flex items-center justify-between text-[11px]">
+          <span className="flex items-center gap-1 text-dsh-green" title={mod.inPorts.join(', ')}>
+            <ArrowLeftCircle className="w-3.5 h-3.5" />
+            <span>{mod.inPorts.length} In-Ports</span>
+          </span>
+          <span className="flex items-center gap-1 text-dsh-blue" title={mod.outPorts.join(', ')}>
+            <span>{mod.outPorts.length} Out-Ports</span>
+            <ArrowRightCircle className="w-3.5 h-3.5" />
+          </span>
+        </div>
+
+        {/* 下钻与右键提示 */}
+        <div className="mt-2 text-[10px] text-center text-dsh-dimmed group-hover:text-dsh-blue transition-colors flex items-center justify-center gap-2">
+          <span>双击下钻</span>
+          <span>·</span>
+          <span>右键选项</span>
+        </div>
       </div>
 
-      {/* 端口与交互总线摘要 */}
-      <div className="pt-2 border-t border-dsh-border1 flex items-center justify-between text-[11px]">
-        <span className="flex items-center gap-1 text-dsh-green" title={mod.inPorts.join(', ')}>
-          <ArrowLeftCircle className="w-3.5 h-3.5" />
-          <span>{mod.inPorts.length} In-Ports</span>
-        </span>
-        <span className="flex items-center gap-1 text-dsh-blue" title={mod.outPorts.join(', ')}>
-          <span>{mod.outPorts.length} Out-Ports</span>
-          <ArrowRightCircle className="w-3.5 h-3.5" />
-        </span>
-      </div>
-
-      {/* 下钻与右键提示 */}
-      <div className="mt-2 text-[10px] text-center text-dsh-dimmed group-hover:text-dsh-blue transition-colors flex items-center justify-center gap-2">
-        <span>双击下钻</span>
-        <span>·</span>
-        <span>右键选项</span>
+      {/* LOD 极简色块模式 (在视口缩小且非选中时激活) */}
+      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1">
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-dsh-border1/40">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded bg-blue-500/30 shrink-0" />
+            <div className="w-24 h-3 rounded-sm bg-dsh-primary/40" />
+          </div>
+          <div className="w-12 h-2 rounded-sm bg-dsh-layer2 border border-dsh-border2/40" />
+        </div>
+        <div className="space-y-2 my-2">
+          <div className="w-44 h-2 rounded-sm bg-dsh-secondary/25" />
+          <div className="w-36 h-2 rounded-sm bg-dsh-tertiary/20" />
+          <div className="w-28 h-2 rounded-sm bg-dsh-tertiary/15" />
+        </div>
+        <div className="pt-2 border-t border-dsh-border1/40 flex items-center justify-between">
+          <div className="w-16 h-2 rounded-sm bg-emerald-500/40" />
+          <div className="w-16 h-2 rounded-sm bg-blue-500/40" />
+        </div>
       </div>
     </div>
   );
-};
+});
 
 // DeepSeek Harness 风格总线边
 const BusEdge = ({
@@ -243,7 +265,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
   const nodeTypes = useMemo(() => ({ moduleCard: ModuleCardNode }), []);
   const edgeTypes = useMemo(() => ({ busEdge: BusEdge }), []);
 
-  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
+  const [rfInstance, setRfInstance] = useState<any>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
@@ -252,6 +274,19 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
   const [routingMode, setRoutingMode] = useState<'smoothstep' | 'bezier'>('smoothstep');
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
   const [isUntangling, setIsUntangling] = useState<boolean>(false);
+
+  // 视口自适应 LOD 细节分级状态：宏观缩放时未选中模块降级为同色色块，零卡顿零丢失
+  const [isLodCompact, setIsLodCompact] = useState<boolean>(false);
+  const isLodCompactRef = useRef<boolean>(false);
+
+  const handleMove = useCallback((_: any, viewport: { zoom: number }) => {
+    const compact = viewport.zoom < 0.55;
+    if (compact !== isLodCompactRef.current) {
+      isLodCompactRef.current = compact;
+      setIsLodCompact(compact);
+    }
+  }, []);
+
   const [currentLayout, setCurrentLayout] = useState<LayoutResult | undefined>(layout);
 
   useEffect(() => {
@@ -492,7 +527,7 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
   );
 
   return (
-    <div className="w-full h-[calc(100vh-56px)] bg-dsh-base relative">
+    <div className={`w-full h-[calc(100vh-56px)] bg-dsh-base relative ${isLodCompact ? 'rf-lod-compact' : ''}`}>
       {/* 顶部右侧理线与连线控制工具栏 (固定布局，避免因提示变化跳动) */}
       <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2 p-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[13px]">
         {/* 一键理线按钮 */}
@@ -548,14 +583,19 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onInit={setRfInstance}
+        onInit={(instance) => {
+          setRfInstance(instance);
+          const initialCompact = instance.getZoom() < 0.55;
+          isLodCompactRef.current = initialCompact;
+          setIsLodCompact(initialCompact);
+        }}
+        onMove={handleMove}
         onNodeClick={(_, node) => setSelectedModuleId((prev) => (prev === node.id ? null : node.id))}
         onNodeDoubleClick={(_, node) => onDrillDown(node.id)}
         onPaneClick={() => setSelectedModuleId(null)}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
         fitView
-        onlyRenderVisibleElements={true}
         nodeDragThreshold={2}
         elevateNodesOnSelect={true}
         minZoom={0.2}

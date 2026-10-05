@@ -117,13 +117,54 @@ body {
   z-index: 10 !important;
 }
 
-/* 硬件加速图层，大幅提升大图谱 (500+ 卡片) 拖拽、平移与缩放跟手率 */
+/* 硬件加速图层与渲染隔离，大幅提升大图谱 (500+ 卡片) 拖拽、平移与缩放跟手率 */
 .react-flow__viewport {
   will-change: transform;
 }
 
 .react-flow__node {
   will-change: transform;
+  contain: layout style;
+}
+
+.react-flow__edge {
+  contain: paint;
+}
+
+/* =========================================================================
+   LOD (Level of Detail) 视窗缩放自适应分级渲染规则
+   - 默认正常缩放：全量精细显示文字与图标 (.node-full-detail)
+   - 缩小至宏观视野 (.rf-lod-compact)：未选中卡片降级为同色色块 (.node-skeleton-detail)，避免文字与SVG排版开销
+   - 选中卡片 (.node-focused) 与关联卡片 (.node-connected)：特权豁免，始终保持精细显示！
+   ========================================================================= */
+.node-full-detail {
+  display: flex;
+}
+
+.node-skeleton-detail {
+  display: none;
+}
+
+/* 视窗缩小模式：未被选中的普通卡片隐藏文字并展示色块 */
+.rf-lod-compact .node-compact-card .node-full-detail {
+  display: none !important;
+}
+
+.rf-lod-compact .node-compact-card .node-skeleton-detail {
+  display: flex !important;
+}
+
+/* 焦点选中卡片、关联卡片或鼠标临时悬浮预览：始终保持 100% 精细显示！ */
+.rf-lod-compact .node-compact-card.node-focused .node-full-detail,
+.rf-lod-compact .node-compact-card.node-connected .node-full-detail,
+.rf-lod-compact .node-compact-card:hover .node-full-detail {
+  display: flex !important;
+}
+
+.rf-lod-compact .node-compact-card.node-focused .node-skeleton-detail,
+.rf-lod-compact .node-compact-card.node-connected .node-skeleton-detail,
+.rf-lod-compact .node-compact-card:hover .node-skeleton-detail {
+  display: none !important;
 }
 
 .react-flow__edge-path {

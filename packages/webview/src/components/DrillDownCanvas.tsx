@@ -45,8 +45,8 @@ interface DrillDownCanvasProps {
   onBackToArchitecture: () => void;
 }
 
-// 模块内部符号节点
-const InternalSymbolNode = ({ data }: NodeProps) => {
+// 模块内部符号节点 (支持视口自适应 LOD 色块分级渲染与 React.memo 记忆化)
+const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
   const node = data.node as CodeNode;
   const onSelectNode = data.onSelectNode as (id: string, path: string, line: number) => void;
   const isFocused = Boolean(data.isFocused);
@@ -55,6 +55,8 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
 
   const isClass = node.entityType === 'CLASS';
   const isContract = node.entityType === 'CONTRACT_ENDPOINT' || node.entityType === 'CONTRACT_TOPIC';
+
+  const accentBg = isContract ? 'bg-indigo-400' : isClass ? 'bg-amber-400' : 'bg-blue-400';
 
   return (
     <div
@@ -69,63 +71,79 @@ const InternalSymbolNode = ({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6), 0 4px 12px -2px rgba(59, 130, 246, 0.15)'
           : undefined,
       }}
-      className={`w-[220px] bg-dsh-layer1 border ${
+      className={`node-compact-card w-[220px] h-[85px] box-border bg-dsh-layer1 border ${
         isFocused
-          ? 'border-dsh-blue'
+          ? 'border-dsh-blue node-focused'
           : isConnected
-          ? 'border-dsh-blue/70'
+          ? 'border-dsh-blue/70 node-connected'
           : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue'
-      } rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none`}
+      } rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none flex flex-col justify-between overflow-hidden`}
     >
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
 
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-1">
-          <span
-            className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
-              isContract
-                ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
-                : isClass
-                ? 'bg-dsh-amber-tint text-dsh-amber border border-dsh-amber-border'
-                : 'bg-dsh-blue-tint text-dsh-blue border border-dsh-blue-border'
-            }`}
-          >
-            {isContract ? (node.entityType === 'CONTRACT_ENDPOINT' ? 'REST API' : 'TOPIC') : node.entityType}
-          </span>
-          {node.language && node.language !== 'contract' && (
-            <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-dsh-layer2 text-dsh-tertiary border border-dsh-border1 uppercase">
-              {node.language}
+      {/* 1. 全量精细模式 (默认正常缩放，或在卡片被选中/直连时强制保持) */}
+      <div className="node-full-detail flex-1 flex flex-col justify-between">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-1">
+            <span
+              className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
+                isContract
+                  ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
+                  : isClass
+                  ? 'bg-dsh-amber-tint text-dsh-amber border border-dsh-amber-border'
+                  : 'bg-dsh-blue-tint text-dsh-blue border border-dsh-blue-border'
+              }`}
+            >
+              {isContract ? (node.entityType === 'CONTRACT_ENDPOINT' ? 'REST API' : 'TOPIC') : node.entityType}
             </span>
-          )}
+            {node.language && node.language !== 'contract' && (
+              <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-dsh-layer2 text-dsh-tertiary border border-dsh-border1 uppercase">
+                {node.language}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] text-dsh-dimmed font-mono">L{node.loc.startLine}</span>
         </div>
-        <span className="text-[10px] text-dsh-dimmed font-mono">L{node.loc.startLine}</span>
+
+        <div className="flex items-center gap-1.5 mb-1">
+          {isContract ? (
+            <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          ) : isClass ? (
+            <Box className="w-3.5 h-3.5 text-dsh-amber shrink-0" />
+          ) : (
+            <Code className="w-3.5 h-3.5 text-dsh-blue shrink-0" />
+          )}
+          <span className="text-[12px] font-semibold text-dsh-primary truncate" title={node.name}>
+            {node.name}
+          </span>
+        </div>
+
+        <div className="text-[10px] text-dsh-tertiary truncate border-t border-dsh-border1 pt-1 font-mono">
+          {node.filePath.split(/[/\\]/).pop()}
+        </div>
       </div>
 
-      <div className="flex items-center gap-1.5 mb-1">
-        {isContract ? (
-          <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-        ) : isClass ? (
-          <Box className="w-3.5 h-3.5 text-dsh-amber shrink-0" />
-        ) : (
-          <Code className="w-3.5 h-3.5 text-dsh-blue shrink-0" />
-        )}
-        <span className="text-[12px] font-semibold text-dsh-primary truncate" title={node.name}>
-          {node.name}
-        </span>
-      </div>
-
-      <div className="text-[10px] text-dsh-tertiary truncate border-t border-dsh-border1 pt-1 font-mono">
-        {node.filePath.split(/[/\\]/).pop()}
+      {/* 2. LOD 极简同色色块模式 (在视口缩小且非选中时激活，外框不消失，文字图标转为同色几何色块) */}
+      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-0.5">
+        <div className="flex items-center justify-between">
+          <div className={`h-2 rounded-sm w-12 ${accentBg} opacity-70`} />
+          <div className="h-1.5 rounded-sm w-6 bg-dsh-border2 opacity-40" />
+        </div>
+        <div className="flex items-center gap-2 my-1">
+          <div className={`w-3.5 h-3.5 rounded-sm ${accentBg} opacity-80 shrink-0`} />
+          <div className="h-2.5 rounded-sm w-28 bg-dsh-primary/40" />
+        </div>
+        <div className="h-1.5 rounded-sm w-20 bg-dsh-tertiary/25 mt-0.5 border-t border-dsh-border1/40 pt-1" />
       </div>
     </div>
   );
-};
+});
 
-// In-Port 端口卡片
-const InPortNode = ({ data }: NodeProps) => {
+// In-Port 端口卡片 (支持 LOD 色块与 React.memo)
+const InPortNode = React.memo(({ data }: NodeProps) => {
   const name = (data as any)?.name as string;
   const isFocused = Boolean((data as any)?.isFocused);
   const isConnected = Boolean((data as any)?.isConnected);
@@ -142,28 +160,41 @@ const InPortNode = ({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(16, 185, 129, 0.6)'
           : undefined,
       }}
-      className={`w-[170px] bg-dsh-green-tint border ${
+      className={`node-compact-card w-[170px] h-[52px] box-border bg-dsh-green-tint border ${
         isFocused
-          ? 'border-emerald-500'
+          ? 'border-emerald-500 node-focused'
           : isConnected
-          ? 'border-emerald-500/80'
+          ? 'border-emerald-500/80 node-connected'
           : 'border-dsh-green-border'
-      } rounded-md p-2 shadow flex items-center gap-2 select-none cursor-grab active:cursor-grabbing`}
+      } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden`}
     >
       <Handle type="source" position={Position.Right} />
-      <ArrowLeftCircle className="w-3.5 h-3.5 text-dsh-green shrink-0" />
-      <div className="truncate">
-        <div className="text-[9px] text-dsh-green font-bold uppercase tracking-tight">📥 IN-PORT (外部入口)</div>
-        <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
-          {name}
+
+      {/* 精细全量详情 */}
+      <div className="node-full-detail w-full flex items-center gap-2">
+        <ArrowLeftCircle className="w-3.5 h-3.5 text-dsh-green shrink-0" />
+        <div className="truncate flex-1">
+          <div className="text-[9px] text-dsh-green font-bold uppercase tracking-tight">📥 IN-PORT</div>
+          <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
+            {name}
+          </div>
+        </div>
+      </div>
+
+      {/* LOD 极简色块 */}
+      <div className="node-skeleton-detail w-full flex items-center gap-2">
+        <div className="w-3.5 h-3.5 rounded-full bg-emerald-500/70 shrink-0" />
+        <div className="flex-1 space-y-1">
+          <div className="w-12 h-1.5 rounded-sm bg-emerald-500/50" />
+          <div className="w-20 h-2 rounded-sm bg-dsh-primary/30" />
         </div>
       </div>
     </div>
   );
-};
+});
 
-// Out-Port 端口卡片
-const OutPortNode = ({ data }: NodeProps) => {
+// Out-Port 端口卡片 (支持 LOD 色块与 React.memo)
+const OutPortNode = React.memo(({ data }: NodeProps) => {
   const name = (data as any)?.name as string;
   const isFocused = Boolean((data as any)?.isFocused);
   const isConnected = Boolean((data as any)?.isConnected);
@@ -180,25 +211,38 @@ const OutPortNode = ({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6)'
           : undefined,
       }}
-      className={`w-[170px] bg-dsh-blue-tint border ${
+      className={`node-compact-card w-[170px] h-[52px] box-border bg-dsh-blue-tint border ${
         isFocused
-          ? 'border-blue-500'
+          ? 'border-blue-500 node-focused'
           : isConnected
-          ? 'border-blue-500/80'
+          ? 'border-blue-500/80 node-connected'
           : 'border-dsh-blue-border'
-      } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing`}
+      } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden`}
     >
       <Handle type="target" position={Position.Left} />
-      <div className="truncate">
-        <div className="text-[9px] text-dsh-blue font-bold uppercase tracking-tight">📤 OUT-PORT (外调依赖)</div>
-        <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
-          {name}
+
+      {/* 精细全量详情 */}
+      <div className="node-full-detail w-full flex items-center justify-between">
+        <div className="truncate flex-1">
+          <div className="text-[9px] text-dsh-blue font-bold uppercase tracking-tight">📤 OUT-PORT</div>
+          <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
+            {name}
+          </div>
         </div>
+        <ArrowRightCircle className="w-3.5 h-3.5 text-dsh-blue shrink-0 ml-1" />
       </div>
-      <ArrowRightCircle className="w-3.5 h-3.5 text-dsh-blue shrink-0 ml-1" />
+
+      {/* LOD 极简色块 */}
+      <div className="node-skeleton-detail w-full flex items-center justify-between">
+        <div className="flex-1 space-y-1">
+          <div className="w-12 h-1.5 rounded-sm bg-blue-500/50" />
+          <div className="w-20 h-2 rounded-sm bg-dsh-primary/30" />
+        </div>
+        <div className="w-3.5 h-3.5 rounded-full bg-blue-500/70 shrink-0 ml-1" />
+      </div>
     </div>
   );
-};
+});
 
 /**
  * 客户端拓扑排版算法 (Kahn Topological DAG Layering + Barycenter Crossing Minimization)
@@ -428,6 +472,18 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   const [filterCallsOnly, setFilterCallsOnly] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isUntangling, setIsUntangling] = useState<boolean>(false);
+
+  // 视口自适应 LOD 细节分级状态：缩小视野下未选中卡片降级为同色色块，零重排零卡顿
+  const [isLodCompact, setIsLodCompact] = useState<boolean>(false);
+  const isLodCompactRef = useRef<boolean>(false);
+
+  const handleMove = useCallback((_: any, viewport: { zoom: number }) => {
+    const compact = viewport.zoom < 0.65;
+    if (compact !== isLodCompactRef.current) {
+      isLodCompactRef.current = compact;
+      setIsLodCompact(compact);
+    }
+  }, []);
 
   // 首帧立即根据内存/LocalStorage/极速Kahn拓扑排版初始化坐标，杜绝首帧白屏与跳动
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>(() => {
@@ -893,7 +949,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   );
 
   return (
-    <div className="relative w-full h-[calc(100vh-56px)] bg-dsh-base">
+    <div className={`relative w-full h-[calc(100vh-56px)] bg-dsh-base ${isLodCompact ? 'rf-lod-compact' : ''}`}>
       {/* 顶部面包屑快速返回条 */}
       <div className="absolute top-3.5 left-3.5 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dsh-layer1/95 border border-dsh-border2 shadow-md text-[13px]">
         <button
@@ -979,10 +1035,14 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onInit={(instance) => {
           setRfInstance(instance);
           rfInstanceRef.current = instance;
+          const initialCompact = instance.getZoom() < 0.65;
+          isLodCompactRef.current = initialCompact;
+          setIsLodCompact(initialCompact);
           setTimeout(() => {
             instance.fitView({ padding: 0.15, duration: 250 });
           }, 30);
         }}
+        onMove={handleMove}
         onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
         onPaneClick={() => setSelectedNodeId(null)}
         onNodeDragStop={(_, node) => {
@@ -1002,7 +1062,6 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         onPaneContextMenu={handlePaneContextMenu}
         fitView
         fitViewOptions={{ padding: 0.15 }}
-        onlyRenderVisibleElements={true}
         nodeDragThreshold={2}
         elevateNodesOnSelect={true}
         minZoom={0.05}
