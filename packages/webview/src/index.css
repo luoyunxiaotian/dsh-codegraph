@@ -123,8 +123,8 @@ body {
 }
 
 .react-flow__node {
-  will-change: transform;
-  contain: layout style;
+  /* 移除 will-change 与 contain: layout style，避免 500 个独立合成图层导致显存超载与合成器掉层 */
+  pointer-events: auto;
 }
 
 .react-flow__edge {
@@ -132,138 +132,128 @@ body {
 }
 
 /* =========================================================================
-   LOD (Level of Detail) 视窗缩放自适应分级渲染规则
-   - 默认正常缩放：全量精细显示文字与图标 (.node-full-detail)
-   - 缩小至宏观视野 (.rf-lod-compact)：未选中卡片降级为同色色块 (.node-skeleton-detail)，避免文字与SVG排版开销
-   - 选中卡片 (.node-focused) 与关联卡片 (.node-connected)：特权豁免，始终保持精细显示！
+   LOD (Level of Detail) 单套 DOM 零重排视觉掩膜规则 (Visual Mask)
+   - 彻底摒弃 display: none / flex 硬切，零布局树重排，杜绝 Chromium 掉层与卡片消失！
+   - 默认正常缩放：文字与图标 100% 完整精细显示
+   - 缩小至宏观视野 (.rf-lod-compact)：未选中卡片文字透明，通过实体背景渲染高对比几何色块
+   - 选中卡片 (.node-focused)、关联卡片 (.node-connected) 与鼠标悬浮 (:hover)：特权豁免，始终精细！
    ========================================================================= */
-.node-full-detail {
-  display: flex;
+
+/* 卡片实体常态与外框保底 */
+.node-compact-card {
+  position: relative;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  border: 2px solid rgba(71, 85, 105, 0.7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.node-skeleton-detail {
-  display: none;
-}
-
-/* 视窗缩小模式：未被选中的普通卡片隐藏文字并展示色块 */
-.rf-lod-compact .node-compact-card .node-full-detail {
-  display: none !important;
-}
-
-.rf-lod-compact .node-compact-card .node-skeleton-detail {
-  display: flex !important;
-}
-
-/* 焦点选中卡片、关联卡片或鼠标临时悬浮预览：始终保持 100% 精细显示！ */
-.rf-lod-compact .node-compact-card.node-focused .node-full-detail,
-.rf-lod-compact .node-compact-card.node-connected .node-full-detail,
-.rf-lod-compact .node-compact-card:hover .node-full-detail {
-  display: flex !important;
-}
-
-.rf-lod-compact .node-compact-card.node-focused .node-skeleton-detail,
-.rf-lod-compact .node-compact-card.node-connected .node-skeleton-detail,
-.rf-lod-compact .node-compact-card:hover .node-skeleton-detail {
-  display: none !important;
-}
-
-/* LOD 极简模式下卡片强化外框与实体对比度，杜绝小缩放比例下被抗锯齿吞噬 */
-.rf-lod-compact .node-compact-card {
-  border-width: 2px !important;
-  border-style: solid !important;
-  border-radius: 6px !important;
-}
-
-/* 浅色主题下 LOD 外框与底色 */
-.rf-lod-compact .node-compact-card {
-  background-color: #ffffff !important;
-  border-color: rgba(71, 85, 105, 0.7) !important;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 4px 14px rgba(0, 0, 0, 0.1) !important;
-}
-
-/* 深色主题下 LOD 外框与底色：采用 Slate-800 明亮灰蓝与高对比亮框，杜绝缩放被背景吞噬 */
-[data-theme="dark"] .rf-lod-compact .node-compact-card,
-body[data-ds-dark-theme] .rf-lod-compact .node-compact-card,
-.dark .rf-lod-compact .node-compact-card {
+[data-theme="dark"] .node-compact-card,
+body[data-ds-dark-theme] .node-compact-card,
+.dark .node-compact-card {
   background-color: #1e293b !important;
   border-color: rgba(148, 163, 184, 0.75) !important;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(0, 0, 0, 0.6) !important;
 }
 
-/* 端口卡片在 LOD 模式下的专属实体对比度 */
-[data-theme="dark"] .rf-lod-compact .node-compact-card.bg-dsh-green-tint,
-.dark .rf-lod-compact .node-compact-card.bg-dsh-green-tint {
+/* 端口卡片实体底色保底 */
+[data-theme="dark"] .node-compact-card.node-inport,
+.dark .node-compact-card.node-inport {
   background-color: #064e3b !important;
   border-color: #10b981 !important;
 }
 
-[data-theme="dark"] .rf-lod-compact .node-compact-card.bg-dsh-blue-tint,
-.dark .rf-lod-compact .node-compact-card.bg-dsh-blue-tint {
+[data-theme="dark"] .node-compact-card.node-outport,
+.dark .node-compact-card.node-outport {
   background-color: #1e3a8a !important;
   border-color: #3b82f6 !important;
 }
 
-/* 悬浮预览：提升层级并高亮外框 */
-.rf-lod-compact .node-compact-card:hover {
+/* 悬浮预览与焦点高亮 */
+.node-compact-card:hover {
   z-index: 40 !important;
   border-color: #3b82f6 !important;
   box-shadow: 0 0 0 2px #3b82f6, 0 8px 24px -2px rgba(59, 130, 246, 0.4) !important;
 }
 
-/* 聚焦与关联卡片在 LOD 模式下更要醒目高亮 */
-.rf-lod-compact .node-compact-card.node-focused {
+.node-compact-card.node-focused {
+  z-index: 50 !important;
   border-color: #3b82f6 !important;
   box-shadow: 0 0 0 3px #3b82f6, 0 8px 24px -2px rgba(59, 130, 246, 0.6) !important;
 }
 
-.rf-lod-compact .node-compact-card.node-connected {
+.node-compact-card.node-connected {
+  z-index: 30 !important;
   border-color: rgba(59, 130, 246, 0.9) !important;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.8), 0 4px 14px -2px rgba(59, 130, 246, 0.3) !important;
 }
 
-/* LOD 极简色块专用样式：100% 实体纯色，杜绝 Tailwind 变量透明度语法失效 */
-.node-skeleton-badge-class {
-  background-color: #f59e0b !important;
-}
-.node-skeleton-badge-func {
-  background-color: #3b82f6 !important;
-}
-.node-skeleton-badge-contract {
-  background-color: #818cf8 !important;
-}
-.node-skeleton-badge-inport {
-  background-color: #10b981 !important;
-}
-.node-skeleton-badge-outport {
-  background-color: #3b82f6 !important;
+/* -------------------------------------------------------------------------
+   .rf-lod-compact 缩略图模式下的平滑视觉掩膜 (纯颜色过渡，零 DOM 增删)
+   ------------------------------------------------------------------------- */
+
+/* 未选中的普通卡片：图标透明隐藏 */
+.rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-icon {
+  opacity: 0 !important;
 }
 
-/* 标题色块：浅色深灰，深色亮白灰 */
-.node-skeleton-title {
-  background-color: #334155 !important;
+/* 未选中的普通卡片：徽章文字隐藏，呈现实体彩色小色块 */
+.rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-badge-text {
+  color: transparent !important;
 }
-[data-theme="dark"] .node-skeleton-title,
-body[data-ds-dark-theme] .node-skeleton-title,
-.dark .node-skeleton-title {
+.rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-badge {
+  min-width: 48px !important;
+  height: 12px !important;
+  border-color: transparent !important;
+}
+
+/* 未选中的普通卡片：标题行文字隐藏，呈现高对比纯色几何条块 */
+.rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-title-text {
+  color: transparent !important;
+  background-color: #334155;
+  border-radius: 3px;
+  display: inline-block;
+  min-width: 90px;
+  max-width: 140px;
+  height: 14px;
+}
+
+[data-theme="dark"] .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-title-text,
+body[data-ds-dark-theme] .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-title-text,
+.dark .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-title-text {
   background-color: #f8fafc !important;
 }
 
-/* 次要信息/文件路径色块 */
-.node-skeleton-sub {
-  background-color: #64748b !important;
+/* 未选中的普通卡片：次要信息行文字隐藏，呈现细灰几何色块 */
+.rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-sub-text {
+  color: transparent !important;
+  background-color: #64748b;
+  border-radius: 2px;
+  display: inline-block;
+  min-width: 60px;
+  max-width: 100px;
+  height: 10px;
 }
-[data-theme="dark"] .node-skeleton-sub,
-body[data-ds-dark-theme] .node-skeleton-sub,
-.dark .node-skeleton-sub {
+
+[data-theme="dark"] .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-sub-text,
+body[data-ds-dark-theme] .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-sub-text,
+.dark .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-sub-text {
   background-color: #94a3b8 !important;
 }
 
-.node-skeleton-meta {
-  background-color: #94a3b8 !important;
+/* 未选中的普通卡片：行号或 meta 信息文字隐藏，呈现小色块 */
+.rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-meta-text {
+  color: transparent !important;
+  background-color: #94a3b8;
+  border-radius: 2px;
+  display: inline-block;
+  width: 24px;
+  height: 10px;
 }
-[data-theme="dark"] .node-skeleton-meta,
-body[data-ds-dark-theme] .node-skeleton-meta,
-.dark .node-skeleton-meta {
+
+[data-theme="dark"] .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-meta-text,
+body[data-ds-dark-theme] .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-meta-text,
+.dark .rf-lod-compact .node-compact-card:not(.node-focused):not(.node-connected):not(:hover) .node-meta-text {
   background-color: #64748b !important;
 }
 

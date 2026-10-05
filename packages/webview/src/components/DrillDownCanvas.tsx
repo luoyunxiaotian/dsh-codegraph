@@ -56,6 +56,11 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
   const isClass = node.entityType === 'CLASS';
   const isContract = node.entityType === 'CONTRACT_ENDPOINT' || node.entityType === 'CONTRACT_TOPIC';
   const accentColor = isContract ? '#818cf8' : isClass ? '#f59e0b' : '#3b82f6';
+  const badgeCls = isContract
+    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+    : isClass
+    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+    : 'bg-blue-500/20 text-blue-300 border-blue-500/40';
 
   return (
     <div
@@ -70,7 +75,7 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6), 0 4px 12px -2px rgba(59, 130, 246, 0.15)'
           : undefined,
       }}
-      className={`node-compact-card relative w-[220px] h-[85px] box-border bg-dsh-layer1 border ${
+      className={`node-compact-card relative w-[220px] h-[85px] box-border rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none flex flex-col justify-between overflow-hidden ${
         isFocused
           ? 'border-dsh-blue node-focused'
           : isConnected
@@ -78,7 +83,7 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
           : isContract
           ? 'border-indigo-500/50 hover:border-indigo-400 shadow-indigo-950/20'
           : 'border-dsh-border2 hover:border-dsh-blue'
-      } rounded-md shadow p-2.5 cursor-grab active:cursor-grabbing group transition-all select-none flex flex-col justify-between overflow-hidden`}
+      }`}
     >
       {/* 顶部实体色彩指示条 (微缩视野下提供极致辨识度，确保框架和身份永不消失) */}
       <div
@@ -88,81 +93,51 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
 
-      {/* 1. 全量精细模式 (默认正常缩放，或在卡片被选中/直连时强制保持) */}
-      <div className="node-full-detail flex-1 flex flex-col justify-between pt-1">
+      {/* 单套统一 DOM 架构：文字与色块同一生命周期，零重排零掉层，卡片绝对不消失 */}
+      <div className="flex-1 flex flex-col justify-between pt-1">
+        {/* 顶部元信息栏 */}
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1">
-            <span
-              className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
-                isContract
-                  ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
-                  : isClass
-                  ? 'bg-dsh-amber-tint text-dsh-amber border border-dsh-amber-border'
-                  : 'bg-dsh-blue-tint text-dsh-blue border border-dsh-blue-border'
-              }`}
-            >
-              {isContract ? (node.entityType === 'CONTRACT_ENDPOINT' ? 'REST API' : 'TOPIC') : node.entityType}
+            <span className={`node-badge text-[9px] px-1.5 py-0.5 rounded font-mono border transition-all ${badgeCls}`}>
+              <span className="node-badge-text">
+                {isContract ? (node.entityType === 'CONTRACT_ENDPOINT' ? 'REST API' : 'TOPIC') : node.entityType}
+              </span>
             </span>
             {node.language && node.language !== 'contract' && (
               <span className="text-[9px] px-1 py-0.2 rounded font-mono bg-dsh-layer2 text-dsh-tertiary border border-dsh-border1 uppercase">
-                {node.language}
+                <span className="node-badge-text">{node.language}</span>
               </span>
             )}
           </div>
-          <span className="text-[10px] text-dsh-dimmed font-mono">L{node.loc.startLine}</span>
+          <span className="node-meta-text text-[10px] text-dsh-dimmed font-mono">L{node.loc.startLine}</span>
         </div>
 
-        <div className="flex items-center gap-1.5 mb-1">
-          {isContract ? (
-            <Globe className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-          ) : isClass ? (
-            <Box className="w-3.5 h-3.5 text-dsh-amber shrink-0" />
-          ) : (
-            <Code className="w-3.5 h-3.5 text-dsh-blue shrink-0" />
-          )}
-          <span className="text-[12px] font-semibold text-dsh-primary truncate" title={node.name}>
+        {/* 核心符号名称栏 */}
+        <div className="flex items-center gap-1.5 mb-1 overflow-hidden">
+          <span className="node-icon shrink-0">
+            {isContract ? (
+              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+            ) : isClass ? (
+              <Box className="w-3.5 h-3.5 text-dsh-amber" />
+            ) : (
+              <Code className="w-3.5 h-3.5 text-dsh-blue" />
+            )}
+          </span>
+          <span className="node-title-text text-[12px] font-semibold text-dsh-primary truncate" title={node.name}>
             {node.name}
           </span>
         </div>
 
+        {/* 所属文件路径栏 */}
         <div className="text-[10px] text-dsh-tertiary truncate border-t border-dsh-border1 pt-1 font-mono">
-          {node.filePath.split(/[/\\]/).pop()}
+          <span className="node-sub-text">{node.filePath.split(/[/\\]/).pop()}</span>
         </div>
-      </div>
-
-      {/* 2. LOD 极简同色色块模式 (在视口缩小且非选中时激活，外框不消失，文字图标转为同色几何色块) */}
-      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1 pt-1.5">
-        <div className="flex items-center justify-between">
-          <div
-            className={`h-3 w-16 rounded ${
-              isContract
-                ? 'node-skeleton-badge-contract'
-                : isClass
-                ? 'node-skeleton-badge-class'
-                : 'node-skeleton-badge-func'
-            }`}
-          />
-          <div className="h-2.5 w-8 rounded node-skeleton-meta" />
-        </div>
-        <div className="flex items-center gap-2 my-1">
-          <div
-            className={`w-4 h-4 rounded shrink-0 ${
-              isContract
-                ? 'node-skeleton-badge-contract'
-                : isClass
-                ? 'node-skeleton-badge-class'
-                : 'node-skeleton-badge-func'
-            }`}
-          />
-          <div className="h-3.5 w-32 rounded node-skeleton-title" />
-        </div>
-        <div className="h-2.5 w-24 rounded node-skeleton-sub mt-0.5 border-t border-dsh-border1/40 pt-1" />
       </div>
     </div>
   );
 });
 
-// In-Port 端口卡片 (支持 LOD 色块与 React.memo)
+// In-Port 端口卡片 (单套统一 DOM 零掉层)
 const InPortNode = React.memo(({ data }: NodeProps) => {
   const name = (data as any)?.name as string;
   const isFocused = Boolean((data as any)?.isFocused);
@@ -180,42 +155,32 @@ const InPortNode = React.memo(({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(16, 185, 129, 0.6)'
           : undefined,
       }}
-      className={`node-compact-card relative w-[170px] h-[52px] box-border bg-dsh-green-tint border ${
+      className={`node-compact-card node-inport relative w-[170px] h-[52px] box-border rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden ${
         isFocused
           ? 'border-emerald-500 node-focused'
           : isConnected
           ? 'border-emerald-500/80 node-connected'
-          : 'border-dsh-green-border'
-      } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden`}
+          : 'border-emerald-500/60'
+      }`}
     >
       {/* 顶部实体色彩指示条 */}
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-500" />
       <Handle type="source" position={Position.Right} />
 
-      {/* 精细全量详情 */}
-      <div className="node-full-detail w-full flex items-center gap-2 pt-0.5">
-        <ArrowLeftCircle className="w-3.5 h-3.5 text-dsh-green shrink-0" />
+      <div className="w-full flex items-center gap-2 pt-0.5">
+        <ArrowLeftCircle className="node-icon w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <div className="truncate flex-1">
-          <div className="text-[9px] text-dsh-green font-bold uppercase tracking-tight">📥 IN-PORT</div>
-          <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
+          <div className="node-badge-text text-[9px] text-emerald-400 font-bold uppercase tracking-tight">📥 IN-PORT</div>
+          <div className="node-title-text text-[11px] font-mono text-dsh-primary truncate" title={name}>
             {name}
           </div>
-        </div>
-      </div>
-
-      {/* LOD 极简色块 */}
-      <div className="node-skeleton-detail w-full flex items-center gap-2 pt-0.5">
-        <div className="w-4 h-4 rounded-full node-skeleton-badge-inport shrink-0" />
-        <div className="flex-1 space-y-1.5">
-          <div className="w-14 h-2.5 rounded node-skeleton-badge-inport opacity-85" />
-          <div className="w-24 h-3 rounded node-skeleton-title" />
         </div>
       </div>
     </div>
   );
 });
 
-// Out-Port 端口卡片 (支持 LOD 色块与 React.memo)
+// Out-Port 端口卡片 (单套统一 DOM 零掉层)
 const OutPortNode = React.memo(({ data }: NodeProps) => {
   const name = (data as any)?.name as string;
   const isFocused = Boolean((data as any)?.isFocused);
@@ -233,36 +198,26 @@ const OutPortNode = React.memo(({ data }: NodeProps) => {
           ? '0 0 0 1.5px rgba(59, 130, 246, 0.6)'
           : undefined,
       }}
-      className={`node-compact-card relative w-[170px] h-[52px] box-border bg-dsh-blue-tint border ${
+      className={`node-compact-card node-outport relative w-[170px] h-[52px] box-border rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden ${
         isFocused
           ? 'border-blue-500 node-focused'
           : isConnected
           ? 'border-blue-500/80 node-connected'
-          : 'border-dsh-blue-border'
-      } rounded-md p-2 shadow flex items-center justify-between select-none cursor-grab active:cursor-grabbing overflow-hidden`}
+          : 'border-blue-500/60'
+      }`}
     >
       {/* 顶部实体色彩指示条 */}
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-blue-500" />
       <Handle type="target" position={Position.Left} />
 
-      {/* 精细全量详情 */}
-      <div className="node-full-detail w-full flex items-center justify-between pt-0.5">
+      <div className="w-full flex items-center justify-between pt-0.5">
         <div className="truncate flex-1">
-          <div className="text-[9px] text-dsh-blue font-bold uppercase tracking-tight">📤 OUT-PORT</div>
-          <div className="text-[11px] font-mono text-dsh-primary truncate" title={name}>
+          <div className="node-badge-text text-[9px] text-blue-400 font-bold uppercase tracking-tight">📤 OUT-PORT</div>
+          <div className="node-title-text text-[11px] font-mono text-dsh-primary truncate" title={name}>
             {name}
           </div>
         </div>
-        <ArrowRightCircle className="w-3.5 h-3.5 text-dsh-blue shrink-0 ml-1" />
-      </div>
-
-      {/* LOD 极简色块 */}
-      <div className="node-skeleton-detail w-full flex items-center justify-between pt-0.5">
-        <div className="flex-1 space-y-1.5">
-          <div className="w-14 h-2.5 rounded node-skeleton-badge-outport opacity-85" />
-          <div className="w-24 h-3 rounded node-skeleton-title" />
-        </div>
-        <div className="w-4 h-4 rounded-full node-skeleton-badge-outport shrink-0 ml-1" />
+        <ArrowRightCircle className="node-icon w-3.5 h-3.5 text-blue-400 shrink-0 ml-1" />
       </div>
     </div>
   );
@@ -411,10 +366,12 @@ function calculateClientTopologicalLayout(
     if (nodesInStage.length === 0) continue;
 
     const cols = Math.ceil(nodesInStage.length / maxRows) || 1;
+    // 动态平衡各列行数，消除断崖空洞
+    const rowsPerCol = Math.ceil(nodesInStage.length / cols);
 
     nodesInStage.forEach((n, idx) => {
-      const colIdx = Math.floor(idx / maxRows);
-      const rowIdx = idx % maxRows;
+      const colIdx = Math.floor(idx / rowsPerCol);
+      const rowIdx = idx % rowsPerCol;
       const x = currentX + colIdx * (CARD_WIDTH + COL_GAP);
       const y = 80 + rowIdx * (CARD_HEIGHT + ROW_GAP);
       positions[n.id] = { x, y };
@@ -432,7 +389,7 @@ function calculateClientTopologicalLayout(
   return positions;
 }
 
-// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储，并附带 v3 版本与完整度自愈校验)
+// 模块级下钻持久化缓存 (同时保障内存与 LocalStorage 双层存储，升级为 v4 版本)
 interface PersistedDrillLayout {
   positions: Record<string, { x: number; y: number }>;
   portEdges: Array<{ source: string; target: string }>;
@@ -456,7 +413,7 @@ function isLayoutValid(layout: PersistedDrillLayout | null | undefined, minExpec
 
 function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string): PersistedDrillLayout | null {
   try {
-    const key = `dsh_cg_drill_v3_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v4_${workspaceRoot || 'default'}_${moduleId}`;
     const raw = localStorage.getItem(key);
     if (raw) {
       return JSON.parse(raw);
@@ -469,7 +426,7 @@ function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string)
 
 function savePersistedLayout(workspaceRoot: string | undefined, moduleId: string, data: PersistedDrillLayout) {
   try {
-    const key = `dsh_cg_drill_v3_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v4_${workspaceRoot || 'default'}_${moduleId}`;
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
     console.warn('Failed to save drilldown layout to localStorage', e);

@@ -177,30 +177,6 @@ const ModuleCardNode = React.memo(({ data }: NodeProps) => {
           <span>右键选项</span>
         </div>
       </div>
-
-      {/* LOD 极简色块模式 (在视口缩小且非选中时激活) */}
-      <div className="node-skeleton-detail flex-1 flex flex-col justify-between py-1">
-        <div className="flex items-center justify-between pb-2 mb-2 border-b border-dsh-border1/40">
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-5 h-5 rounded shrink-0 ${
-                isContract ? 'node-skeleton-badge-contract' : 'node-skeleton-badge-func'
-              }`}
-            />
-            <div className="w-28 h-3.5 rounded node-skeleton-title" />
-          </div>
-          <div className="w-14 h-2.5 rounded node-skeleton-meta" />
-        </div>
-        <div className="space-y-2 my-2">
-          <div className="w-48 h-2.5 rounded node-skeleton-sub" />
-          <div className="w-36 h-2.5 rounded node-skeleton-sub opacity-80" />
-          <div className="w-28 h-2.5 rounded node-skeleton-sub opacity-60" />
-        </div>
-        <div className="pt-2 border-t border-dsh-border1/40 flex items-center justify-between">
-          <div className="w-16 h-2.5 rounded node-skeleton-badge-inport opacity-80" />
-          <div className="w-16 h-2.5 rounded node-skeleton-badge-outport opacity-80" />
-        </div>
-      </div>
     </div>
   );
 });

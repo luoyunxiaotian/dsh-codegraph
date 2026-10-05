@@ -110560,9 +110560,10 @@ var ElkLayoutEngine = class {
       if (nodesInStage.length === 0)
         continue;
       const cols = Math.ceil(nodesInStage.length / maxRows) || 1;
+      const rowsPerCol = Math.ceil(nodesInStage.length / cols);
       nodesInStage.forEach((n, idx) => {
-        const colIdx = Math.floor(idx / maxRows);
-        const rowIdx = idx % maxRows;
+        const colIdx = Math.floor(idx / rowsPerCol);
+        const rowIdx = idx % rowsPerCol;
         const x = currentX + colIdx * (CARD_WIDTH + COL_GAP);
         const y = 80 + rowIdx * (CARD_HEIGHT + ROW_GAP);
         positions[n.id] = { x, y, width: CARD_WIDTH, height: CARD_HEIGHT };
