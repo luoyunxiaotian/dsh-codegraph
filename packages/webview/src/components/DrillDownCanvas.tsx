@@ -255,10 +255,10 @@ function calculateClientTopologicalLayout(
     }
   });
 
-  // 2. 自适应计算目标纵横比与最大行数
+  // 2. 自适应计算目标纵横比与最大行数 (紧凑矩阵，杜绝几千像素孤岛连线)
   const totalN = internalNodes.length;
-  const maxRows = totalN > 300 ? 28 : totalN > 150 ? 20 : totalN > 50 ? 14 : 8;
-  const MAX_STAGES = totalN > 200 ? 8 : totalN > 60 ? 6 : 4;
+  const maxRows = totalN > 300 ? 32 : totalN > 150 ? 22 : totalN > 50 ? 15 : 8;
+  const MAX_STAGES = totalN > 200 ? 5 : totalN > 60 ? 4 : 3;
 
   // 3. Kahn 拓扑分层 (带环路安全截断)
   const rawRank: Record<string, number> = {};
@@ -347,12 +347,12 @@ function calculateClientTopologicalLayout(
     }
   }
 
-  // 6. 坐标网格化分配与多列折叠
+  // 6. 坐标网格化分配与多列折叠 (紧凑间距，杜绝空洞)
   const CARD_WIDTH = 220;
   const CARD_HEIGHT = 85;
-  const COL_GAP = 35;
-  const ROW_GAP = 22;
-  const STAGE_GAP = 70;
+  const COL_GAP = 28;
+  const ROW_GAP = 18;
+  const STAGE_GAP = 40;
 
   let currentX = 260;
 
@@ -407,13 +407,13 @@ function isLayoutValid(layout: PersistedDrillLayout | null | undefined, minExpec
   for (const id in layout.positions) {
     if (layout.positions[id].x > maxX) maxX = layout.positions[id].x;
   }
-  if (maxX > 7500) return false;
+  if (maxX > 5000) return false;
   return true;
 }
 
 function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string): PersistedDrillLayout | null {
   try {
-    const key = `dsh_cg_drill_v4_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v5_${workspaceRoot || 'default'}_${moduleId}`;
     const raw = localStorage.getItem(key);
     if (raw) {
       return JSON.parse(raw);
@@ -426,7 +426,7 @@ function getPersistedLayout(workspaceRoot: string | undefined, moduleId: string)
 
 function savePersistedLayout(workspaceRoot: string | undefined, moduleId: string, data: PersistedDrillLayout) {
   try {
-    const key = `dsh_cg_drill_v4_${workspaceRoot || 'default'}_${moduleId}`;
+    const key = `dsh_cg_drill_v5_${workspaceRoot || 'default'}_${moduleId}`;
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
     console.warn('Failed to save drilldown layout to localStorage', e);
@@ -562,7 +562,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         if (isLayoutValid(cached, internalNodes.length)) {
           setNodePositions(cached.positions);
           if (cached.portEdges) setServerPortEdges(cached.portEdges);
-          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
+          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
           return;
         }
       }
@@ -574,7 +574,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           setNodePositions(persisted!.positions);
           if (persisted!.portEdges) setServerPortEdges(persisted!.portEdges);
           moduleLayoutMemoryCache.set(module.id, persisted!);
-          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 30);
+          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
           return;
         }
       }
@@ -591,7 +591,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         if (
           data.success &&
           data.layout?.nodes &&
-          (!data.layout.width || data.layout.width < 7500) &&
+          (!data.layout.width || data.layout.width < 5500) &&
           data.layout.nodes.length >= Math.min(internalNodes.length, 10)
         ) {
           const posMap: Record<string, { x: number; y: number }> = {};
@@ -606,7 +606,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           savePersistedLayout(workspaceRoot, module.id, layoutData);
 
           if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
-          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 50);
+          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 300 }), 150);
           return;
         }
       } catch (err) {
@@ -621,7 +621,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       moduleLayoutMemoryCache.set(module.id, clientData);
       savePersistedLayout(workspaceRoot, module.id, clientData);
       if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
-      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 350 }), 50);
+      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 300 }), 150);
     },
     [module, workspaceRoot, internalNodes, allEdges, rfInstance]
   );
@@ -632,7 +632,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     if (mem && isLayoutValid(mem, internalNodes.length)) {
       setNodePositions(mem.positions);
       if (mem.portEdges) setServerPortEdges(mem.portEdges);
-      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 40);
+      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
       return;
     }
 
@@ -641,7 +641,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       setNodePositions(stored.positions);
       if (stored.portEdges) setServerPortEdges(stored.portEdges);
       moduleLayoutMemoryCache.set(module.id, stored);
-      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.15, duration: 250 }), 40);
+      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
       return;
     }
 
@@ -753,6 +753,30 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
     setNodes(reactNodes);
   }, [module, internalNodes, nodePositions, selectedNodeId, rawEdges, onSelectNode, setNodes]);
+
+  // 当首次加载完节点或切换模块时，确保全景自动适屏居中 (彻底杜绝停留在 (0,0) 局部导致卡片在屏幕外被误判为消失)
+  const hasAutoFittedRef = useRef(false);
+  const prevModuleIdRef = useRef(module.id);
+
+  useEffect(() => {
+    if (prevModuleIdRef.current !== module.id) {
+      prevModuleIdRef.current = module.id;
+      hasAutoFittedRef.current = false;
+    }
+  }, [module.id]);
+
+  useEffect(() => {
+    if (nodes.length > 0 && (rfInstance || rfInstanceRef.current) && !hasAutoFittedRef.current) {
+      hasAutoFittedRef.current = true;
+      const timer = setTimeout(() => {
+        const inst = rfInstanceRef.current || rfInstance;
+        if (inst) {
+          inst.fitView({ padding: 0.1, duration: 250 });
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [nodes.length, rfInstance]);
 
   // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画，未选中时全量静态化且沉底
   useEffect(() => {
@@ -974,6 +998,16 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           <span>{isUntangling ? '理线中...' : '一键理线'}</span>
         </button>
 
+        {/* 全景适屏按钮 */}
+        <button
+          onClick={() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 })}
+          title="将所有卡片全景居中适屏显示"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+        >
+          <Maximize2 className="w-4 h-4 text-emerald-400" />
+          <span>全景适屏</span>
+        </button>
+
         {/* 平滑正交 / 优雅曲线 切换 */}
         <button
           onClick={() => setRoutingMode((prev) => (prev === 'smoothstep' ? 'bezier' : 'smoothstep'))}
@@ -1036,8 +1070,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           isLodCompactRef.current = initialCompact;
           setIsLodCompact(initialCompact);
           setTimeout(() => {
-            instance.fitView({ padding: 0.15, duration: 250 });
-          }, 30);
+            instance.fitView({ padding: 0.1, duration: 250 });
+          }, 150);
         }}
         onMove={handleMove}
         onNodeClick={(_, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}

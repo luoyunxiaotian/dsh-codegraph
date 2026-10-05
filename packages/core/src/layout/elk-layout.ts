@@ -190,10 +190,10 @@ export class ElkLayoutEngine {
       }
     });
 
-    // 1. 自适应计算目标纵横比与最大行数 (杜绝万像素单行长蛇阵，收敛至 16:9 ~ 4:3 黄金视口)
+    // 1. 自适应计算目标纵横比与最大行数 (紧凑矩阵，杜绝几千像素孤岛连线)
     const totalN = internalNodes.length;
-    const maxRows = totalN > 300 ? 28 : totalN > 150 ? 20 : totalN > 50 ? 14 : 8;
-    const MAX_STAGES = totalN > 200 ? 8 : totalN > 60 ? 6 : 4;
+    const maxRows = totalN > 300 ? 32 : totalN > 150 ? 22 : totalN > 50 ? 15 : 8;
+    const MAX_STAGES = totalN > 200 ? 5 : totalN > 60 ? 4 : 3;
 
     // 2. Kahn 拓扑分层 (带环路安全截断)
     const rawRank: Record<string, number> = {};
@@ -283,12 +283,12 @@ export class ElkLayoutEngine {
       }
     }
 
-    // 5. 坐标网格化分配与多列折叠
+    // 5. 坐标网格化分配与多列折叠 (紧凑间距，杜绝空洞)
     const CARD_WIDTH = 220;
     const CARD_HEIGHT = 85;
-    const COL_GAP = 35;
-    const ROW_GAP = 22;
-    const STAGE_GAP = 70;
+    const COL_GAP = 28;
+    const ROW_GAP = 18;
+    const STAGE_GAP = 40;
 
     const positions: Record<string, { x: number; y: number; width: number; height: number }> = {};
     let currentX = 260;

@@ -110460,8 +110460,8 @@ var ElkLayoutEngine = class {
       }
     });
     const totalN = internalNodes.length;
-    const maxRows = totalN > 300 ? 28 : totalN > 150 ? 20 : totalN > 50 ? 14 : 8;
-    const MAX_STAGES = totalN > 200 ? 8 : totalN > 60 ? 6 : 4;
+    const maxRows = totalN > 300 ? 32 : totalN > 150 ? 22 : totalN > 50 ? 15 : 8;
+    const MAX_STAGES = totalN > 200 ? 5 : totalN > 60 ? 4 : 3;
     const rawRank = {};
     const inDegreeWork = { ...inDegree };
     let currentLayer = [];
@@ -110541,9 +110541,9 @@ var ElkLayoutEngine = class {
     }
     const CARD_WIDTH = 220;
     const CARD_HEIGHT = 85;
-    const COL_GAP = 35;
-    const ROW_GAP = 22;
-    const STAGE_GAP = 70;
+    const COL_GAP = 28;
+    const ROW_GAP = 18;
+    const STAGE_GAP = 40;
     const positions = {};
     let currentX = 260;
     let maxY = 500;
@@ -110819,7 +110819,7 @@ var CodeGraphServer = class {
       if (!body2?.forceRefresh) {
         if (this.drilldownCache.has(moduleId)) {
           const cached = this.drilldownCache.get(moduleId);
-          if (cached?.layout?.width && cached.layout.width < 7500) {
+          if (cached?.layout?.width && cached.layout.width < 5500) {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({
               success: true,
@@ -110831,7 +110831,7 @@ var CodeGraphServer = class {
           }
         }
         const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 7500) {
+        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 5500) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({

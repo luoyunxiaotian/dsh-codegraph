@@ -261,7 +261,7 @@ export class CodeGraphServer {
       if (!body?.forceRefresh) {
         if (this.drilldownCache.has(moduleId)) {
           const cached = this.drilldownCache.get(moduleId);
-          if (cached?.layout?.width && cached.layout.width < 7500) {
+          if (cached?.layout?.width && cached.layout.width < 5500) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
@@ -277,7 +277,7 @@ export class CodeGraphServer {
 
         // 检测核心引擎与磁盘持久化缓存
         const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 7500) {
+        if (diskCache && diskCache?.layout?.width && diskCache.layout.width < 5500) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
