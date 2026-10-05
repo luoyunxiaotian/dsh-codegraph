@@ -117,18 +117,18 @@ body {
   z-index: 10 !important;
 }
 
-/* 硬件加速图层与渲染隔离，大幅提升大图谱 (500+ 卡片) 拖拽、平移与缩放跟手率 */
+/* 彻底移除 .react-flow__viewport 的 will-change: transform 与 .react-flow__edge 的 contain: paint，
+   杜绝 Chromium Compositor (TileManager) 在极端缩放或大型视口下掉层、丢瓦片导致卡片凭空消失！ */
 .react-flow__viewport {
-  will-change: transform;
+  will-change: auto;
 }
 
 .react-flow__node {
-  /* 移除 will-change 与 contain: layout style，避免 500 个独立合成图层导致显存超载与合成器掉层 */
   pointer-events: auto;
 }
 
 .react-flow__edge {
-  contain: paint;
+  contain: none;
 }
 
 /* =========================================================================
