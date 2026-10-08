@@ -28,6 +28,8 @@ export class SymbolTable {
   public registerFileExtraction(result: ExtractedFileResult): void {
     // 1. 先清理该文件可能存在的旧索引 (若增量更新)
     this.invalidateFile(result.filePath);
+    // 文件集变化后模块路径解析结果可能改变 → 清空记忆化缓存
+    this.modulePathCache.clear();
 
     this.fileExtractionCache.set(result.filePath, result);
     const nodeSet = new Set<string>();
@@ -379,9 +381,36 @@ export class SymbolTable {
   }
 
   /**
-   * 辅助方法：将多语言导入模块路径解析为工作区实际文件相对路径
+   * modulePath 解析结果缓存（键 = 源文件 + 模块路径 + 导入名）。
+   *
+   * 为什么需要：实测 49 文件子集里 resolveModuleToFilePath 被调 **8762 次**（约 180 次/文件），
+   *   累计 4581ms，占全量扫描 89%；而同期 fs 同步探测只有 191 次/11ms —— 瓶颈是**重复纯计算**
+   *   （同一次解析里大量 (源文件, 模块路径, 导入名) 组合完全相同）。
+   * 失效：registerFileExtraction（新增/更新文件）时清空。
+   */
+  private modulePathCache = new Map<string, string | null>();
+
+  /**
+   * 辅助方法：将多语言导入模块路径解析为工作区实际文件相对路径。
+   * 带记忆化：同一入参在本次解析内只算一次（见 modulePathCache）。
    */
   public resolveModuleToFilePath(
+    sourceFilePath: string,
+    modulePath: string,
+    importedName?: string
+  ): string | undefined {
+    const key = `${sourceFilePath}\u0000${modulePath}\u0000${importedName || ''}`;
+    const hit = this.modulePathCache.get(key);
+    if (hit !== undefined) return hit === null ? undefined : hit;
+    const resolved = this.resolveModuleToFilePathUncached(sourceFilePath, modulePath, importedName);
+    this.modulePathCache.set(key, resolved === undefined ? null : resolved);
+    return resolved;
+  }
+
+  /**
+   * 辅助方法（无缓存实现）：将多语言导入模块路径解析为工作区实际文件相对路径。
+   */
+  private resolveModuleToFilePathUncached(
     sourceFilePath: string,
     modulePath: string,
     importedName?: string
