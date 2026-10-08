@@ -110522,8 +110522,8 @@ var ArchitectureSkeletonExtractor = class {
         lines.push(`* ... (\u53E6\u6709 ${flows.length - 4} \u6761\u65F6\u5E8F\u6D41\u7A0B)`);
       }
     }
-    lines.push("\n[\u667A\u80FD\u4F53\u534F\u540C\u5EFA\u8BAE]");
-    lines.push("\u{1F4A1} \u5F53\u524D\u5DE5\u7A0B\u5DF2\u6302\u8F7D\u672C\u5730 CodeGraph AST \u56FE\u8C31\u5F15\u64CE\u3002\u5F53\u9700\u8981\u63A2\u7D22\u6A21\u5757\u4F9D\u8D56\u5173\u7CFB\u3001\u67E5\u770B\u65F6\u5E8F\u8C03\u7528\u94FE\u3001\u6216\u5728\u6539\u52A8\u4EE3\u7801\u524D\u8BC4\u4F30\u5F71\u54CD\u9762 (Blast Radius) \u65F6\uFF0C\u5F3A\u70C8\u63A8\u8350\u4F18\u5148\u8C03\u7528 codegraph \u4E13\u5C5E\u5DE5\u5177 (\u5982 codegraph_get_architecture, codegraph_trace_flow, codegraph_impact_analysis, codegraph_inspect_narrative, codegraph_audit_health) \u83B7\u53D6\u9AD8\u7CBE\u5EA6\u62D3\u6251\uFF0C\u8F85\u52A9\u8FDB\u884C\u5DE5\u7A0B\u51B3\u7B56\u3002");
+    lines.push("\n[\u667A\u80FD\u4F53\u534F\u540C\u6307\u5F15]");
+    lines.push("\u{1F4A1} \u5F53\u524D\u5DE5\u7A0B\u5DF2\u6302\u8F7D\u672C\u5730 CodeGraph AST \u56FE\u8C31\u5F15\u64CE\u3002\u5728\u5206\u6790\u4EE3\u7801\u7ED3\u6784\u3001\u5BFB\u627E\u5173\u952E\u58F0\u660E\u3001\u6392\u67E5\u8C03\u7528\u94FE\u8DEF\uFF08\u652F\u6301 from\u2794to \u6700\u77ED\u8DEF\u5F84\u7A7F\u900F\uFF09\u6216\u4FEE\u6539\u524D\u8BC4\u4F30\u5F71\u54CD\u9762\u65F6\uFF0C\u5F3A\u70C8\u5EFA\u8BAE\u4F18\u5148\u4F7F\u7528 codegraph \u4E13\u5C5E\u5DE5\u5177\uFF08\u5982 codegraph_get_architecture, codegraph_trace_flow, codegraph_impact_analysis, codegraph_inspect_narrative, codegraph_audit_health\uFF09\u83B7\u53D6\u786E\u5B9A\u6027\u62D3\u6251\uFF0C\u907F\u514D\u76F2\u76EE grep/read \u5927\u6587\u4EF6\uFF1B\u4EC5\u5728\u9700\u8981\u7F16\u8F91\u4FEE\u6539\u5177\u4F53\u6E90\u7801\u65F6\u4F7F\u7528 edit/read\u3002");
     lines.push("</code_graph_architecture>");
     return lines.join("\n");
   }
@@ -110879,6 +110879,217 @@ var ArchitectureHealthAuditor = class {
       lines.push(`
 **\u5206\u5C42\u8D8A\u6743\u68C0\u6D4B**: \u2705 \u6838\u5FC3\u5C42\u7EA7\u4F9D\u8D56\u65B9\u5411\u7B26\u5408\u67B6\u6784\u89C4\u8303\u3002`);
     }
+    return lines.join("\n");
+  }
+};
+
+// packages/core/dist/graph/call-path-finder.js
+var CallPathFinder = class {
+  /**
+   * 在代码图谱中执行 A ➔ B 广度优先 (BFS) 最短调用路径穿透搜索
+   */
+  static findShortestPath(fromQuery, toQuery, graph, options = {}) {
+    const maxDepth = options.maxDepth ?? 10;
+    const allNodes = graph.allNodes;
+    const allEdges = graph.allEdges;
+    const modules = graph.architectureView?.modules || [];
+    const findModuleForFile = (filePath) => {
+      for (const m of modules) {
+        if (m.files.some((f) => f === filePath || filePath.endsWith(f) || f.endsWith(filePath))) {
+          return m.name;
+        }
+      }
+      return "default";
+    };
+    const matchCandidates = (query, fileFilter) => {
+      const q = query.trim().toLowerCase();
+      const nodes = Object.values(allNodes);
+      let matches = nodes.filter((n) => {
+        if (fileFilter && !n.filePath.toLowerCase().includes(fileFilter.toLowerCase()))
+          return false;
+        return n.name.toLowerCase() === q || n.qualifiedName.toLowerCase() === q || n.id.toLowerCase() === q;
+      });
+      if (matches.length === 0 && q.length > 2) {
+        matches = nodes.filter((n) => {
+          if (fileFilter && !n.filePath.toLowerCase().includes(fileFilter.toLowerCase()))
+            return false;
+          return n.name.toLowerCase().includes(q) || n.qualifiedName.toLowerCase().includes(q);
+        });
+      }
+      return matches;
+    };
+    const fromNodes = matchCandidates(fromQuery, options.fromFile);
+    if (fromNodes.length === 0) {
+      return {
+        found: false,
+        fromQuery,
+        toQuery,
+        hopCount: 0,
+        path: [],
+        message: `\u672A\u5728\u56FE\u8C31\u4E2D\u627E\u5230\u8D77\u70B9\u7B26\u53F7 [${fromQuery}] \u5BF9\u5E94\u7684\u51FD\u6570\u6216\u7EC4\u4EF6`
+      };
+    }
+    const toNodes = matchCandidates(toQuery, options.toFile);
+    if (toNodes.length === 0) {
+      return {
+        found: false,
+        fromQuery,
+        toQuery,
+        hopCount: 0,
+        path: [],
+        message: `\u672A\u5728\u56FE\u8C31\u4E2D\u627E\u5230\u7EC8\u70B9\u7B26\u53F7 [${toQuery}] \u5BF9\u5E94\u7684\u51FD\u6570\u6216\u7EC4\u4EF6`
+      };
+    }
+    const forwardAdj = /* @__PURE__ */ new Map();
+    const reverseAdj = /* @__PURE__ */ new Map();
+    for (const edge of Object.values(allEdges)) {
+      if (!forwardAdj.has(edge.source))
+        forwardAdj.set(edge.source, []);
+      forwardAdj.get(edge.source).push({ targetId: edge.target, edge });
+      if (!reverseAdj.has(edge.target))
+        reverseAdj.set(edge.target, []);
+      reverseAdj.get(edge.target).push({ sourceId: edge.source, edge });
+    }
+    const targetSet = new Set(toNodes.map((n) => n.id));
+    const bfs = (startNodes, targets, adjacency) => {
+      const parentMap = /* @__PURE__ */ new Map();
+      const visited = /* @__PURE__ */ new Set();
+      const queue = [];
+      for (const start2 of startNodes) {
+        if (targets.has(start2.id)) {
+          return { targetReached: start2.id, parentMap };
+        }
+        visited.add(start2.id);
+        queue.push({ nodeId: start2.id, depth: 0 });
+      }
+      while (queue.length > 0) {
+        const { nodeId, depth } = queue.shift();
+        if (depth >= maxDepth)
+          continue;
+        const neighbors = adjacency.get(nodeId) || [];
+        for (const { targetId, edge } of neighbors) {
+          if (!visited.has(targetId)) {
+            visited.add(targetId);
+            parentMap.set(targetId, { prevId: nodeId, edge });
+            if (targets.has(targetId)) {
+              return { targetReached: targetId, parentMap };
+            }
+            queue.push({ nodeId: targetId, depth: depth + 1 });
+          }
+        }
+      }
+      return { targetReached: void 0, parentMap };
+    };
+    const forwardResult = bfs(fromNodes, targetSet, forwardAdj);
+    if (forwardResult.targetReached) {
+      const targetId = forwardResult.targetReached;
+      const targetNode = allNodes[targetId];
+      const hops = [];
+      let curr = targetId;
+      while (forwardResult.parentMap.has(curr)) {
+        const { prevId, edge } = forwardResult.parentMap.get(curr);
+        const prevNode = allNodes[prevId];
+        const nextNode = allNodes[curr];
+        if (prevNode && nextNode) {
+          hops.unshift({
+            hopIndex: 0,
+            fromNode: {
+              id: prevNode.id,
+              name: prevNode.name,
+              filePath: prevNode.filePath,
+              line: prevNode.loc?.startLine || 1,
+              module: findModuleForFile(prevNode.filePath)
+            },
+            toNode: {
+              id: nextNode.id,
+              name: nextNode.name,
+              filePath: nextNode.filePath,
+              line: nextNode.loc?.startLine || 1,
+              module: findModuleForFile(nextNode.filePath)
+            },
+            relation: edge.relation,
+            callLine: edge.sourceLine
+          });
+        }
+        curr = prevId;
+      }
+      hops.forEach((h, idx) => h.hopIndex = idx + 1);
+      const startNode = allNodes[curr] || fromNodes[0];
+      return {
+        found: true,
+        isReversed: false,
+        fromQuery,
+        toQuery,
+        fromNode: {
+          id: startNode.id,
+          name: startNode.name,
+          filePath: startNode.filePath,
+          line: startNode.loc?.startLine || 1
+        },
+        toNode: {
+          id: targetNode.id,
+          name: targetNode.name,
+          filePath: targetNode.filePath,
+          line: targetNode.loc?.startLine || 1
+        },
+        hopCount: hops.length,
+        path: hops,
+        message: `\u6210\u529F\u67E5\u627E\u5230\u4ECE [${startNode.name}] \u5230 [${targetNode.name}] \u7684\u6700\u77ED\u8C03\u7528\u94FE (\u5171 ${hops.length} \u6B65)`
+      };
+    }
+    const fromSet = new Set(fromNodes.map((n) => n.id));
+    const reverseResult = bfs(toNodes, fromSet, forwardAdj);
+    if (reverseResult.targetReached) {
+      return {
+        found: false,
+        isReversed: true,
+        fromQuery,
+        toQuery,
+        hopCount: 0,
+        path: [],
+        message: `\u63D0\u793A\uFF1A\u672A\u53D1\u73B0 [${fromQuery}] \u2794 [${toQuery}] \u7684\u8C03\u7528\u6D41\uFF0C\u4F46\u5728\u76F8\u53CD\u65B9\u5411\u4E0A\u68C0\u6D4B\u5230 [${toQuery}] \u6B63\u5728\u8C03\u7528 [${fromQuery}]\u3002\u5982\u9700\u8FFD\u8E2A\u8BF7\u98A0\u5012\u8D77\u70B9\u4E0E\u7EC8\u70B9\u3002`
+      };
+    }
+    return {
+      found: false,
+      isReversed: false,
+      fromQuery,
+      toQuery,
+      hopCount: 0,
+      path: [],
+      message: `\u672A\u5728\u5F53\u524D\u4EE3\u7801\u56FE\u8C31\u4E2D\u68C0\u6D4B\u5230\u4ECE [${fromQuery}] \u76F4\u8FBE [${toQuery}] \u7684\u8C03\u7528\u94FE\u8DEF (\u6700\u5927\u641C\u7D22\u6DF1\u5EA6 ${maxDepth} \u8DF3)\u3002\u4E24\u8005\u53EF\u80FD\u901A\u8FC7\u4E8B\u4EF6\u6D3E\u53D1\u3001\u6D88\u606F\u603B\u7EBF\u89E3\u8026\u6216\u5C5E\u4E8E\u4E0D\u540C\u72EC\u7ACB\u5C42\u7EA7\u3002`
+    };
+  }
+  /**
+   * 将调用链路格式化为高可读性、确定性的 Markdown 文本
+   */
+  static formatMarkdown(result) {
+    const lines = [];
+    if (!result.found) {
+      lines.push(`### \u26D3\uFE0F \u8C03\u7528\u94FE\u7A7F\u900F\u7ED3\u679C: \`${result.fromQuery}\` \u2794 \`${result.toQuery}\``);
+      lines.push(`> \u26A0\uFE0F **\u672A\u8FDE\u901A**: ${result.message}`);
+      lines.push(`
+**\u5EFA\u8BAE\u6392\u67E5\u6B65\u9AA4**:`);
+      lines.push(`1. \u4F7F\u7528 \`codegraph_inspect_narrative\` \u67E5\u8BE2 \`${result.fromQuery}\`\uFF0C\u67E5\u770B\u5176\u6240\u6709\u76F4\u63A5\u4E0B\u6E38\u4F9D\u8D56 (Out-Ports / Callees)`);
+      lines.push(`2. \u4F7F\u7528 \`codegraph_inspect_narrative\` \u67E5\u8BE2 \`${result.toQuery}\`\uFF0C\u67E5\u770B\u5176\u6240\u6709\u4E0A\u6E38\u6765\u6E90 (In-Ports / Callers)`);
+      lines.push(`3. \u68C0\u67E5\u4E24\u8005\u662F\u5426\u901A\u8FC7\u4E8B\u4EF6\u53D1\u5E03\u8BA2\u9605 (EventBus)\u3001HTTP \u8DEF\u7531\u6216\u5168\u5C40\u4F9D\u8D56\u6CE8\u5165\u95F4\u63A5\u4EA4\u4E92`);
+      return lines.join("\n");
+    }
+    lines.push(`### \u26D3\uFE0F \u6700\u77ED\u8C03\u7528\u94FE\u8DEF\u7A7F\u900F: \`${result.fromNode?.name || result.fromQuery}\` \u2794 \`${result.toNode?.name || result.toQuery}\` (\u5171 ${result.hopCount} \u6B65)`);
+    lines.push(`- **\u8D77\u70B9**: \`${result.fromNode?.name}\` (\`${result.fromNode?.filePath}:${result.fromNode?.line}\`)`);
+    lines.push(`- **\u7EC8\u70B9**: \`${result.toNode?.name}\` (\`${result.toNode?.filePath}:${result.toNode?.line}\`)`);
+    lines.push(`- **\u7A7F\u900F\u6DF1\u5EA6**: ${result.hopCount} \u7EA7\u8C03\u7528
+`);
+    lines.push(`**\u9010\u6B65\u6267\u884C\u94FE\u8DEF**:`);
+    for (const hop of result.path) {
+      const fromLoc = `\`${hop.fromNode.filePath}:${hop.callLine || hop.fromNode.line}\``;
+      const toLoc = `\`${hop.toNode.filePath}:${hop.toNode.line}\``;
+      const fromMod = hop.fromNode.module ? `[${hop.fromNode.module}] ` : "";
+      const toMod = hop.toNode.module ? `[${hop.toNode.module}] ` : "";
+      lines.push(`${hop.hopIndex}. ${fromMod}\`${hop.fromNode.name}()\` (${fromLoc}) \u2794 \`${hop.relation}\` \u2794 ${toMod}\`${hop.toNode.name}()\` (${toLoc})`);
+    }
+    lines.push(`
+\u2705 **\u8C03\u7528\u94FE\u8FBE\u6210**: \u5DF2\u5B8C\u6574\u8FDE\u901A\u8D77\u70B9\u4E0E\u7EC8\u70B9\u3002`);
     return lines.join("\n");
   }
 };
@@ -112201,7 +112412,7 @@ function apply(ctx, config = {}) {
                 const skeleton = getStableSkeleton(result);
                 assembly.contexts.push({
                   name: "codegraph-architecture",
-                  order: 200,
+                  order: 98,
                   text: skeleton
                 });
               }
@@ -112215,7 +112426,7 @@ function apply(ctx, config = {}) {
       if (ctx.systemPrompt && typeof ctx.systemPrompt.context === "function") {
         ctx.systemPrompt.context({
           name: "codegraph-architecture",
-          order: 200,
+          order: 98,
           text: () => {
             if (!coreInstance) return "";
             let graph = coreInstance.getLastResult();
@@ -112259,6 +112470,10 @@ function apply(ctx, config = {}) {
           schema: { type: "string" },
           render: (_args, value) => [{ type: "text", text: value }]
         },
+        presentCall: (args2) => ({
+          card: "terminal",
+          title: `codegraph: \u67B6\u6784\u5206\u6790${args2.module ? ` (${args2.module})` : ""}`
+        }),
         async execute(args2) {
           const cached = getCachedToolResult("codegraph_get_architecture", args2);
           if (cached) return cached;
@@ -112343,7 +112558,7 @@ function apply(ctx, config = {}) {
       });
       toolsService.register({
         name: "codegraph_trace_flow",
-        description: "\u7AEF\u5230\u7AEF\u4E1A\u52A1\u65F6\u5E8F\u6D41\u7A7F\u900F\u67E5\u8BE2\u3002\u6309\u6267\u884C\u65F6\u5E8F\u83B7\u53D6\u5173\u952E\u4E1A\u52A1\u6D41\uFF08\u5982\u8BF7\u6C42\u5904\u7406\u3001\u8BA4\u8BC1\u9274\u6743\u3001\u6570\u636E\u540C\u6B65\uFF09\u7684\u5B8C\u6574\u8C03\u7528\u6B65\u9AA4\u5E8F\u5217\u53CA\u5177\u4F53\u6E90\u7801\u4F4D\u7F6E(\u6587\u4EF6\u4E0E\u7CBE\u786E\u884C\u53F7)\u3002\u5F53\u9700\u8981\u7406\u89E3\u4E1A\u52A1\u6267\u884C\u6D41\u8F6C\u8DEF\u5F84\u65F6\u4F7F\u7528\u3002",
+        description: "\u7AEF\u5230\u7AEF\u4E1A\u52A1\u65F6\u5E8F\u6D41\u4E0E\u8C03\u7528\u94FE\u7A7F\u900F\u67E5\u8BE2\u3002\u652F\u6301\u4E24\u79CD\u6A21\u5F0F\uFF1A\u2460 \u6700\u77ED\u8DEF\u5F84\u7A7F\u900F\u6A21\u5F0F\uFF1A\u4F20\u5165 from \u4E0E to \u7B26\u53F7\u540D\u79F0\uFF0C\u6267\u884C A\u2794B \u5E7F\u5EA6\u4F18\u5148 (BFS) \u6700\u77ED\u8C03\u7528\u94FE\u8DEF\u7A7F\u900F\u641C\u7D22\uFF1B\u2461 \u4E1A\u52A1\u65F6\u5E8F\u6A21\u5F0F\uFF1A\u4F20\u5165 flowId \u6216 query\uFF0C\u83B7\u53D6\u5173\u952E\u4E1A\u52A1\u6D41\uFF08\u5982\u8BF7\u6C42\u5904\u7406\u3001\u8BA4\u8BC1\u9274\u6743\u3001\u6570\u636E\u540C\u6B65\uFF09\u7684\u5B8C\u6574\u65F6\u5E8F\u6D41\u8F6C\u6B65\u9AA4\u4E0E\u6E90\u7801\u4F4D\u7F6E\u3002",
         parameters: {
           flowId: {
             type: "string",
@@ -112352,6 +112567,18 @@ function apply(ctx, config = {}) {
           query: {
             type: "string",
             description: "\u53EF\u9009\uFF1A\u4E1A\u52A1\u6D41\u7A0B\u540D\u79F0\u6216\u5173\u952E\u8BCD\u6A21\u7CCA\u641C\u7D22 (\u5982 login, sync, scan)"
+          },
+          from: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u8C03\u7528\u94FE\u7A7F\u900F\u8D77\u70B9\u7B26\u53F7\u540D\u79F0 (\u5982 handleRequest, login, AuthController)\u3002\u4E0E to \u53C2\u6570\u914D\u5408\u65F6\u89E6\u53D1 A\u2794B \u6700\u77ED\u8C03\u7528\u94FE\u8DEF\u7A7F\u900F\u641C\u7D22\u3002"
+          },
+          to: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u8C03\u7528\u94FE\u7A7F\u900F\u7EC8\u70B9\u7B26\u53F7\u540D\u79F0 (\u5982 queryUserById, saveToken, verifyCredentials)\u3002\u4E0E from \u53C2\u6570\u914D\u5408\u65F6\u89E6\u53D1 A\u2794B \u6700\u77ED\u8C03\u7528\u94FE\u8DEF\u7A7F\u900F\u641C\u7D22\u3002"
+          },
+          maxDepth: {
+            type: "number",
+            description: "\u53EF\u9009\uFF1A\u4E24\u70B9\u8C03\u7528\u7A7F\u900F\u7684\u6700\u5927\u641C\u7D22\u6DF1\u5EA6\u8DF3\u6570 (\u9ED8\u8BA4 10\uFF0C\u6700\u5927 15)"
           },
           workspaceRoot: {
             type: "string",
@@ -112362,10 +112589,26 @@ function apply(ctx, config = {}) {
           schema: { type: "string" },
           render: (_args, value) => [{ type: "text", text: value }]
         },
+        presentCall: (args2) => ({
+          card: "terminal",
+          title: `codegraph: ${args2.from && args2.to ? `\u94FE\u8DEF\u7A7F\u900F (${args2.from} \u2794 ${args2.to})` : `\u65F6\u5E8F\u6D41 (${args2.flowId || args2.query || "\u4E3B\u5E72"})`}`
+        }),
         async execute(args2) {
           const cached = getCachedToolResult("codegraph_trace_flow", args2);
           if (cached) return cached;
           const graph = await ensureGraphReady(args2.workspaceRoot);
+          if (args2.from && args2.to) {
+            const maxDepth = Math.min(Math.max(args2.maxDepth || 10, 1), 15);
+            const pathResult = CallPathFinder.findShortestPath(args2.from, args2.to, graph, { maxDepth });
+            const output2 = CallPathFinder.formatMarkdown(pathResult);
+            setCachedToolResult("codegraph_trace_flow", args2, output2);
+            return output2;
+          }
+          if (args2.from && !args2.query) {
+            args2.query = args2.from;
+          } else if (args2.to && !args2.query) {
+            args2.query = args2.to;
+          }
           let rawFlows = graph.processFlows || [];
           if (args2.flowId) {
             rawFlows = rawFlows.filter((f) => f.flowId === args2.flowId);
@@ -112429,6 +112672,10 @@ function apply(ctx, config = {}) {
           schema: { type: "string" },
           render: (_args, value) => [{ type: "text", text: value }]
         },
+        presentCall: (args2) => ({
+          card: "terminal",
+          title: `codegraph: \u5F71\u54CD\u9762\u5206\u6790 (${args2.symbol})`
+        }),
         async execute(args2) {
           if (!args2.symbol) {
             return "\u9519\u8BEF\uFF1A\u5FC5\u987B\u63D0\u4F9B symbol \u53C2\u6570 (\u51C6\u5907\u4FEE\u6539\u7684\u7B26\u53F7\u540D\u79F0)";
@@ -112468,6 +112715,10 @@ function apply(ctx, config = {}) {
           schema: { type: "string" },
           render: (_args, value) => [{ type: "text", text: value }]
         },
+        presentCall: (args2) => ({
+          card: "terminal",
+          title: `codegraph: \u7B26\u53F7\u62D3\u6251\u53D9\u4E8B (${args2.symbol})`
+        }),
         async execute(args2) {
           if (!args2.symbol) {
             return "\u9519\u8BEF\uFF1A\u5FC5\u987B\u63D0\u4F9B symbol \u53C2\u6570";
@@ -112557,6 +112808,10 @@ function apply(ctx, config = {}) {
           schema: { type: "string" },
           render: (_args, value) => [{ type: "text", text: value }]
         },
+        presentCall: (_args) => ({
+          card: "terminal",
+          title: "codegraph: \u67B6\u6784\u5065\u5EB7\u5BA1\u8BA1"
+        }),
         async execute(args2) {
           const cached = getCachedToolResult("codegraph_audit_health", args2);
           if (cached) return cached;

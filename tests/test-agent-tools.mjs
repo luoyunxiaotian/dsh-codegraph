@@ -3,6 +3,7 @@ import { CodeGraphCore } from '../packages/core/dist/index.js';
 import { ArchitectureSkeletonExtractor } from '../packages/core/dist/archetype/skeleton-extractor.js';
 import { ImpactAnalyzer } from '../packages/core/dist/graph/impact-analyzer.js';
 import { ArchitectureHealthAuditor } from '../packages/core/dist/graph/health-auditor.js';
+import { CallPathFinder } from '../packages/core/dist/graph/call-path-finder.js';
 
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
@@ -54,6 +55,16 @@ async function testAll() {
     throw new Error('❌ loadFromCache 失败，本地缓存未自动生成！');
   }
   console.log(`   ✅ 磁盘缓存读取成功 (版本: ${cached.version}, 生成于: ${cached.savedAt})`);
+
+  console.log('\n6. 测试两点最短调用链穿透确定性 (CallPathFinder)...');
+  const path1 = CallPathFinder.formatMarkdown(CallPathFinder.findShortestPath('apply', 'ensureGraphReady', graph));
+  const path2 = CallPathFinder.formatMarkdown(CallPathFinder.findShortestPath('apply', 'ensureGraphReady', graph));
+  const hashP1 = sha256(path1);
+  const hashP2 = sha256(path2);
+  if (hashP1 !== hashP2) {
+    throw new Error('❌ CallPathFinder 最短调用链穿透输出不具有确定性！');
+  }
+  console.log(`   ✅ 调用链穿透确定性校验通过 (SHA256: ${hashP1.slice(0, 12)}...)`);
 
   console.log('\n🎉 所有确定性保真与缓存优化验证全部通过！');
 }

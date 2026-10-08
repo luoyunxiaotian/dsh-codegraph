@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { CodeGraphCore, WorkspaceProfiler } from '../src/index.js';
+import { CodeGraphCore, WorkspaceProfiler, CallPathFinder } from '../src/index.js';
 import { runWatcherIncrementalTests } from './watcher-incremental.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -377,6 +377,26 @@ func main() {
     throw new Error(`Out-Port x(${outPortPos.x}) 未能在调用源 x(${verifyPos.x}) 的右侧`);
   }
   console.log('  ✓ 成功验证 Sugiyama 分层排版与 In/Out Port 首尾层级正交流向约束！');
+
+  // 测试 10: 验证 A ➔ B 最短调用链穿透查找 (CallPathFinder)
+  console.log('\n[测试 10] 验证 A ➔ B 最短调用链穿透查找 (CallPathFinder)...');
+  const pathResult = CallPathFinder.findShortestPath('login', 'query_user_by_name', result1);
+  console.log(`  ✓ 连通状态: ${pathResult.found}, 步数: ${pathResult.hopCount}`);
+  if (!pathResult.found || pathResult.hopCount !== 2) {
+    throw new Error(`CallPathFinder 路径查找异常，期望 2 步，实际: ${pathResult.hopCount}`);
+  }
+  const formatted = CallPathFinder.formatMarkdown(pathResult);
+  if (!formatted.includes('login') || !formatted.includes('query_user_by_name')) {
+    throw new Error('CallPathFinder 格式化输出异常');
+  }
+  console.log('  ✓ 成功验证端到端调用链穿透连通性与 Markdown 输出');
+
+  // 测试反向探测
+  const reversedResult = CallPathFinder.findShortestPath('query_user_by_name', 'login', result1);
+  if (reversedResult.found || !reversedResult.isReversed) {
+    throw new Error('CallPathFinder 反向探测失败');
+  }
+  console.log('  ✓ 成功检测反向调用关系并给出转向提示');
 
   // 增量变更检测回归（未提交 / 已提交 / 重命名 都要能检出；见 watcher-incremental.ts）
   await runWatcherIncrementalTests();

@@ -64,9 +64,9 @@ export class ArchitectureSkeletonExtractor {
       }
     }
 
-    // 4. 强烈推荐引导建议 (软约束)
-    lines.push('\n[智能体协同建议]');
-    lines.push('💡 当前工程已挂载本地 CodeGraph AST 图谱引擎。当需要探索模块依赖关系、查看时序调用链、或在改动代码前评估影响面 (Blast Radius) 时，强烈推荐优先调用 codegraph 专属工具 (如 codegraph_get_architecture, codegraph_trace_flow, codegraph_impact_analysis, codegraph_inspect_narrative, codegraph_audit_health) 获取高精度拓扑，辅助进行工程决策。');
+    // 4. 强烈推荐引导建议 (优先调用图谱，避免盲目 grep/read)
+    lines.push('\n[智能体协同指引]');
+    lines.push('💡 当前工程已挂载本地 CodeGraph AST 图谱引擎。在分析代码结构、寻找关键声明、排查调用链路（支持 from➔to 最短路径穿透）或修改前评估影响面时，强烈建议优先使用 codegraph 专属工具（如 codegraph_get_architecture, codegraph_trace_flow, codegraph_impact_analysis, codegraph_inspect_narrative, codegraph_audit_health）获取确定性拓扑，避免盲目 grep/read 大文件；仅在需要编辑修改具体源码时使用 edit/read。');
     lines.push('</code_graph_architecture>');
 
     return lines.join('\n');

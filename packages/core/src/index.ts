@@ -36,12 +36,14 @@ export * from './graph/dual-compiler.js';
 export * from './graph/interaction-narrator.js';
 export * from './graph/impact-analyzer.js';
 export * from './graph/health-auditor.js';
+export * from './graph/call-path-finder.js';
 export * from './layout/elk-layout.js';
 export * from './persistence/cache-store.js';
 export * from './server.js';
 import { ArchitectureSkeletonExtractor } from './archetype/skeleton-extractor.js';
 import { ImpactAnalyzer, ImpactAnalysisResult } from './graph/impact-analyzer.js';
 import { ArchitectureHealthAuditor, ArchitectureHealthReport } from './graph/health-auditor.js';
+import { CallPathFinder, CallPathResult } from './graph/call-path-finder.js';
 import { WorkspaceProfiler } from './archetype/workspace-profiler.js';
 import { DetectedProjectProfile, WorkspaceDiscoveryResult } from './types/index.js';
 

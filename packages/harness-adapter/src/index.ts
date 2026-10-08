@@ -11,6 +11,7 @@ import {
   ImpactAnalyzer,
   ArchitectureHealthAuditor,
   ArchitectureSkeletonExtractor,
+  CallPathFinder,
 } from '@codegraph/core';
 
 export const name = 'dsh-codegraph';
@@ -254,10 +255,10 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
               const exists = assembly.contexts.some((c: any) => c.name === 'codegraph-architecture');
               if (!exists) {
                 const skeleton = getStableSkeleton(result);
-                // order 置为 200，后置挂载在基础指令之后，保护全局核心前缀
+                // order 置为 98：DSH 内置文件工具集中在 100~104 (read=100, grep=104)，置为 98 自然优先于文件工具，引导模型先看图谱
                 assembly.contexts.push({
                   name: 'codegraph-architecture',
-                  order: 200,
+                  order: 98,
                   text: skeleton,
                 });
               }
@@ -273,7 +274,7 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
       if (ctx.systemPrompt && typeof ctx.systemPrompt.context === 'function') {
         ctx.systemPrompt.context({
           name: 'codegraph-architecture',
-          order: 200,
+          order: 98,
           text: () => {
             if (!coreInstance) return '';
             let graph = coreInstance.getLastResult();
@@ -325,6 +326,10 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
           schema: { type: 'string' },
           render: (_args: any, value: string) => [{ type: 'text', text: value }],
         },
+        presentCall: (args: any) => ({
+          card: 'terminal',
+          title: `codegraph: 架构分析${args.module ? ` (${args.module})` : ''}`,
+        }),
         async execute(args: { module?: string; workspaceRoot?: string }) {
           const cached = getCachedToolResult('codegraph_get_architecture', args);
           if (cached) return cached;
@@ -421,12 +426,12 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
       });
 
       // -------------------------------------------------------------
-      // 工具 2: codegraph_trace_flow (端到端业务时序流穿透)
+      // 工具 2: codegraph_trace_flow (端到端业务时序流与调用链穿透)
       // -------------------------------------------------------------
       toolsService.register({
         name: 'codegraph_trace_flow',
         description:
-          '端到端业务时序流穿透查询。按执行时序获取关键业务流（如请求处理、认证鉴权、数据同步）的完整调用步骤序列及具体源码位置(文件与精确行号)。当需要理解业务执行流转路径时使用。',
+          '端到端业务时序流与调用链穿透查询。支持两种模式：① 最短路径穿透模式：传入 from 与 to 符号名称，执行 A➔B 广度优先 (BFS) 最短调用链路穿透搜索；② 业务时序模式：传入 flowId 或 query，获取关键业务流（如请求处理、认证鉴权、数据同步）的完整时序流转步骤与源码位置。',
         parameters: {
           flowId: {
             type: 'string',
@@ -435,6 +440,18 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
           query: {
             type: 'string',
             description: '可选：业务流程名称或关键词模糊搜索 (如 login, sync, scan)',
+          },
+          from: {
+            type: 'string',
+            description: '可选：调用链穿透起点符号名称 (如 handleRequest, login, AuthController)。与 to 参数配合时触发 A➔B 最短调用链路穿透搜索。',
+          },
+          to: {
+            type: 'string',
+            description: '可选：调用链穿透终点符号名称 (如 queryUserById, saveToken, verifyCredentials)。与 from 参数配合时触发 A➔B 最短调用链路穿透搜索。',
+          },
+          maxDepth: {
+            type: 'number',
+            description: '可选：两点调用穿透的最大搜索深度跳数 (默认 10，最大 15)',
           },
           workspaceRoot: {
             type: 'string',
@@ -445,11 +462,40 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
           schema: { type: 'string' },
           render: (_args: any, value: string) => [{ type: 'text', text: value }],
         },
-        async execute(args: { flowId?: string; query?: string; workspaceRoot?: string }) {
+        presentCall: (args: any) => ({
+          card: 'terminal',
+          title: `codegraph: ${args.from && args.to ? `链路穿透 (${args.from} ➔ ${args.to})` : `时序流 (${args.flowId || args.query || '主干'})`}`,
+        }),
+        async execute(args: {
+          flowId?: string;
+          query?: string;
+          from?: string;
+          to?: string;
+          maxDepth?: number;
+          workspaceRoot?: string;
+        }) {
           const cached = getCachedToolResult('codegraph_trace_flow', args);
           if (cached) return cached;
 
           const graph = await ensureGraphReady(args.workspaceRoot);
+
+          // 模式 1: 两点间最短调用链路穿透 (A ➔ B BFS CallPathFinder)
+          if (args.from && args.to) {
+            const maxDepth = Math.min(Math.max(args.maxDepth || 10, 1), 15);
+            const pathResult = CallPathFinder.findShortestPath(args.from, args.to, graph, { maxDepth });
+            const output = CallPathFinder.formatMarkdown(pathResult);
+            setCachedToolResult('codegraph_trace_flow', args, output);
+            return output;
+          }
+
+          // 若仅传入了 from 或 to，转为 query 进行关键词模糊匹配
+          if (args.from && !args.query) {
+            args.query = args.from;
+          } else if (args.to && !args.query) {
+            args.query = args.to;
+          }
+
+          // 模式 2: 常规业务时序流程查询
           let rawFlows = graph.processFlows || [];
 
           if (args.flowId) {
@@ -528,6 +574,10 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
           schema: { type: 'string' },
           render: (_args: any, value: string) => [{ type: 'text', text: value }],
         },
+        presentCall: (args: any) => ({
+          card: 'terminal',
+          title: `codegraph: 影响面分析 (${args.symbol})`,
+        }),
         async execute(args: { symbol: string; filePath?: string; depth?: number; workspaceRoot?: string }) {
           if (!args.symbol) {
             return '错误：必须提供 symbol 参数 (准备修改的符号名称)';
@@ -573,6 +623,10 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
           schema: { type: 'string' },
           render: (_args: any, value: string) => [{ type: 'text', text: value }],
         },
+        presentCall: (args: any) => ({
+          card: 'terminal',
+          title: `codegraph: 符号拓扑叙事 (${args.symbol})`,
+        }),
         async execute(args: { symbol: string; filePath?: string; workspaceRoot?: string }) {
           if (!args.symbol) {
             return '错误：必须提供 symbol 参数';
@@ -682,6 +736,10 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
           schema: { type: 'string' },
           render: (_args: any, value: string) => [{ type: 'text', text: value }],
         },
+        presentCall: (_args: any) => ({
+          card: 'terminal',
+          title: 'codegraph: 架构健康审计',
+        }),
         async execute(args: { workspaceRoot?: string }) {
           const cached = getCachedToolResult('codegraph_audit_health', args);
           if (cached) return cached;
