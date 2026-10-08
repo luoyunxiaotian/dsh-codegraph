@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CodeGraphCore, WorkspaceProfiler } from '../src/index.js';
+import { runWatcherIncrementalTests } from './watcher-incremental.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,14 +145,20 @@ def query_user_by_name(username: str):
 
   // 测试 6: 验证危险系统目录与磁盘根硬拦截
   console.log('\n[测试 6] 验证危险系统目录与磁盘根硬拦截...');
-  const dangerC = WorkspaceProfiler.checkDangerousRoot('C:\\');
-  const dangerWin = WorkspaceProfiler.checkDangerousRoot('C:\\Windows');
+  // 断言必须**按平台取路径**：checkDangerousRoot 内部先做 path.resolve()，
+  //   在 Linux 上 path.resolve('C:\\') 会变成 /<cwd>/C:\ 这类本地路径，Windows 写法**本来就不该**被判危险；
+  //   固定用 C:\ 断言会让本套件在 Linux/macOS 上必然失败（既有环境性失败）。
+  const isWindows = process.platform === 'win32';
+  const rootPath = isWindows ? 'C:\\' : '/';
+  const systemDir = isWindows ? 'C:\\Windows' : '/etc';
+  const dangerC = WorkspaceProfiler.checkDangerousRoot(rootPath);
+  const dangerWin = WorkspaceProfiler.checkDangerousRoot(systemDir);
   const safeDir = WorkspaceProfiler.checkDangerousRoot(fixtureDir);
-  console.log(`  ✓ 磁盘根 C:\\ 拦截结果: isDangerous=${dangerC.isDangerous}`);
-  console.log(`  ✓ 系统目录 C:\\Windows 拦截结果: isDangerous=${dangerWin.isDangerous}`);
+  console.log(`  ✓ 磁盘根 ${rootPath} 拦截结果: isDangerous=${dangerC.isDangerous}`);
+  console.log(`  ✓ 系统目录 ${systemDir} 拦截结果: isDangerous=${dangerWin.isDangerous}`);
   console.log(`  ✓ 普通项目目录拦截结果: isDangerous=${safeDir.isDangerous}`);
   if (!dangerC.isDangerous || !dangerWin.isDangerous || safeDir.isDangerous) {
-    throw new Error('危险目录硬拦截校验失败！');
+    throw new Error(`危险目录硬拦截校验失败！（平台=${process.platform}，磁盘根=${rootPath}，系统目录=${systemDir}）`);
   }
 
   // 测试 7: 验证多端生态智能画像、版本隔离推荐与双模型视图切换
@@ -370,6 +377,9 @@ func main() {
     throw new Error(`Out-Port x(${outPortPos.x}) 未能在调用源 x(${verifyPos.x}) 的右侧`);
   }
   console.log('  ✓ 成功验证 Sugiyama 分层排版与 In/Out Port 首尾层级正交流向约束！');
+
+  // 增量变更检测回归（未提交 / 已提交 / 重命名 都要能检出；见 watcher-incremental.ts）
+  await runWatcherIncrementalTests();
 
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });
