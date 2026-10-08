@@ -108138,6 +108138,7 @@ var SymbolTable = class {
    */
   registerFileExtraction(result) {
     this.invalidateFile(result.filePath);
+    this.modulePathCache.clear();
     this.fileExtractionCache.set(result.filePath, result);
     const nodeSet = /* @__PURE__ */ new Set();
     const localMap = /* @__PURE__ */ new Map();
@@ -108157,6 +108158,7 @@ var SymbolTable = class {
    * 局部手术式剔除单个文件的旧符号与相关边
    */
   invalidateFile(filePath) {
+    this.modulePathCache.clear();
     const existingNodeIds = this.fileNodeIndex.get(filePath);
     if (existingNodeIds) {
       for (const nodeId of existingNodeIds) {
@@ -108414,9 +108416,31 @@ var SymbolTable = class {
     }
   }
   /**
-   * 辅助方法：将多语言导入模块路径解析为工作区实际文件相对路径
+   * modulePath 解析结果缓存（键 = 源文件 + 模块路径 + 导入名）。
+   *
+   * 为什么需要：实测 49 文件子集里 resolveModuleToFilePath 被调 **8762 次**（约 180 次/文件），
+   *   累计 4581ms，占全量扫描 89%；而同期 fs 同步探测只有 191 次/11ms —— 瓶颈是**重复纯计算**
+   *   （同一次解析里大量 (源文件, 模块路径, 导入名) 组合完全相同）。
+   * 失效：registerFileExtraction（新增/更新文件）时清空。
+   */
+  modulePathCache = /* @__PURE__ */ new Map();
+  /**
+   * 辅助方法：将多语言导入模块路径解析为工作区实际文件相对路径。
+   * 带记忆化：同一入参在本次解析内只算一次（见 modulePathCache）。
    */
   resolveModuleToFilePath(sourceFilePath, modulePath, importedName) {
+    const key = `${sourceFilePath}\0${modulePath}\0${importedName || ""}`;
+    const hit = this.modulePathCache.get(key);
+    if (hit !== void 0)
+      return hit === null ? void 0 : hit;
+    const resolved = this.resolveModuleToFilePathUncached(sourceFilePath, modulePath, importedName);
+    this.modulePathCache.set(key, resolved === void 0 ? null : resolved);
+    return resolved;
+  }
+  /**
+   * 辅助方法（无缓存实现）：将多语言导入模块路径解析为工作区实际文件相对路径。
+   */
+  resolveModuleToFilePathUncached(sourceFilePath, modulePath, importedName) {
     const normSource = sourceFilePath.replace(/\\/g, "/");
     const sourceDir = path3.posix.dirname(normSource);
     const sourceExt = path3.posix.extname(normSource).toLowerCase();
@@ -108531,13 +108555,21 @@ var import_fast_glob = __toESM(require_out4(), 1);
 import fs3 from "fs";
 import path4 from "path";
 import crypto from "crypto";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 var DualTrackWatcher = class _DualTrackWatcher {
   workspaceRoot;
   scopePath;
   hashMap = /* @__PURE__ */ new Map();
   // relativePath -> sha256
   isGitRepo = false;
+  /**
+   * 上次扫描时的 HEAD（`git rev-parse HEAD`）。
+   *
+   * 增量判据要用「上次扫描点 .. 当前 HEAD」的**提交区间** —— 只跑 `git status` 会漏掉
+   * 「扫描之后被 commit」的改动（快路径返回空，图谱静默陈旧）。
+   * 空字符串表示尚无基线（非 git 仓库 / 首次运行 / 空仓库无 HEAD）→ 落回 Hash 内容比对通道。
+   */
+  lastScannedCommit = "";
   constructor(workspaceRoot, scopePath = ".") {
     this.workspaceRoot = path4.resolve(workspaceRoot);
     this.scopePath = scopePath;
@@ -108591,18 +108623,21 @@ var DualTrackWatcher = class _DualTrackWatcher {
       } catch (err2) {
       }
     }
+    this.lastScannedCommit = this.currentHead();
     return new Map(this.hashMap);
   }
   /**
-   * 增量变更检测：优先尝试 Git 差异加速，兜底运行 Hash 对比
+   * 增量变更检测：优先 Git 快路径（**提交区间 ∪ 工作区状态**），不可用时兜底 Hash 内容比对。
    */
   async detectChanges(patterns) {
     const globs = patterns && patterns.length > 0 ? patterns : ExtractorRegistry.getGlobPatterns();
-    if (this.isGitRepo) {
+    if (this.isGitRepo && this.lastScannedCommit) {
       try {
         const gitChanges = this.detectViaGit();
-        if (gitChanges) {
+        const total = gitChanges.added.length + gitChanges.modified.length + gitChanges.deleted.length;
+        if (total > 0 || this.hashMap.size > 0) {
           this.applyChangesToHashMap(gitChanges);
+          this.lastScannedCommit = this.currentHead() || this.lastScannedCommit;
           return { ...gitChanges, isGitAccelerated: true };
         }
       } catch (err2) {
@@ -108610,32 +108645,141 @@ var DualTrackWatcher = class _DualTrackWatcher {
     }
     const hashChanges = await this.detectViaHash(globs);
     this.applyChangesToHashMap(hashChanges);
+    this.lastScannedCommit = this.currentHead() || this.lastScannedCommit;
     return { ...hashChanges, isGitAccelerated: false };
   }
+  /**
+   * Git 快路径：**提交区间 ∪ 工作区状态**（缺任一会漏变更）。
+   *
+   * - 提交区间 `git diff --name-status <lastScannedCommit>..HEAD`：覆盖「上次扫描后被 commit」的改动
+   *   （旧实现只跑 `git status`，这类改动完全检不到 —— 图谱静默陈旧）。
+   * - 工作区状态 `git status --porcelain -uall`：覆盖未提交改动与未跟踪文件。
+   * - 状态码按**首字符**分类（旧实现只枚举 `??/A/M/MM/AM/D`，`R`/`RM`/`UU`/`AD` 等全被忽略）。
+   * - 同一文件出现在多处时按优先级归并：added > modified > deleted。
+   */
   detectViaGit() {
-    const cmd = "git status --porcelain -uall";
-    const output = execSync(cmd, { cwd: this.workspaceRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
-    const lines = output.split("\n").filter((l) => l.trim().length > 0);
+    const normScope = this.scopePath.replace(/\\/g, "/").replace(/^\.\//, "");
+    const inScope = (file) => {
+      if (!ExtractorRegistry.getExtractorForFile(file))
+        return false;
+      if (normScope && normScope !== "." && !file.startsWith(normScope))
+        return false;
+      return true;
+    };
+    const bucket = /* @__PURE__ */ new Map();
+    const isReallyChanged = (file) => {
+      const full = path4.join(this.workspaceRoot, file);
+      if (!fs3.existsSync(full))
+        return true;
+      const stored = this.hashMap.get(file);
+      if (!stored)
+        return true;
+      return _DualTrackWatcher.computeFileHash(full) !== stored;
+    };
+    const mark = (file, kind) => {
+      const norm = file.replace(/\\/g, "/");
+      if (!norm || !inScope(norm))
+        return;
+      if (kind !== "deleted" && !isReallyChanged(norm))
+        return;
+      const prev = bucket.get(norm);
+      if (prev === "added" || prev === kind)
+        return;
+      if (prev === "modified" && kind === "deleted")
+        return;
+      bucket.set(norm, kind);
+    };
+    const diffOut = this.execGit(["diff", "--name-status", `${this.lastScannedCommit}..HEAD`]);
+    for (const item of _DualTrackWatcher.parseNameStatus(diffOut))
+      mark(item.file, item.kind);
+    const statusOut = this.execGit(["status", "--porcelain", "-uall"]);
+    for (const item of _DualTrackWatcher.parsePorcelain(statusOut))
+      mark(item.file, item.kind);
     const added = [];
     const modified = [];
     const deleted = [];
-    const normScope = this.scopePath.replace(/\\/g, "/").replace(/^\.\//, "");
-    for (const line of lines) {
-      const status = line.substring(0, 2).trim();
-      const filePath = line.substring(3).trim().replace(/\\/g, "/");
-      if (!ExtractorRegistry.getExtractorForFile(filePath))
-        continue;
-      if (normScope && normScope !== "." && !filePath.startsWith(normScope))
-        continue;
-      if (status === "??" || status === "A") {
-        added.push(filePath);
-      } else if (status === "M" || status === "MM" || status === "AM") {
-        modified.push(filePath);
-      } else if (status === "D") {
-        deleted.push(filePath);
-      }
+    for (const [file, kind] of bucket.entries()) {
+      if (kind === "added")
+        added.push(file);
+      else if (kind === "deleted")
+        deleted.push(file);
+      else
+        modified.push(file);
     }
     return { added, modified, deleted, isGitAccelerated: true };
+  }
+  /** 解析 `git diff --name-status` 输出（重命名/复制按「旧路径删除 + 新路径新增」）。 */
+  static parseNameStatus(output) {
+    const out2 = [];
+    for (const line of output.split("\n")) {
+      const cols = line.split("	").map((s) => s.trim()).filter(Boolean);
+      if (cols.length < 2)
+        continue;
+      const code = cols[0].charAt(0).toUpperCase();
+      if (code === "R" || code === "C") {
+        if (cols[1])
+          out2.push({ file: cols[1], kind: "deleted" });
+        if (cols[2])
+          out2.push({ file: cols[2], kind: "added" });
+      } else if (code === "A") {
+        out2.push({ file: cols[1], kind: "added" });
+      } else if (code === "D") {
+        out2.push({ file: cols[1], kind: "deleted" });
+      } else if (code === "M" || code === "T") {
+        out2.push({ file: cols[1], kind: "modified" });
+      }
+    }
+    return out2;
+  }
+  /** 解析 `git status --porcelain -uall` 输出（**按首字符**分类，不枚举组合码）。 */
+  static parsePorcelain(output) {
+    const out2 = [];
+    for (const rawLine of output.split("\n")) {
+      const line = rawLine.replace(/\r$/, "");
+      if (line.trim().length === 0)
+        continue;
+      const code = line.substring(0, 2);
+      const rest = line.substring(3).trim();
+      if (!rest)
+        continue;
+      if (code.charAt(0) === "R" || code.charAt(0) === "C") {
+        const [oldPath, newPath] = rest.split(" -> ").map((s) => s.trim());
+        if (oldPath)
+          out2.push({ file: oldPath, kind: "deleted" });
+        if (newPath)
+          out2.push({ file: newPath, kind: "added" });
+        continue;
+      }
+      if (code === "??" || code.charAt(0) === "A")
+        out2.push({ file: rest, kind: "added" });
+      else if (code.charAt(0) === "D")
+        out2.push({ file: rest, kind: "deleted" });
+      else
+        out2.push({ file: rest, kind: "modified" });
+    }
+    return out2;
+  }
+  /** 执行 git 并返回 stdout（失败抛错，由调用方决定是否降级到 Hash 通道）。 */
+  execGit(args2) {
+    return execFileSync("git", args2, {
+      cwd: this.workspaceRoot,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+  }
+  /** 当前 HEAD 的 sha（非 git / 空仓库无 HEAD 时返回空串）。 */
+  currentHead() {
+    if (!this.isGitRepo)
+      return "";
+    try {
+      return execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: this.workspaceRoot,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+    } catch {
+      return "";
+    }
   }
   async detectViaHash(patterns) {
     const searchRoot = path4.resolve(this.workspaceRoot, this.scopePath);

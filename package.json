@@ -1,6 +1,6 @@
 {
   "name": "dsh-codegraph",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "DeepSeek Harness 代码架构图谱与业务时序流分析插件 (0-Token 本地静态解析 · 宏观架构 · 业务时序流 · 模块下钻)",
   "type": "module",
   "main": "./dist/index.js",

@@ -56,6 +56,9 @@ export class SymbolTable {
    * 局部手术式剔除单个文件的旧符号与相关边
    */
   public invalidateFile(filePath: string): void {
+    // 无论是单文件更新还是删除，工作区文件集变动均需清空模块解析记忆化缓存
+    this.modulePathCache.clear();
+
     const existingNodeIds = this.fileNodeIndex.get(filePath);
     if (existingNodeIds) {
       // 移除节点与限定名索引

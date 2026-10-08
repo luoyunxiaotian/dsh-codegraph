@@ -1,6 +1,6 @@
 {
   "name": "@codegraph/harness-adapter",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "DeepSeek Harness thin integration adapter for CodeGraph Studio (AST topology, process flow, and AI agent tool)",
   "type": "module",
   "main": "./dist/index.js",
