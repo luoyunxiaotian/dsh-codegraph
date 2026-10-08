@@ -31,11 +31,17 @@ export * from './indexer/symbol-table.js';
 export * from './watcher/hash-watcher.js';
 export * from './archetype/detector.js';
 export * from './archetype/workspace-profiler.js';
+export * from './archetype/skeleton-extractor.js';
 export * from './graph/dual-compiler.js';
 export * from './graph/interaction-narrator.js';
+export * from './graph/impact-analyzer.js';
+export * from './graph/health-auditor.js';
 export * from './layout/elk-layout.js';
 export * from './persistence/cache-store.js';
 export * from './server.js';
+import { ArchitectureSkeletonExtractor } from './archetype/skeleton-extractor.js';
+import { ImpactAnalyzer, ImpactAnalysisResult } from './graph/impact-analyzer.js';
+import { ArchitectureHealthAuditor, ArchitectureHealthReport } from './graph/health-auditor.js';
 import { WorkspaceProfiler } from './archetype/workspace-profiler.js';
 import { DetectedProjectProfile, WorkspaceDiscoveryResult } from './types/index.js';
 
@@ -293,6 +299,9 @@ export class CodeGraphCore {
     );
 
     this.lastGraphResult = result;
+    try {
+      this.saveToCache();
+    } catch {}
     const duration = Date.now() - startTime;
     console.log(
       `[CodeGraph] 全量扫描完成: ${normalizedFiles.length} 个文件, ${result.meta.nodeCount} 节点, ${result.meta.edgeCount} 关系 (耗时 ${duration}ms)`
@@ -374,6 +383,9 @@ export class CodeGraphCore {
     );
 
     this.lastGraphResult = result;
+    try {
+      this.saveToCache();
+    } catch {}
     const duration = Date.now() - startTime;
     console.log(
       `[CodeGraph] 增量更新完成 (${changes.isGitAccelerated ? 'Git加速' : 'Hash比对'}): 变动 ${totalChanged} 文件 (耗时 ${duration}ms)`
@@ -436,6 +448,38 @@ export class CodeGraphCore {
 
   public hasCache(): boolean {
     return hasCache(this.workspaceRoot);
+  }
+
+  /**
+   * 获取极轻量全局架构骨架 (~250-300 Token)，适合直接注入 Agent System Prompt
+   */
+  public getSkeleton(): string {
+    const graph = this.getLastResult();
+    if (!graph) {
+      return '<code_graph_architecture>\n[项目架构骨架]\n- 状态: 图谱尚未完成首次构建，正在后台索引中...\n</code_graph_architecture>';
+    }
+    return ArchitectureSkeletonExtractor.extract(graph, this.workspaceRoot);
+  }
+
+  /**
+   * 针对指定符号或文件执行多跳递归影响面分析 (Blast Radius)
+   */
+  public analyzeImpact(
+    symbolOrPath: string,
+    options: { maxDepth?: number; filePath?: string } = {}
+  ): ImpactAnalysisResult | null {
+    const graph = this.getLastResult();
+    if (!graph) return null;
+    return ImpactAnalyzer.analyze(symbolOrPath, graph, options);
+  }
+
+  /**
+   * 针对当前工程执行全局架构合规性与健康度排查
+   */
+  public auditHealth(): ArchitectureHealthReport | null {
+    const graph = this.getLastResult();
+    if (!graph) return null;
+    return ArchitectureHealthAuditor.audit(graph);
   }
 
   public dispose(): void {

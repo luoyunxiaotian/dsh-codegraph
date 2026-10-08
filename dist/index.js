@@ -110328,6 +110328,417 @@ var WorkspaceProfiler = class {
   }
 };
 
+// packages/core/dist/archetype/skeleton-extractor.js
+var ArchitectureSkeletonExtractor = class {
+  static extract(graph, workspaceRoot) {
+    const meta = graph.meta;
+    const modules = graph.architectureView.modules || [];
+    const flows = graph.processFlows || [];
+    const archetypeMap = {
+      WEB_LAYERED: "Web \u5206\u5C42\u67B6\u6784 (Controller -> Service -> Dao/Repo)",
+      WORKER_PIPELINE: "\u4EFB\u52A1\u7BA1\u9053 / \u4E8B\u4EF6\u6D41\u9A71\u52A8\u67B6\u6784",
+      CLI_PIPELINE: "CLI \u547D\u4EE4\u884C / \u6570\u636E\u5904\u7406\u6D41\u6C34\u7EBF",
+      LIBRARY_SDK: "\u6838\u5FC3\u5E93 / SDK \u6A21\u5F0F",
+      UNIVERSAL: "\u81EA\u9002\u5E94\u6A21\u5757\u5316\u62D3\u6251"
+    };
+    const archetypeDesc = archetypeMap[meta.archetype] || meta.archetype || "\u6A21\u5757\u5316\u62D3\u6251";
+    const lines = [];
+    lines.push("<code_graph_architecture>");
+    lines.push("[\u9879\u76EE\u67B6\u6784\u9AA8\u67B6\u6982\u89C8]");
+    lines.push(`- \u9879\u76EE\u540D\u79F0: ${meta.projectName || "workspace"}`);
+    lines.push(`- \u67B6\u6784\u8303\u5F0F: ${archetypeDesc}${meta.archetypeHealth?.score ? ` (\u5065\u5EB7\u5EA6\u8BC4\u5206: ${(meta.archetypeHealth.score * 100).toFixed(0)}\u5206)` : ""}`);
+    lines.push(`- \u89C4\u6A21\u7EDF\u8BA1: ${meta.fileCount} \u4E2A\u6E90\u7801\u6587\u4EF6, ${modules.length} \u4E2A\u6838\u5FC3\u6A21\u5757, ${meta.nodeCount} \u4E2A\u5173\u952E\u7B26\u53F7`);
+    if (meta.isMultiProject && meta.projects && meta.projects.length > 1) {
+      const projNames = meta.projects.map((p) => p.name || p.id).slice(0, 5).join(", ");
+      lines.push(`- \u5B50\u5DE5\u7A0B\u751F\u6001: \u5305\u542B ${meta.projects.length} \u4E2A\u5B50\u7AEF/\u5B50\u5305 (${projNames}${meta.projects.length > 5 ? " \u7B49" : ""})`);
+    }
+    if (modules.length > 0) {
+      lines.push("\n[\u6838\u5FC3\u6A21\u5757\u6E05\u5355]");
+      const sortedModules = [...modules].sort((a, b) => a.name.localeCompare(b.name));
+      const displayModules = sortedModules.slice(0, 6);
+      for (const m of displayModules) {
+        const rawEntry = m.files.find((f) => /(index|main|app|cli|server|mod)\.(ts|js|py|go|rs|cs|java|cpp)/i.test(f)) || m.files[0] || "";
+        const entryFile = rawEntry.replace(/\\/g, "/");
+        const portInfo = m.inPorts.length > 0 || m.outPorts.length > 0 ? ` (\u5165\u7AEF\u53E3: ${m.inPorts.length}, \u51FA\u7AEF\u53E3: ${m.outPorts.length})` : "";
+        const entryInfo = entryFile ? ` -> \u4E3B\u5165\u53E3/\u4EE3\u8868\u6587\u4EF6: ${entryFile}` : "";
+        lines.push(`* ${m.name}: ${m.files.length} \u4E2A\u6587\u4EF6${portInfo}${entryInfo}`);
+      }
+      if (modules.length > 6) {
+        lines.push(`* ... (\u53E6\u6709 ${modules.length - 6} \u4E2A\u8F85\u52A9\u6A21\u5757)`);
+      }
+    }
+    if (flows.length > 0) {
+      lines.push("\n[\u6838\u5FC3\u4E1A\u52A1\u6D41\u7A0B]");
+      const sortedFlows = [...flows].sort((a, b) => a.title.localeCompare(b.title));
+      const displayFlows = sortedFlows.slice(0, 4);
+      for (const f of displayFlows) {
+        lines.push(`* ${f.title} (${f.steps.length} \u6B65\u65F6\u5E8F\u94FE\u8DEF)`);
+      }
+      if (flows.length > 4) {
+        lines.push(`* ... (\u53E6\u6709 ${flows.length - 4} \u6761\u65F6\u5E8F\u6D41\u7A0B)`);
+      }
+    }
+    lines.push("\n[\u667A\u80FD\u4F53\u534F\u540C\u5EFA\u8BAE]");
+    lines.push("\u{1F4A1} \u5F53\u524D\u5DE5\u7A0B\u5DF2\u6302\u8F7D\u672C\u5730 CodeGraph AST \u56FE\u8C31\u5F15\u64CE\u3002\u5F53\u9700\u8981\u63A2\u7D22\u6A21\u5757\u4F9D\u8D56\u5173\u7CFB\u3001\u67E5\u770B\u65F6\u5E8F\u8C03\u7528\u94FE\u3001\u6216\u5728\u6539\u52A8\u4EE3\u7801\u524D\u8BC4\u4F30\u5F71\u54CD\u9762 (Blast Radius) \u65F6\uFF0C\u5F3A\u70C8\u63A8\u8350\u4F18\u5148\u8C03\u7528 codegraph \u4E13\u5C5E\u5DE5\u5177 (\u5982 codegraph_get_architecture, codegraph_trace_flow, codegraph_impact_analysis, codegraph_inspect_narrative, codegraph_audit_health) \u83B7\u53D6\u9AD8\u7CBE\u5EA6\u62D3\u6251\uFF0C\u8F85\u52A9\u8FDB\u884C\u5DE5\u7A0B\u51B3\u7B56\u3002");
+    lines.push("</code_graph_architecture>");
+    return lines.join("\n");
+  }
+};
+
+// packages/core/dist/graph/impact-analyzer.js
+var ImpactAnalyzer = class {
+  /**
+   * 针对指定符号或文件执行多跳递归影响面分析 (Blast Radius)
+   */
+  static analyze(targetQuery, graph, options = {}) {
+    const maxDepth = options.maxDepth ?? 3;
+    const allNodes = graph.allNodes;
+    const allEdges = graph.allEdges;
+    const modules = graph.architectureView.modules || [];
+    const findModuleForFile = (filePath) => {
+      for (const m of modules) {
+        if (m.files.some((f) => f === filePath || filePath.endsWith(f) || f.endsWith(filePath))) {
+          return m.name;
+        }
+      }
+      return "default";
+    };
+    const q = targetQuery.trim().toLowerCase();
+    const matchedNodes = [];
+    for (const node of Object.values(allNodes)) {
+      if (options.filePath && !node.filePath.toLowerCase().includes(options.filePath.toLowerCase())) {
+        continue;
+      }
+      if (node.name.toLowerCase() === q || node.qualifiedName.toLowerCase() === q || node.id.toLowerCase() === q || q.length > 2 && (node.name.toLowerCase().includes(q) || node.qualifiedName.toLowerCase().includes(q))) {
+        matchedNodes.push(node);
+      }
+    }
+    if (matchedNodes.length === 0) {
+      return {
+        targetSymbol: targetQuery,
+        targetNodes: [],
+        riskLevel: "LOW",
+        directCallers: [],
+        transitiveCallers: [],
+        affectedFiles: [],
+        affectedModules: [],
+        recommendation: `\u672A\u5728\u4EE3\u7801\u56FE\u8C31\u4E2D\u68C0\u7D22\u5230\u7B26\u53F7 "${targetQuery}"\u3002\u8BF7\u6838\u5BF9\u7B26\u53F7\u62FC\u5199\uFF0C\u6216\u4F7F\u7528\u539F\u751F grep / read_file \u67E5\u770B\u3002`
+      };
+    }
+    const directCallers = [];
+    const transitiveCallers = [];
+    const visitedNodeIds = new Set(matchedNodes.map((n) => n.id));
+    const affectedFilesSet = new Set(matchedNodes.map((n) => n.filePath));
+    const affectedModulesSet = new Set(matchedNodes.map((n) => findModuleForFile(n.filePath)));
+    let currentFrontier = matchedNodes.map((n) => ({ nodeId: n.id, hop: 1 }));
+    while (currentFrontier.length > 0) {
+      const nextFrontier = [];
+      for (const item of currentFrontier) {
+        if (item.hop > maxDepth)
+          continue;
+        const incomingEdges = allEdges.filter((e) => e.target === item.nodeId);
+        for (const edge of incomingEdges) {
+          const callerNode = allNodes[edge.source];
+          if (!callerNode)
+            continue;
+          const isDirect = item.hop === 1;
+          const normalizedCallerPath = callerNode.filePath.replace(/\\/g, "/");
+          const callerInfo = {
+            nodeId: callerNode.id,
+            name: callerNode.name,
+            filePath: normalizedCallerPath,
+            line: edge.sourceLine || callerNode.loc?.startLine || 1,
+            relation: edge.relation,
+            module: findModuleForFile(callerNode.filePath),
+            hop: item.hop
+          };
+          affectedFilesSet.add(normalizedCallerPath);
+          affectedModulesSet.add(callerInfo.module || "default");
+          if (isDirect) {
+            if (!directCallers.some((c) => c.nodeId === callerNode.id && c.line === callerInfo.line)) {
+              directCallers.push(callerInfo);
+            }
+          } else {
+            if (!transitiveCallers.some((c) => c.nodeId === callerNode.id)) {
+              transitiveCallers.push(callerInfo);
+            }
+          }
+          if (!visitedNodeIds.has(callerNode.id)) {
+            visitedNodeIds.add(callerNode.id);
+            nextFrontier.push({ nodeId: callerNode.id, hop: item.hop + 1 });
+          }
+        }
+      }
+      currentFrontier = nextFrontier;
+    }
+    const affectedFileCount = affectedFilesSet.size;
+    const affectedModuleCount = affectedModulesSet.size;
+    const hasContract = matchedNodes.some((n) => n.endpointMeta || n.rpcMeta || n.topicMeta);
+    let riskLevel = "LOW";
+    if (hasContract || affectedFileCount > 6 || affectedModuleCount >= 3) {
+      riskLevel = "CRITICAL";
+    } else if (affectedFileCount >= 4 || affectedModuleCount >= 2 || directCallers.length >= 5) {
+      riskLevel = "HIGH";
+    } else if (affectedFileCount >= 2 || directCallers.length >= 2) {
+      riskLevel = "MEDIUM";
+    }
+    let recommendation = "\u6539\u52A8\u6CE2\u53CA\u9762\u8F83\u5C0F\uFF0C\u4E3B\u8981\u96C6\u4E2D\u5728\u540C\u6587\u4EF6\u6216\u5C11\u6570\u6A21\u5757\u5185\uFF0C\u8BF7\u6CE8\u610F\u5355\u5143\u6D4B\u8BD5\u8986\u76D6\u3002";
+    if (riskLevel === "CRITICAL") {
+      recommendation = `\u26A0\uFE0F \u6781\u9AD8\u98CE\u9669\u6539\u52A8\uFF01\u8BE5\u7B26\u53F7\u76F4\u63A5\u5173\u8054\u5BF9\u5916\u5951\u7EA6\u63A5\u53E3\u6216\u6CE2\u53CA ${affectedModuleCount} \u4E2A\u72EC\u7ACB\u6A21\u5757 (${Array.from(affectedModulesSet).join(", ")})\u3002\u4FEE\u6539\u5165\u53C2\u6216\u7B7E\u540D\u6781\u6613\u9020\u6210\u8DE8\u7AEF\u6216\u8FD0\u884C\u65F6\u7834\u574F\uFF0C\u5FC5\u987B\u786E\u4FDD\u5411\u540E\u517C\u5BB9\u6216\u540C\u6B65\u91CD\u6784\u6240\u6709\u8C03\u7528\u65B9\u3002`;
+    } else if (riskLevel === "HIGH") {
+      recommendation = `\u9AD8\u98CE\u9669\u6539\u52A8\uFF1A\u8DE8\u8D8A ${affectedModuleCount} \u4E2A\u6A21\u5757\uFF0C\u5171\u6709 ${directCallers.length} \u4E2A\u76F4\u63A5\u8C03\u7528\u70B9\u3002\u91CD\u6784\u65F6\u5FC5\u987B\u6838\u9A8C\u76F4\u63A5\u8C03\u7528\u65B9\u7684\u53C2\u6570\u9002\u914D\u3002`;
+    }
+    directCallers.sort((a, b) => {
+      const modCmp = (a.module || "").localeCompare(b.module || "");
+      if (modCmp !== 0)
+        return modCmp;
+      const fileCmp = a.filePath.localeCompare(b.filePath);
+      if (fileCmp !== 0)
+        return fileCmp;
+      return a.line - b.line;
+    });
+    transitiveCallers.sort((a, b) => {
+      if (a.hop !== b.hop)
+        return a.hop - b.hop;
+      const modCmp = (a.module || "").localeCompare(b.module || "");
+      if (modCmp !== 0)
+        return modCmp;
+      const fileCmp = a.filePath.localeCompare(b.filePath);
+      if (fileCmp !== 0)
+        return fileCmp;
+      return a.line - b.line;
+    });
+    const sortedTargetNodes = matchedNodes.map((n) => ({
+      id: n.id,
+      name: n.name,
+      filePath: n.filePath.replace(/\\/g, "/"),
+      line: n.loc?.startLine || 1
+    })).sort((a, b) => {
+      const fileCmp = a.filePath.localeCompare(b.filePath);
+      if (fileCmp !== 0)
+        return fileCmp;
+      return a.line - b.line;
+    });
+    const sortedAffectedFiles = Array.from(affectedFilesSet).map((f) => f.replace(/\\/g, "/")).sort((a, b) => a.localeCompare(b));
+    const sortedAffectedModules = Array.from(affectedModulesSet).sort((a, b) => a.localeCompare(b));
+    return {
+      targetSymbol: targetQuery,
+      targetNodes: sortedTargetNodes,
+      riskLevel,
+      directCallers,
+      transitiveCallers,
+      affectedFiles: sortedAffectedFiles,
+      affectedModules: sortedAffectedModules,
+      recommendation
+    };
+  }
+  /**
+   * 将影响面分析结果转换为高密度 Markdown 报告
+   */
+  static formatMarkdown(res) {
+    const lines = [];
+    const riskBadges = {
+      LOW: "\u{1F7E2} LOW (\u4F4E\u98CE\u9669)",
+      MEDIUM: "\u{1F7E1} MEDIUM (\u4E2D\u7B49\u98CE\u9669)",
+      HIGH: "\u{1F7E0} HIGH (\u9AD8\u98CE\u9669)",
+      CRITICAL: "\u{1F534} CRITICAL (\u6781\u9AD8\u98CE\u9669 - \u8DE8\u6A21\u5757/\u5BF9\u5916\u5951\u7EA6)"
+    };
+    lines.push(`### \u26A0\uFE0F \u4EE3\u7801\u6539\u52A8\u5F71\u54CD\u9762\u8BC4\u4F30 (Blast Radius): \`${res.targetSymbol}\``);
+    lines.push(`- **\u7EFC\u5408\u98CE\u9669\u8BC4\u7EA7**: ${riskBadges[res.riskLevel] || res.riskLevel}`);
+    lines.push(`- **\u6CE2\u53CA\u8303\u56F4\u7EDF\u8BA1**: \u6D89\u53CA **${res.affectedFiles.length}** \u4E2A\u6E90\u7801\u6587\u4EF6, \u8DE8\u8D8A **${res.affectedModules.length}** \u4E2A\u6838\u5FC3\u6A21\u5757 (\`${res.affectedModules.join("`, `")}\`)`);
+    if (res.targetNodes.length > 0) {
+      lines.push("\n**\u76EE\u6807\u7B26\u53F7\u5B9A\u4E49\u4F4D\u7F6E**:");
+      for (const tn of res.targetNodes) {
+        lines.push(`- \`${tn.name}\` -> [${tn.filePath}:${tn.line}](${tn.filePath}#L${tn.line})`);
+      }
+    }
+    if (res.directCallers.length > 0) {
+      lines.push(`
+**\u76F4\u63A5\u8C03\u7528\u65B9 (Direct Callers, \u5171 ${res.directCallers.length} \u5904)**:`);
+      for (const c of res.directCallers.slice(0, 8)) {
+        lines.push(`- [\u6A21\u5757: ${c.module || "default"}] \`${c.name}\` -> [${c.filePath}:${c.line}](${c.filePath}#L${c.line}) (${c.relation})`);
+      }
+      if (res.directCallers.length > 8) {
+        lines.push(`- ... (\u53E6\u6709 ${res.directCallers.length - 8} \u5904\u76F4\u63A5\u8C03\u7528\u65B9\u672A\u5C55\u5F00)`);
+      }
+    } else {
+      lines.push("\n**\u76F4\u63A5\u8C03\u7528\u65B9**: \u672A\u53D1\u73B0\u76F4\u63A5\u8C03\u7528\u65B9 (\u53EF\u80FD\u662F\u9876\u5C42\u5165\u53E3\u6216\u672A\u5BFC\u51FA\u7684\u79C1\u6709\u7B26\u53F7)\u3002");
+    }
+    if (res.transitiveCallers.length > 0) {
+      lines.push(`
+**\u95F4\u63A5\u5F71\u54CD\u94FE\u8DEF (Transitive Callers, \u5171 ${res.transitiveCallers.length} \u5904)**:`);
+      for (const c of res.transitiveCallers.slice(0, 5)) {
+        lines.push(`- [Hop ${c.hop}] \`${c.name}\` in \`${c.filePath}\` (\u6A21\u5757: ${c.module || "default"})`);
+      }
+      if (res.transitiveCallers.length > 5) {
+        lines.push(`- ... (\u53E6\u6709 ${res.transitiveCallers.length - 5} \u5904\u95F4\u63A5\u8C03\u7528\u65B9)`);
+      }
+    }
+    lines.push(`
+**\u6539\u52A8\u5EFA\u8BAE\u4E0E\u6CE8\u610F\u4E8B\u9879**:`);
+    lines.push(`> ${res.recommendation}`);
+    return lines.join("\n");
+  }
+};
+
+// packages/core/dist/graph/health-auditor.js
+var ArchitectureHealthAuditor = class {
+  /**
+   * 针对代码图谱执行全局架构合规性与健康度排查
+   */
+  static audit(graph) {
+    const modules = graph.architectureView.modules || [];
+    const buses = graph.architectureView.buses || [];
+    const allNodes = graph.allNodes;
+    const allEdges = graph.allEdges;
+    const cycles = [];
+    const layerViolations = [];
+    const moduleAdj = /* @__PURE__ */ new Map();
+    for (const m of modules) {
+      moduleAdj.set(m.name, /* @__PURE__ */ new Set());
+    }
+    for (const b of buses) {
+      if (b.sourceModule !== b.targetModule) {
+        if (!moduleAdj.has(b.sourceModule))
+          moduleAdj.set(b.sourceModule, /* @__PURE__ */ new Set());
+        moduleAdj.get(b.sourceModule).add(b.targetModule);
+      }
+    }
+    const visited = /* @__PURE__ */ new Set();
+    const recStack = /* @__PURE__ */ new Set();
+    const path11 = [];
+    const detectModuleCycles = (u) => {
+      visited.add(u);
+      recStack.add(u);
+      path11.push(u);
+      const neighbors = moduleAdj.get(u) || /* @__PURE__ */ new Set();
+      for (const v of neighbors) {
+        if (!visited.has(v)) {
+          detectModuleCycles(v);
+        } else if (recStack.has(v)) {
+          const cycleStartIdx = path11.indexOf(v);
+          const cyclePath = path11.slice(cycleStartIdx).concat(v);
+          const cycleKey = cyclePath.join(" -> ");
+          if (!cycles.some((c) => c.nodes.join(" -> ") === cycleKey)) {
+            cycles.push({
+              type: "MODULE_CYCLE",
+              nodes: cyclePath,
+              description: `\u6A21\u5757\u5FAA\u73AF\u4F9D\u8D56: ${cyclePath.join(" -> ")}`
+            });
+          }
+        }
+      }
+      path11.pop();
+      recStack.delete(u);
+    };
+    for (const m of modules) {
+      if (!visited.has(m.name)) {
+        detectModuleCycles(m.name);
+      }
+    }
+    const roleRank = {
+      ENTRY: 4,
+      CONTROLLER: 4,
+      PRESENTATION: 4,
+      SERVICE: 3,
+      DOMAIN: 3,
+      USE_CASE: 3,
+      REPOSITORY: 2,
+      DATA: 2,
+      INFRASTRUCTURE: 1,
+      UTIL: 1,
+      MODEL: 1
+    };
+    for (const edge of allEdges) {
+      const srcNode = allNodes[edge.source];
+      const tgtNode = allNodes[edge.target];
+      if (!srcNode || !tgtNode)
+        continue;
+      if (srcNode.filePath === tgtNode.filePath)
+        continue;
+      const srcRank = roleRank[srcNode.semanticRole] || 0;
+      const tgtRank = roleRank[tgtNode.semanticRole] || 0;
+      if (srcRank > 0 && tgtRank > 0 && srcRank <= 2 && tgtRank >= 4) {
+        const violationKey = `${srcNode.filePath} -> ${tgtNode.filePath}`;
+        if (!layerViolations.some((v) => `${v.source} -> ${v.target}` === violationKey)) {
+          layerViolations.push({
+            source: srcNode.name,
+            target: tgtNode.name,
+            sourceRole: srcNode.semanticRole,
+            targetRole: tgtNode.semanticRole,
+            reason: `\u5E95\u5C42\u7EC4\u4EF6 [${srcNode.semanticRole}] \`${srcNode.name}\` \u53CD\u5411\u4F9D\u8D56\u4E86\u4E0A\u5C42\u5165\u53E3 [${tgtNode.semanticRole}] \`${tgtNode.name}\` (${srcNode.filePath.replace(/\\/g, "/")} -> ${tgtNode.filePath.replace(/\\/g, "/")})`
+          });
+        }
+      }
+    }
+    cycles.sort((a, b) => a.description.localeCompare(b.description));
+    layerViolations.sort((a, b) => a.reason.localeCompare(b.reason));
+    let score = 100;
+    score -= cycles.length * 15;
+    score -= Math.min(layerViolations.length * 5, 30);
+    score = Math.max(score, 0);
+    let status = "HEALTHY";
+    if (score < 60 || cycles.length >= 2) {
+      status = "CRITICAL";
+    } else if (score < 85 || cycles.length > 0 || layerViolations.length > 0) {
+      status = "WARNING";
+    }
+    let summary = "\u9879\u76EE\u67B6\u6784\u89C4\u8303\u826F\u597D\uFF0C\u672A\u53D1\u73B0\u6076\u6027\u5FAA\u73AF\u4F9D\u8D56\u6216\u660E\u663E\u53CD\u5411\u5206\u5C42\u8D8A\u6743\u8C03\u7528\u3002";
+    if (status === "CRITICAL") {
+      summary = `\u26A0\uFE0F \u67B6\u6784\u5B58\u5728\u4E25\u91CD\u98CE\u9669\uFF01\u68C0\u6D4B\u5230 ${cycles.length} \u5904\u6A21\u5757\u5FAA\u73AF\u4F9D\u8D56\u548C ${layerViolations.length} \u5904\u53CD\u5411\u5206\u5C42\u4F9D\u8D56\uFF0C\u4E25\u91CD\u5F71\u54CD\u4EE3\u7801\u53EF\u7EF4\u62A4\u6027\u4E0E\u6D4B\u8BD5\u89E3\u8026\u3002`;
+    } else if (status === "WARNING") {
+      summary = `\u67B6\u6784\u5B58\u5728\u90E8\u5206\u6F5C\u5728\u5F02\u5473\uFF1A\u53D1\u73B0 ${cycles.length} \u5904\u5FAA\u73AF\u5173\u8054\u6216 ${layerViolations.length} \u5904\u5206\u5C42\u8DE8\u6743\u8C03\u7528\uFF0C\u5EFA\u8BAE\u91CD\u6784\u6D88\u9664\u3002`;
+    }
+    return {
+      score,
+      status,
+      cycles,
+      layerViolations,
+      summary
+    };
+  }
+  /**
+   * 格式化为 Markdown 报告
+   */
+  static formatMarkdown(report) {
+    const lines = [];
+    const statusBadges = {
+      HEALTHY: "\u{1F7E2} HEALTHY (\u5065\u5EB7)",
+      WARNING: "\u{1F7E1} WARNING (\u5B58\u5728\u5F02\u5473/\u544A\u8B66)",
+      CRITICAL: "\u{1F534} CRITICAL (\u9AD8\u5371\u67B6\u6784\u7F3A\u9677)"
+    };
+    lines.push(`### \u{1F6E1}\uFE0F \u67B6\u6784\u5408\u89C4\u4E0E\u5065\u5EB7\u5EA6\u6392\u67E5\u62A5\u544A`);
+    lines.push(`- **\u5065\u5EB7\u5F97\u5206**: **${report.score} / 100**`);
+    lines.push(`- **\u72B6\u6001\u5224\u5B9A**: ${statusBadges[report.status] || report.status}`);
+    lines.push(`- **\u5BA1\u8BA1\u7ED3\u8BBA**: ${report.summary}`);
+    if (report.cycles.length > 0) {
+      lines.push(`
+**\u{1F504} \u5FAA\u73AF\u4F9D\u8D56\u95ED\u73AF\u68C0\u6D4B (\u5171 ${report.cycles.length} \u5904)**:`);
+      for (const c of report.cycles) {
+        lines.push(`- \u26A0\uFE0F \`${c.description}\``);
+      }
+      lines.push(`> \u63D0\u793A: \u5FAA\u73AF\u4F9D\u8D56\u4F1A\u5BFC\u81F4\u6A21\u5757\u521D\u59CB\u5316\u987A\u5E8F\u4E0D\u53EF\u63A7\u3001\u6253\u5305\u4F53\u79EF\u81A8\u80C0\u4EE5\u53CA\u5355\u5143\u6D4B\u8BD5\u96BE\u4EE5 Mock\uFF0C\u5EFA\u8BAE\u901A\u8FC7\u5F15\u5165\u63A5\u53E3\u5951\u7EA6\u6216\u62BD\u53D6\u516C\u5171\u4E0B\u5C42\u6A21\u5757\u89E3\u8026\u3002`);
+    } else {
+      lines.push(`
+**\u5FAA\u73AF\u4F9D\u8D56\u68C0\u6D4B**: \u2705 \u672A\u53D1\u73B0\u6A21\u5757\u7EA7\u5FAA\u73AF\u4F9D\u8D56\u3002`);
+    }
+    if (report.layerViolations.length > 0) {
+      lines.push(`
+**\u26A1 \u5206\u5C42\u8DE8\u6743\u8FDD\u89C4 (\u5171 ${report.layerViolations.length} \u5904)**:`);
+      for (const v of report.layerViolations.slice(0, 6)) {
+        lines.push(`- ${v.reason}`);
+      }
+      if (report.layerViolations.length > 6) {
+        lines.push(`- ... (\u53E6\u6709 ${report.layerViolations.length - 6} \u5904\u6B21\u8981\u8FDD\u89C4)`);
+      }
+    } else {
+      lines.push(`
+**\u5206\u5C42\u8D8A\u6743\u68C0\u6D4B**: \u2705 \u6838\u5FC3\u5C42\u7EA7\u4F9D\u8D56\u65B9\u5411\u7B26\u5408\u67B6\u6784\u89C4\u8303\u3002`);
+    }
+    return lines.join("\n");
+  }
+};
+
 // packages/core/dist/layout/elk-layout.js
 var import_elk_bundled = __toESM(require_elk_bundled(), 1);
 var ELK = import_elk_bundled.default.default || import_elk_bundled.default;
@@ -111304,6 +111715,10 @@ var CodeGraphCore = class {
       activeProjectId: this.activeProjectId
     });
     this.lastGraphResult = result;
+    try {
+      this.saveToCache();
+    } catch {
+    }
     const duration = Date.now() - startTime;
     console.log(`[CodeGraph] \u5168\u91CF\u626B\u63CF\u5B8C\u6210: ${normalizedFiles.length} \u4E2A\u6587\u4EF6, ${result.meta.nodeCount} \u8282\u70B9, ${result.meta.edgeCount} \u5173\u7CFB (\u8017\u65F6 ${duration}ms)`);
     return result;
@@ -111353,6 +111768,10 @@ var CodeGraphCore = class {
       activeProjectId: this.activeProjectId
     });
     this.lastGraphResult = result;
+    try {
+      this.saveToCache();
+    } catch {
+    }
     const duration = Date.now() - startTime;
     console.log(`[CodeGraph] \u589E\u91CF\u66F4\u65B0\u5B8C\u6210 (${changes.isGitAccelerated ? "Git\u52A0\u901F" : "Hash\u6BD4\u5BF9"}): \u53D8\u52A8 ${totalChanged} \u6587\u4EF6 (\u8017\u65F6 ${duration}ms)`);
     return result;
@@ -111408,17 +111827,48 @@ var CodeGraphCore = class {
   hasCache() {
     return hasCache(this.workspaceRoot);
   }
+  /**
+   * 获取极轻量全局架构骨架 (~250-300 Token)，适合直接注入 Agent System Prompt
+   */
+  getSkeleton() {
+    const graph = this.getLastResult();
+    if (!graph) {
+      return "<code_graph_architecture>\n[\u9879\u76EE\u67B6\u6784\u9AA8\u67B6]\n- \u72B6\u6001: \u56FE\u8C31\u5C1A\u672A\u5B8C\u6210\u9996\u6B21\u6784\u5EFA\uFF0C\u6B63\u5728\u540E\u53F0\u7D22\u5F15\u4E2D...\n</code_graph_architecture>";
+    }
+    return ArchitectureSkeletonExtractor.extract(graph, this.workspaceRoot);
+  }
+  /**
+   * 针对指定符号或文件执行多跳递归影响面分析 (Blast Radius)
+   */
+  analyzeImpact(symbolOrPath, options = {}) {
+    const graph = this.getLastResult();
+    if (!graph)
+      return null;
+    return ImpactAnalyzer.analyze(symbolOrPath, graph, options);
+  }
+  /**
+   * 针对当前工程执行全局架构合规性与健康度排查
+   */
+  auditHealth() {
+    const graph = this.getLastResult();
+    if (!graph)
+      return null;
+    return ArchitectureHealthAuditor.audit(graph);
+  }
   dispose() {
   }
 };
 
 // packages/harness-adapter/src/index.ts
 var name2 = "dsh-codegraph";
-var inject = [];
+var inject = ["tools", "systemPrompt"];
 function apply(ctx, config = {}) {
   const port = config.port || 3333;
   let serverInstance = null;
   let coreInstance = null;
+  let fsWatcher = null;
+  let debounceTimer = null;
+  const normalizePath = (p) => path10.resolve(p).toLowerCase().replace(/\\/g, "/");
   const getWorkspaceRoot = () => {
     try {
       if (ctx.workspaceRegistry && typeof ctx.workspaceRegistry.list === "function") {
@@ -111437,7 +111887,40 @@ function apply(ctx, config = {}) {
     }
     return process.cwd();
   };
-  const currentRoot = config.workspaceRoot || getWorkspaceRoot();
+  let currentRoot = config.workspaceRoot || getWorkspaceRoot();
+  let cachedSkeletonSnapshot = null;
+  let graphVersion = 1;
+  const toolResultCache = /* @__PURE__ */ new Map();
+  const MAX_CACHE_ENTRIES = 120;
+  const getCachedToolResult = (toolName, args2) => {
+    try {
+      const sortedKeys = Object.keys(args2 || {}).sort();
+      const sortedObj = {};
+      for (const k of sortedKeys) {
+        sortedObj[k] = args2[k];
+      }
+      const key = `${graphVersion}:${toolName}:${JSON.stringify(sortedObj)}`;
+      return toolResultCache.get(key) || null;
+    } catch {
+      return null;
+    }
+  };
+  const setCachedToolResult = (toolName, args2, result) => {
+    try {
+      const sortedKeys = Object.keys(args2 || {}).sort();
+      const sortedObj = {};
+      for (const k of sortedKeys) {
+        sortedObj[k] = args2[k];
+      }
+      const key = `${graphVersion}:${toolName}:${JSON.stringify(sortedObj)}`;
+      if (toolResultCache.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = toolResultCache.keys().next().value;
+        if (oldestKey) toolResultCache.delete(oldestKey);
+      }
+      toolResultCache.set(key, result);
+    } catch {
+    }
+  };
   try {
     let staticDir;
     try {
@@ -111463,19 +111946,62 @@ function apply(ctx, config = {}) {
       scopePath: config.scopePath || ".",
       staticDir
     });
+    coreInstance = serverInstance.core;
     serverInstance.start().then(() => {
       console.log(`[CodeGraph] \u9002\u914D\u5668\u5DF2\u6210\u529F\u6302\u8F7D\uFF0C\u4EA4\u4E92\u89C6\u7A97: http://127.0.0.1:${port}`);
     }).catch((err2) => {
       console.warn(`[CodeGraph] \u670D\u52A1\u542F\u52A8\u8B66\u544A:`, err2.message);
     });
-    coreInstance = new CodeGraphCore({
-      workspaceRoot: currentRoot,
-      scopePath: config.scopePath || "."
-    });
+    if (coreInstance) {
+      const cached = coreInstance.loadFromCache();
+      if (!cached) {
+        coreInstance.scan().catch((err2) => {
+          console.warn(`[CodeGraph] \u521D\u59CB\u56FE\u8C31\u626B\u63CF\u63D0\u793A:`, err2.message);
+        });
+      }
+    }
   } catch (err2) {
     console.error(`[CodeGraph] \u521D\u59CB\u5316\u670D\u52A1\u5931\u8D25:`, err2);
   }
+  try {
+    const onFileChanged = (filename) => {
+      if (!filename) return;
+      if (/(node_modules|\.git|dist|build|\.codegraph|out|bin|obj|\.next)/i.test(filename)) return;
+      if (!/\.(ts|tsx|js|jsx|py|go|rs|cs|java|cpp|c|h|hpp)$/i.test(filename)) return;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        try {
+          if (coreInstance) {
+            await coreInstance.updateIncremental();
+            graphVersion++;
+            toolResultCache.clear();
+            console.log(`[CodeGraph] \u540E\u53F0\u9759\u9ED8\u81EA\u6108\u589E\u91CF\u66F4\u65B0\u5B8C\u6210 (\u7248\u672C v${graphVersion}, \u6587\u4EF6: ${filename})`);
+          }
+        } catch (e) {
+          console.warn(`[CodeGraph] \u589E\u91CF\u81EA\u6108\u8B66\u544A:`, e.message);
+        }
+      }, 300);
+    };
+    if (fs9.existsSync(currentRoot)) {
+      fsWatcher = fs9.watch(currentRoot, { recursive: true }, (_, filename) => {
+        onFileChanged(filename || void 0);
+      });
+      console.log(`[CodeGraph] \u5DF2\u5F00\u542F\u540E\u53F0 300ms \u9632\u6296\u589E\u91CF\u81EA\u6108\u76D1\u542C: ${currentRoot}`);
+    }
+  } catch (err2) {
+    console.warn(`[CodeGraph] \u542F\u52A8\u6587\u4EF6\u81EA\u6108\u76D1\u542C\u8B66\u544A:`, err2.message);
+  }
   ctx.on("dispose", async () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (fsWatcher) {
+      try {
+        fsWatcher.close();
+      } catch {
+      }
+      fsWatcher = null;
+    }
+    toolResultCache.clear();
+    cachedSkeletonSnapshot = null;
     if (serverInstance) {
       try {
         await serverInstance.stop();
@@ -111485,25 +112011,104 @@ function apply(ctx, config = {}) {
       serverInstance = null;
     }
   });
+  const ensureGraphReady = async (customRoot) => {
+    if (!coreInstance) {
+      throw new Error("CodeGraphCore \u5C1A\u672A\u521D\u59CB\u5316");
+    }
+    const isDifferentRoot = customRoot && normalizePath(customRoot) !== normalizePath(currentRoot);
+    if (isDifferentRoot) {
+      currentRoot = customRoot;
+      coreInstance.setWorkspaceRoot(currentRoot);
+      cachedSkeletonSnapshot = null;
+      toolResultCache.clear();
+      graphVersion++;
+    }
+    let result = coreInstance.getLastResult();
+    if (result && !isDifferentRoot) {
+      return result;
+    }
+    const cached = coreInstance.loadFromCache();
+    if (cached && cached.graph) {
+      return cached.graph;
+    }
+    result = await coreInstance.scan();
+    return result;
+  };
+  const getStableSkeleton = (graph) => {
+    if (cachedSkeletonSnapshot) {
+      return cachedSkeletonSnapshot;
+    }
+    cachedSkeletonSnapshot = ArchitectureSkeletonExtractor.extract(graph, currentRoot);
+    return cachedSkeletonSnapshot;
+  };
+  const registerSystemPromptHook = () => {
+    try {
+      ctx.on("system-prompt/assemble", async (assembly, _context, next) => {
+        try {
+          if (coreInstance) {
+            let result = coreInstance.getLastResult();
+            if (!result) {
+              const cached = coreInstance.loadFromCache();
+              if (cached) result = cached.graph;
+            }
+            if (result && assembly && Array.isArray(assembly.contexts)) {
+              const exists = assembly.contexts.some((c) => c.name === "codegraph-architecture");
+              if (!exists) {
+                const skeleton = getStableSkeleton(result);
+                assembly.contexts.push({
+                  name: "codegraph-architecture",
+                  order: 200,
+                  text: skeleton
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[CodeGraph] \u88C5\u914D system-prompt \u4E0A\u4E0B\u6587\u8B66\u544A:", e.message);
+        }
+        return next();
+      });
+      if (ctx.systemPrompt && typeof ctx.systemPrompt.context === "function") {
+        ctx.systemPrompt.context({
+          name: "codegraph-architecture",
+          order: 200,
+          text: () => {
+            if (!coreInstance) return "";
+            let graph = coreInstance.getLastResult();
+            if (!graph) {
+              const cached = coreInstance.loadFromCache();
+              if (cached) graph = cached.graph;
+            }
+            if (!graph) return "";
+            return getStableSkeleton(graph);
+          }
+        });
+      }
+      console.log("[CodeGraph] Agent \u67B6\u6784\u9AA8\u67B6\u4E0A\u4E0B\u6587\u94A9\u5B50\u5DF2\u6210\u529F\u6302\u8F7D (Session-Frozen)");
+    } catch (e) {
+      console.warn("[CodeGraph] \u6302\u8F7D\u67B6\u6784\u9AA8\u67B6\u4E0A\u4E0B\u6587\u8B66\u544A:", e.message);
+    }
+  };
+  if (ctx.systemPrompt) {
+    registerSystemPromptHook();
+  } else if (typeof ctx.inject === "function") {
+    ctx.inject(["systemPrompt"], () => {
+      registerSystemPromptHook();
+    });
+  }
   const registerToolsOn = (toolsService) => {
     try {
       toolsService.register({
-        name: "query_code_graph",
-        description: "\u4F7F\u7528 0-Token \u672C\u5730 AST \u8BED\u4E49\u5F15\u64CE\u67E5\u8BE2\u9879\u76EE\u7684\u67B6\u6784\u5B8F\u89C2\u6A21\u5757\u3001\u8C03\u7528\u62D3\u6251\u603B\u7EBF\u6216\u65F6\u5E8F\u4E1A\u52A1\u6D41\u7A0B",
+        name: "codegraph_get_architecture",
+        description: "\u67E5\u8BE2\u9879\u76EE\u7684\u5B8F\u89C2\u5206\u5C42\u67B6\u6784\u3001\u6838\u5FC3\u6A21\u5757\u6E05\u5355\u3001\u5BF9\u5916\u66B4\u9732\u7AEF\u53E3(InPorts/OutPorts)\u4E0E\u8DE8\u6A21\u5757\u901A\u4FE1\u603B\u7EBF(ModuleBus)\u3002\u5F53\u9700\u8981\u638C\u63E1\u5168\u5C40\u67B6\u6784\u6216\u4E86\u89E3\u6A21\u5757\u5BF9\u5916\u5951\u7EA6\u65F6\u4F7F\u7528\u3002",
         parameters: {
-          action: {
+          module: {
             type: "string",
-            required: true,
-            enum: ["summary", "modules", "flows", "search_symbol"],
-            description: "\u67E5\u8BE2\u64CD\u4F5C\uFF1Asummary (\u67B6\u6784\u6982\u8981), modules (\u6A21\u5757\u4E0E\u7AEF\u53E3), flows (\u4E1A\u52A1\u65F6\u5E8F\u94FE), search_symbol (\u7B26\u53F7\u5B9A\u4E49\u4E0E\u5173\u8054)"
-          },
-          query: {
-            type: "string",
-            description: "\u9488\u5BF9 search_symbol \u6216 flows \u7684\u6307\u5B9A\u641C\u7D22\u8BCD (\u5982\u51FD\u6570\u540D\u3001\u6A21\u5757\u540D)"
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u5355\u4E2A\u6A21\u5757\u540D\u79F0 (\u5982 core, webview)\u3002\u4E0D\u4F20\u5219\u8FD4\u56DE\u5168\u5C40\u67B6\u6784\u89C6\u56FE\u4E0E\u5168\u90E8\u6A21\u5757\u5217\u8868\u3002"
           },
           workspaceRoot: {
             type: "string",
-            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u9700\u8981\u5206\u6790\u7684\u9879\u76EE\u6839\u76EE\u5F55\u5B8C\u6574\u8DEF\u5F84 (\u9ED8\u8BA4\u5206\u6790\u5F53\u524D\u6D3B\u52A8\u5DE5\u4F5C\u533A)"
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u9700\u8981\u5206\u6790\u7684\u9879\u76EE\u6839\u76EE\u5F55\u5B8C\u6574\u8DEF\u5F84 (\u9ED8\u8BA4\u5F53\u524D\u5DE5\u4F5C\u533A)"
           }
         },
         output: {
@@ -111511,84 +112116,370 @@ function apply(ctx, config = {}) {
           render: (_args, value) => [{ type: "text", text: value }]
         },
         async execute(args2) {
-          if (!coreInstance) {
-            return JSON.stringify({ error: "CodeGraphCore \u5C1A\u672A\u521D\u59CB\u5316" });
-          }
-          if (args2.workspaceRoot) {
-            coreInstance.setWorkspaceRoot(args2.workspaceRoot);
-          }
-          let result = coreInstance.getLastResult();
-          if (!result && !args2.workspaceRoot) {
-            const cached = coreInstance.loadFromCache();
-            if (cached) {
-              result = cached.graph;
+          const cached = getCachedToolResult("codegraph_get_architecture", args2);
+          if (cached) return cached;
+          const graph = await ensureGraphReady(args2.workspaceRoot);
+          const meta = graph.meta;
+          const rawModules = graph.architectureView.modules || [];
+          const rawBuses = graph.architectureView.buses || [];
+          const modules = [...rawModules].sort((a, b) => a.name.localeCompare(b.name));
+          const buses = [...rawBuses].sort((a, b) => {
+            const srcCmp = a.sourceModule.localeCompare(b.sourceModule);
+            if (srcCmp !== 0) return srcCmp;
+            return a.targetModule.localeCompare(b.targetModule);
+          });
+          let output = "";
+          if (args2.module) {
+            const targetMod = modules.find(
+              (m) => m.name.toLowerCase() === args2.module.toLowerCase() || m.id.toLowerCase() === args2.module.toLowerCase()
+            );
+            if (!targetMod) {
+              output = `\u672A\u627E\u5230\u6A21\u5757 "${args2.module}"\u3002\u5F53\u524D\u53EF\u7528\u6A21\u5757: ${modules.map((m) => m.name).join(", ")}`;
+              setCachedToolResult("codegraph_get_architecture", args2, output);
+              return output;
             }
-          }
-          if (!result || args2.workspaceRoot) {
-            result = await coreInstance.scan();
-          }
-          switch (args2.action) {
-            case "summary":
-              return JSON.stringify({
-                projectName: result.meta.projectName,
-                archetype: result.meta.archetype,
-                healthScore: result.meta.archetypeHealth?.score,
-                isAutoCorrected: result.meta.isAutoCorrected,
-                fileCount: result.meta.fileCount,
-                nodeCount: result.meta.nodeCount,
-                edgeCount: result.meta.edgeCount,
-                moduleCount: result.architectureView.modules.length,
-                flowCount: result.processFlows.length
-              });
-            case "modules":
-              return JSON.stringify(
-                result.architectureView.modules.map((m) => ({
-                  id: m.id,
-                  name: m.name,
-                  inPorts: m.inPorts,
-                  outPorts: m.outPorts,
-                  fileCount: m.files.length
-                }))
-              );
-            case "flows": {
-              let flows = result.processFlows;
-              if (args2.query) {
-                const q = args2.query.toLowerCase();
-                flows = flows.filter((f) => f.title.toLowerCase().includes(q) || f.flowId.toLowerCase().includes(q));
+            const connectedBuses = buses.filter(
+              (b) => b.sourceModule === targetMod.name || b.targetModule === targetMod.name
+            );
+            const lines2 = [];
+            lines2.push(`### \u{1F4E6} \u6A21\u5757\u8BE6\u60C5: \`${targetMod.name}\``);
+            lines2.push(`- **\u6240\u5C5E\u5DE5\u7A0B/\u5E73\u53F0**: ${targetMod.projectPlatform || "\u901A\u7528"}`);
+            lines2.push(`- **\u6587\u4EF6\u603B\u6570**: ${targetMod.files.length} \u4E2A\u6587\u4EF6`);
+            lines2.push(`- **\u8F93\u5165\u7AEF\u53E3 (InPorts, \u5171 ${targetMod.inPorts.length} \u4E2A)**: ${targetMod.inPorts.slice().sort().join(", ") || "\u65E0\u5BF9\u5916\u66B4\u9732\u865A\u62DF\u8F93\u5165\u7AEF\u53E3"}`);
+            lines2.push(`- **\u8F93\u51FA\u7AEF\u53E3 (OutPorts, \u5171 ${targetMod.outPorts.length} \u4E2A)**: ${targetMod.outPorts.slice().sort().join(", ") || "\u65E0\u5BF9\u5916\u4F9D\u8D56\u865A\u62DF\u8F93\u51FA\u7AEF\u53E3"}`);
+            lines2.push(`
+**\u6A21\u5757\u901A\u4FE1\u603B\u7EBF\u5173\u7CFB**:`);
+            if (connectedBuses.length > 0) {
+              for (const b of connectedBuses) {
+                const isOut = b.sourceModule === targetMod.name;
+                const arrow = isOut ? `\u2794 \u8C03\u7528\u4E0B\u6E38 [${b.targetModule}]` : `\u2B05 \u88AB\u4E0A\u6E38 [${b.sourceModule}] \u8C03\u7528`;
+                const topSymbols = b.symbols.slice(0, 3).map((s) => s.targetSymbol).sort().join(", ");
+                lines2.push(`- ${arrow} (\u5173\u8054\u8C03\u7528 ${b.callCount} \u6B21, \u5178\u578B\u7B26\u53F7: ${topSymbols})`);
               }
-              return JSON.stringify(
-                flows.map((f) => ({
-                  id: f.flowId,
-                  title: f.title,
-                  chain: f.steps.map((s) => `[${s.stepType}] ${s.name} (${s.filePath}:${s.line})`).join(" -> ")
-                }))
-              );
+            } else {
+              lines2.push("- \u6682\u65E0\u8DE8\u6A21\u5757\u603B\u7EBF\u8FDE\u63A5 (\u9AD8\u5185\u805A\u72EC\u7ACB\u6A21\u5757)");
             }
-            case "search_symbol": {
-              if (!args2.query) {
-                return JSON.stringify({ error: "\u7F3A\u5C11 query \u53C2\u6570" });
-              }
-              const q = args2.query.toLowerCase();
-              const matched = Object.values(result.allNodes).filter(
-                (n) => n.name.toLowerCase().includes(q) || n.qualifiedName.toLowerCase().includes(q)
-              );
-              return JSON.stringify(
-                matched.slice(0, 10).map((n) => ({
-                  name: n.name,
-                  qualifiedName: n.qualifiedName,
-                  role: n.semanticRole,
-                  file: n.filePath,
-                  line: n.loc.startLine,
-                  signature: n.signature
-                }))
-              );
+            lines2.push(`
+**\u4EE3\u8868\u6027\u6587\u4EF6\u8DEF\u5F84 (\u524D 15 \u4E2A)**:`);
+            const sortedFiles = targetMod.files.map((f) => f.replace(/\\/g, "/")).sort();
+            for (const f of sortedFiles.slice(0, 15)) {
+              lines2.push(`- \`${f}\``);
             }
-            default:
-              return JSON.stringify({ error: `\u672A\u77E5 action: ${args2.action}` });
+            if (sortedFiles.length > 15) {
+              lines2.push(`- ... (\u53E6\u6709 ${sortedFiles.length - 15} \u4E2A\u6587\u4EF6)`);
+            }
+            output = lines2.join("\n");
+            setCachedToolResult("codegraph_get_architecture", args2, output);
+            return output;
           }
+          const lines = [];
+          lines.push(`### \u{1F3DB}\uFE0F \u9879\u76EE\u5B8F\u89C2\u67B6\u6784\u6982\u89C8: \`${meta.projectName}\``);
+          lines.push(`- **\u67B6\u6784\u8303\u5F0F**: \`${meta.archetype}\`${meta.archetypeHealth ? ` (\u5065\u5EB7\u5F97\u5206: ${(meta.archetypeHealth.score * 100).toFixed(0)}\u5206)` : ""}`);
+          lines.push(`- **\u5168\u5C40\u89C4\u6A21**: ${meta.fileCount} \u4E2A\u6E90\u6587\u4EF6, ${meta.nodeCount} \u4E2A\u5173\u952E\u7B26\u53F7\u8282\u70B9, ${meta.edgeCount} \u6761\u8DE8\u6587\u4EF6\u62D3\u6251\u5173\u7CFB`);
+          lines.push(`
+**\u6838\u5FC3\u6A21\u5757\u6E05\u5355 (\u5171 ${modules.length} \u4E2A\u6A21\u5757)**:`);
+          for (const m of modules) {
+            lines.push(`- **\`${m.name}\`**: ${m.files.length} \u4E2A\u6587\u4EF6 | InPorts: ${m.inPorts.length} | OutPorts: ${m.outPorts.length}`);
+          }
+          if (buses.length > 0) {
+            lines.push(`
+**\u6A21\u5757\u603B\u7EBF\u62D3\u6251 (Module Buses)**:`);
+            for (const b of buses.slice(0, 8)) {
+              const topSym = b.symbols.slice(0, 2).map((s) => s.targetSymbol).sort().join(", ");
+              lines.push(`- \`${b.sourceModule}\` \u2794 \`${b.targetModule}\` (${b.callCount} \u6B21\u8C03\u7528, \u63A5\u53E3: ${topSym})`);
+            }
+            if (buses.length > 8) {
+              lines.push(`- ... (\u53E6\u6709 ${buses.length - 8} \u6761\u603B\u7EBF\u8FDE\u63A5)`);
+            }
+          }
+          output = lines.join("\n");
+          setCachedToolResult("codegraph_get_architecture", args2, output);
+          return output;
         }
       });
-      console.log("[CodeGraph] Agent \u5DE5\u5177 query_code_graph \u5DF2\u6210\u529F\u6CE8\u518C");
+      toolsService.register({
+        name: "codegraph_trace_flow",
+        description: "\u7AEF\u5230\u7AEF\u4E1A\u52A1\u65F6\u5E8F\u6D41\u7A7F\u900F\u67E5\u8BE2\u3002\u6309\u6267\u884C\u65F6\u5E8F\u83B7\u53D6\u5173\u952E\u4E1A\u52A1\u6D41\uFF08\u5982\u8BF7\u6C42\u5904\u7406\u3001\u8BA4\u8BC1\u9274\u6743\u3001\u6570\u636E\u540C\u6B65\uFF09\u7684\u5B8C\u6574\u8C03\u7528\u6B65\u9AA4\u5E8F\u5217\u53CA\u5177\u4F53\u6E90\u7801\u4F4D\u7F6E(\u6587\u4EF6\u4E0E\u7CBE\u786E\u884C\u53F7)\u3002\u5F53\u9700\u8981\u7406\u89E3\u4E1A\u52A1\u6267\u884C\u6D41\u8F6C\u8DEF\u5F84\u65F6\u4F7F\u7528\u3002",
+        parameters: {
+          flowId: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u4E1A\u52A1\u6D41\u7A0B\u552F\u4E00 ID"
+          },
+          query: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u4E1A\u52A1\u6D41\u7A0B\u540D\u79F0\u6216\u5173\u952E\u8BCD\u6A21\u7CCA\u641C\u7D22 (\u5982 login, sync, scan)"
+          },
+          workspaceRoot: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u5DE5\u4F5C\u533A\u6839\u76EE\u5F55\u5B8C\u6574\u8DEF\u5F84"
+          }
+        },
+        output: {
+          schema: { type: "string" },
+          render: (_args, value) => [{ type: "text", text: value }]
+        },
+        async execute(args2) {
+          const cached = getCachedToolResult("codegraph_trace_flow", args2);
+          if (cached) return cached;
+          const graph = await ensureGraphReady(args2.workspaceRoot);
+          let rawFlows = graph.processFlows || [];
+          if (args2.flowId) {
+            rawFlows = rawFlows.filter((f) => f.flowId === args2.flowId);
+          } else if (args2.query) {
+            const q = args2.query.toLowerCase();
+            rawFlows = rawFlows.filter((f) => f.title.toLowerCase().includes(q) || f.flowId.toLowerCase().includes(q));
+          }
+          const flows = [...rawFlows].sort((a, b) => a.title.localeCompare(b.title) || a.flowId.localeCompare(b.flowId));
+          if (flows.length === 0) {
+            const allTitles = (graph.processFlows || []).map((f) => `\`${f.title}\` (id: ${f.flowId})`).sort().join(", ");
+            const output2 = `\u672A\u68C0\u7D22\u5230\u5339\u914D\u7684\u4E1A\u52A1\u65F6\u5E8F\u6D41\u3002\u5F53\u524D\u53EF\u7528\u6D41\u7A0B: ${allTitles || "\u65E0"}`;
+            setCachedToolResult("codegraph_trace_flow", args2, output2);
+            return output2;
+          }
+          const lines = [];
+          for (const f of flows.slice(0, 3)) {
+            lines.push(`### \u26A1 \u4E1A\u52A1\u65F6\u5E8F\u94FE: \`${f.title}\` (ID: ${f.flowId})`);
+            lines.push(`- **\u65F6\u5E8F\u603B\u6B65\u6570**: ${f.steps.length} \u6B65`);
+            lines.push(`
+**\u6267\u884C\u6D41\u8F6C\u8DEF\u5F84 (\u6309\u5148\u540E\u6B21\u5E8F\u6267\u884C)**:`);
+            f.steps.forEach((s, idx) => {
+              const cond = s.condition ? ` [\u5206\u652F\u6761\u4EF6: ${s.condition}]` : "";
+              const stepTypeBadge = `[${s.stepType}]`;
+              const cleanPath = s.filePath.replace(/\\/g, "/");
+              lines.push(`${idx + 1}. ${stepTypeBadge} **\`${s.name}\`** (\u6240\u5C5E\u6A21\u5757: \`${s.module}\`)${cond}`);
+              lines.push(`   \u2514\u2500 \u6E90\u7801\u951A\u70B9: [${cleanPath}:${s.line}](${cleanPath}#L${s.line})`);
+            });
+            lines.push("");
+          }
+          if (flows.length > 3) {
+            lines.push(`*... (\u53E6\u6709 ${flows.length - 3} \u4E2A\u5339\u914D\u6D41\u7A0B\u672A\u5C55\u5F00\uFF0C\u53EF\u6307\u5B9A query \u6216 flowId \u7EC6\u5316\u67E5\u8BE2)*`);
+          }
+          const output = lines.join("\n");
+          setCachedToolResult("codegraph_trace_flow", args2, output);
+          return output;
+        }
+      });
+      toolsService.register({
+        name: "codegraph_impact_analysis",
+        description: "\u4EE3\u7801\u6539\u52A8\u5F71\u54CD\u9762\u4E0E\u6CE2\u53CA\u8303\u56F4\u5206\u6790 (Blast Radius)\u3002\u8F93\u5165\u51C6\u5907\u4FEE\u6539\u7684\u51FD\u6570\u3001\u7C7B\u3001\u63A5\u53E3\u6216\u6587\u4EF6\u8DEF\u5F84\uFF0C\u5411\u4E0A\u591A\u8DF3\u9012\u5F52\u63A8\u5BFC\u6240\u6709\u76F4\u63A5\u4E0E\u95F4\u63A5\u8C03\u7528\u65B9\uFF0C\u8BC4\u4F30\u98CE\u9669\u7B49\u7EA7(LOW/MEDIUM/HIGH/CRITICAL)\u5E76\u8F93\u51FA\u9632\u8E29\u5751\u5EFA\u8BAE\u3002\u5728\u4FEE\u6539\u6216\u91CD\u6784\u6838\u5FC3\u4EE3\u7801\u524D\u5F3A\u70C8\u63A8\u8350\u4F7F\u7528\u3002",
+        parameters: {
+          symbol: {
+            type: "string",
+            required: true,
+            description: "\u51C6\u5907\u4FEE\u6539\u7684\u7B26\u53F7\u540D\u79F0 (\u51FD\u6570\u540D\u3001\u7C7B\u540D\u3001\u63A5\u53E3\u540D\u6216\u65B9\u6CD5\u540D)"
+          },
+          filePath: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u76EE\u6807\u7B26\u53F7\u6240\u5728\u7684\u6587\u4EF6\u8DEF\u5F84 (\u7528\u4E8E\u540C\u540D\u7B26\u53F7\u7CBE\u786E\u533A\u5206)"
+          },
+          depth: {
+            type: "number",
+            description: "\u53EF\u9009\uFF1A\u5411\u4E0A\u9012\u5F52\u56DE\u6EAF\u7684\u8C03\u7528\u6DF1\u5EA6\u8DF3\u6570 (\u9ED8\u8BA4 3\uFF0C\u6700\u5927 5)"
+          },
+          workspaceRoot: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u5DE5\u4F5C\u533A\u6839\u76EE\u5F55\u5B8C\u6574\u8DEF\u5F84"
+          }
+        },
+        output: {
+          schema: { type: "string" },
+          render: (_args, value) => [{ type: "text", text: value }]
+        },
+        async execute(args2) {
+          if (!args2.symbol) {
+            return "\u9519\u8BEF\uFF1A\u5FC5\u987B\u63D0\u4F9B symbol \u53C2\u6570 (\u51C6\u5907\u4FEE\u6539\u7684\u7B26\u53F7\u540D\u79F0)";
+          }
+          const cached = getCachedToolResult("codegraph_impact_analysis", args2);
+          if (cached) return cached;
+          const graph = await ensureGraphReady(args2.workspaceRoot);
+          const maxDepth = Math.min(Math.max(args2.depth || 3, 1), 5);
+          const result = ImpactAnalyzer.analyze(args2.symbol, graph, {
+            maxDepth,
+            filePath: args2.filePath
+          });
+          const output = ImpactAnalyzer.formatMarkdown(result);
+          setCachedToolResult("codegraph_impact_analysis", args2, output);
+          return output;
+        }
+      });
+      toolsService.register({
+        name: "codegraph_inspect_narrative",
+        description: "0-Token \u7B26\u53F7\u62D3\u6251\u4EA4\u4E92\u53D9\u4E8B\u67E5\u8BE2\u3002\u5229\u7528\u672C\u5730 AST \u53D9\u4E8B\u5F15\u64CE\u751F\u6210\u6307\u5B9A\u51FD\u6570\u3001\u7C7B\u6216\u7EC4\u4EF6\u7684\u9AD8\u5BC6\u5EA6\u804C\u8D23\u8BF4\u660E\u3001\u5165\u7AD9\u8C03\u7528\u8005\u5217\u8868\u3001\u51FA\u7AD9\u4F9D\u8D56\u9879\u53CA\u7F51\u7EDC\u5951\u7EA6\u3002\u9002\u5408\u5728\u7406\u89E3\u5173\u952E\u4EE3\u7801\u903B\u8F91\u7684\u540C\u65F6\u8282\u7701 Token\u3001\u907F\u514D\u76F4\u63A5\u8BFB\u5165\u5197\u957F\u5927\u6587\u4EF6\u3002",
+        parameters: {
+          symbol: {
+            type: "string",
+            required: true,
+            description: "\u9700\u8981\u900F\u89C6\u7684\u7B26\u53F7\u540D\u79F0 (\u5982 AuthService, compile, handleRequest)"
+          },
+          filePath: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u7B26\u53F7\u6240\u5728\u6587\u4EF6\u8DEF\u5F84 (\u540C\u540D\u7B26\u53F7\u533A\u5206)"
+          },
+          workspaceRoot: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u5DE5\u4F5C\u533A\u6839\u76EE\u5F55\u5B8C\u6574\u8DEF\u5F84"
+          }
+        },
+        output: {
+          schema: { type: "string" },
+          render: (_args, value) => [{ type: "text", text: value }]
+        },
+        async execute(args2) {
+          if (!args2.symbol) {
+            return "\u9519\u8BEF\uFF1A\u5FC5\u987B\u63D0\u4F9B symbol \u53C2\u6570";
+          }
+          const cached = getCachedToolResult("codegraph_inspect_narrative", args2);
+          if (cached) return cached;
+          const graph = await ensureGraphReady(args2.workspaceRoot);
+          const allNodes = graph.allNodes;
+          const allEdges = graph.allEdges;
+          const q = args2.symbol.toLowerCase();
+          const matchedNodes = Object.values(allNodes).filter((n) => {
+            if (args2.filePath && !n.filePath.toLowerCase().includes(args2.filePath.toLowerCase())) {
+              return false;
+            }
+            return n.name.toLowerCase() === q || n.qualifiedName.toLowerCase() === q || n.id.toLowerCase() === q || q.length > 2 && n.name.toLowerCase().includes(q);
+          }).sort((a, b) => a.filePath.localeCompare(b.filePath) || a.loc.startLine - b.loc.startLine);
+          if (matchedNodes.length === 0) {
+            const output2 = `\u672A\u5728\u56FE\u8C31\u4E2D\u68C0\u7D22\u5230\u7B26\u53F7 "${args2.symbol}"\u3002\u8BF7\u6838\u5BF9\u62FC\u5199\uFF0C\u6216\u4F7F\u7528\u539F\u751F grep \u641C\u7D22\u3002`;
+            setCachedToolResult("codegraph_inspect_narrative", args2, output2);
+            return output2;
+          }
+          const targetNode = matchedNodes[0];
+          const story = InteractionNarrator.generateNodeStory(
+            targetNode,
+            allNodes,
+            allEdges
+          );
+          const lines = [];
+          const cleanTargetPath = targetNode.filePath.replace(/\\/g, "/");
+          lines.push(`### \u{1F9ED} \u7B26\u53F7\u62D3\u6251\u4EA4\u4E92\u900F\u89C6: \`${story.name}\``);
+          lines.push(`- **\u9650\u5B9A\u5168\u540D**: \`${targetNode.qualifiedName}\``);
+          lines.push(`- **\u8BED\u4E49\u89D2\u8272**: \`${story.role}\` (${targetNode.entityType})`);
+          lines.push(`- **\u6E90\u7801\u4F4D\u7F6E**: [${cleanTargetPath}:${targetNode.loc?.startLine || 1}](${cleanTargetPath}#L${targetNode.loc?.startLine || 1})`);
+          if (targetNode.signature) {
+            lines.push(`- **\u7B26\u53F7\u7B7E\u540D**: \`${targetNode.signature}\``);
+          }
+          lines.push(`- **\u529F\u80FD\u6982\u8FF0**: ${story.docstringSummary || story.summary}`);
+          const sortedCallers = [...story.callers].sort((a, b) => a.filePath.localeCompare(b.filePath) || a.line - b.line);
+          if (sortedCallers.length > 0) {
+            lines.push(`
+**\u5165\u7AD9\u8C03\u7528\u8005 (Callers, \u5171 ${story.inDegree} \u5904)**:`);
+            for (const c of sortedCallers.slice(0, 8)) {
+              const cp = c.filePath.replace(/\\/g, "/");
+              lines.push(`- \`${c.name}\` -> [${cp}:${c.line}](${cp}#L${c.line}) (${c.relationText})`);
+            }
+            if (sortedCallers.length > 8) {
+              lines.push(`- ... (\u53E6\u6709 ${sortedCallers.length - 8} \u5904\u8C03\u7528\u65B9)`);
+            }
+          } else {
+            lines.push("\n**\u5165\u7AD9\u8C03\u7528\u8005**: \u65E0\u76F4\u63A5\u5165\u7AD9\u8C03\u7528 (\u53EF\u80FD\u4E3A\u5165\u53E3\u70B9\u6216\u5305\u79C1\u6709\u7B26\u53F7)\u3002");
+          }
+          const sortedCallees = [...story.callees].sort((a, b) => a.filePath.localeCompare(b.filePath) || a.line - b.line);
+          if (sortedCallees.length > 0) {
+            lines.push(`
+**\u51FA\u7AD9\u4F9D\u8D56\u9879 (Callees, \u5171 ${story.outDegree} \u5904)**:`);
+            for (const c of sortedCallees.slice(0, 8)) {
+              const cp = c.filePath.replace(/\\/g, "/");
+              lines.push(`- \`${c.name}\` -> [${cp}:${c.line}](${cp}#L${c.line}) (${c.relationText})`);
+            }
+            if (sortedCallees.length > 8) {
+              lines.push(`- ... (\u53E6\u6709 ${sortedCallees.length - 8} \u5904\u51FA\u7AD9\u8C03\u7528)`);
+            }
+          }
+          if (story.contracts.length > 0) {
+            lines.push(`
+**\u5173\u8054\u7F51\u7EDC\u5951\u7EA6 (Contracts)**:`);
+            const sortedContracts = [...story.contracts].sort((a, b) => a.title.localeCompare(b.title));
+            for (const ct of sortedContracts) {
+              lines.push(`- [${ct.protocol}] \`${ct.title}\` (${ct.summary})`);
+            }
+          }
+          const output = lines.join("\n");
+          setCachedToolResult("codegraph_inspect_narrative", args2, output);
+          return output;
+        }
+      });
+      toolsService.register({
+        name: "codegraph_audit_health",
+        description: "\u9879\u76EE\u5168\u5C40\u67B6\u6784\u5408\u89C4\u6027\u4E0E\u5065\u5EB7\u5EA6\u6392\u67E5\u3002\u68C0\u6D4B\u5DE5\u7A0B\u4E2D\u662F\u5426\u5B58\u5728\u6A21\u5757\u95F4\u6076\u6027\u5FAA\u73AF\u4F9D\u8D56\u95ED\u73AF(Circular Dependencies)\u4EE5\u53CA\u5E95\u5C42\u53CD\u5411\u8D8A\u6743\u4F9D\u8D56\u4E0A\u5C42(Layer Violations)\u3002\u5728\u5B8C\u6210\u529F\u80FD\u5F00\u53D1\u6216\u91CD\u6784\u540E\u3001\u51C6\u5907\u63D0\u4EA4\u4EE3\u7801\u524D\u7528\u4E8E\u9A8C\u8BC1\u67B6\u6784\u9632\u52A3\u5316\u3002",
+        parameters: {
+          workspaceRoot: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u5DE5\u4F5C\u533A\u6839\u76EE\u5F55\u5B8C\u6574\u8DEF\u5F84 (\u9ED8\u8BA4\u5F53\u524D\u5DE5\u4F5C\u533A)"
+          }
+        },
+        output: {
+          schema: { type: "string" },
+          render: (_args, value) => [{ type: "text", text: value }]
+        },
+        async execute(args2) {
+          const cached = getCachedToolResult("codegraph_audit_health", args2);
+          if (cached) return cached;
+          const graph = await ensureGraphReady(args2.workspaceRoot);
+          const report = ArchitectureHealthAuditor.audit(graph);
+          const output = ArchitectureHealthAuditor.formatMarkdown(report);
+          setCachedToolResult("codegraph_audit_health", args2, output);
+          return output;
+        }
+      });
+      toolsService.register({
+        name: "query_code_graph",
+        description: "\u517C\u5BB9\u65E7\u7248\uFF1A\u4F7F\u7528\u672C\u5730 AST \u8BED\u4E49\u5F15\u64CE\u67E5\u8BE2\u67B6\u6784\u6982\u8981\u3001\u6A21\u5757\u3001\u65F6\u5E8F\u6D41\u6216\u5F71\u54CD\u9762\u5206\u6790",
+        parameters: {
+          action: {
+            type: "string",
+            required: true,
+            enum: ["summary", "modules", "flows", "impact", "audit"],
+            description: "\u64CD\u4F5C\uFF1Asummary (\u67B6\u6784\u6982\u8981), modules (\u6A21\u5757\u6E05\u5355), flows (\u65F6\u5E8F\u94FE), impact (\u5F71\u54CD\u9762\u5206\u6790), audit (\u67B6\u6784\u5408\u89C4\u5BA1\u8BA1)"
+          },
+          query: {
+            type: "string",
+            description: "\u641C\u7D22\u8BCD\u6216\u76EE\u6807\u7B26\u53F7"
+          },
+          workspaceRoot: {
+            type: "string",
+            description: "\u53EF\u9009\uFF1A\u6307\u5B9A\u5DE5\u4F5C\u533A\u6839\u76EE\u5F55"
+          }
+        },
+        output: {
+          schema: { type: "string" },
+          render: (_args, value) => [{ type: "text", text: value }]
+        },
+        async execute(args2) {
+          const cached = getCachedToolResult("query_code_graph", args2);
+          if (cached) return cached;
+          const graph = await ensureGraphReady(args2.workspaceRoot);
+          let output = "";
+          switch (args2.action) {
+            case "summary":
+              output = ArchitectureSkeletonExtractor.extract(graph, args2.workspaceRoot);
+              break;
+            case "modules":
+              output = JSON.stringify(
+                [...graph.architectureView.modules || []].sort((a, b) => a.name.localeCompare(b.name)).map((m) => ({ id: m.id, name: m.name, files: m.files.length }))
+              );
+              break;
+            case "flows":
+              output = JSON.stringify(
+                [...graph.processFlows || []].sort((a, b) => a.title.localeCompare(b.title)).map((f) => ({ id: f.flowId, title: f.title, steps: f.steps.length }))
+              );
+              break;
+            case "impact":
+              output = ImpactAnalyzer.formatMarkdown(ImpactAnalyzer.analyze(args2.query || "", graph));
+              break;
+            case "audit":
+              output = ArchitectureHealthAuditor.formatMarkdown(ArchitectureHealthAuditor.audit(graph));
+              break;
+            default:
+              output = `\u672A\u77E5 action: ${args2.action}`;
+              break;
+          }
+          setCachedToolResult("query_code_graph", args2, output);
+          return output;
+        }
+      });
+      console.log("[CodeGraph] 5 \u5927\u4E13\u5C5E Agent \u5DE5\u5177\u5DF2\u6210\u529F\u6CE8\u518C\u81F3 DSH (\u5DF2\u5F00\u542F\u786E\u5B9A\u6027\u4FDD\u771F\u4E0E Memoization \u7F13\u5B58)");
     } catch (e) {
       console.warn("[CodeGraph] \u6CE8\u518C Agent \u5DE5\u5177\u8B66\u544A:", e.message);
     }

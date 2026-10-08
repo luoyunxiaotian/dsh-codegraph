@@ -14,7 +14,7 @@ export interface ServerOptions {
 
 export class CodeGraphServer {
   private server: http.Server;
-  private core: CodeGraphCore;
+  public core: CodeGraphCore;
   private port: number;
   private workspaceRoot: string;
   private staticDir?: string;
