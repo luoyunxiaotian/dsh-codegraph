@@ -1,6 +1,6 @@
 {
   "name": "@codegraph/webview",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "type": "module",
   "description": "Interactive Multi-Scale Canvas for Code Architecture, Process Flow, and Drill-Down Inspecion",
   "scripts": {

@@ -87,13 +87,16 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 | :--- | :--- | :--- | :--- |
 | **Python** | `.py` | FastAPI, Django, Flask, 脚本工具 | Class, Def, Import, Calls, Decorator, Docstring |
 | **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | React, Vue, Node.js, Next.js | Class, Interface, Function, Import/Export, Calls |
+| **Vue SFC** | `.vue` | Vue 2/3, Nuxt, Vite 全家桶 | Vue Component 容器, Script 方法/状态, Template 嵌套 |
 | **Go** | `.go` | Gin, gRPC, 云原生后端微服务 | Struct, Interface, Func, Package Import, Method |
 | **Java** | `.java` | Spring Boot, Android 后端 | Class, Interface, Method, Import, Package |
+| **Kotlin** | `.kt`, `.kts` | Android 原生, KMP 跨端, 现代 JVM | Class, Interface, Object, Retrofit/Ktor 路由与请求 |
+| **Swift** | `.swift` | iOS / macOS / SwiftUI 原生全家桶 | Class, Struct, Protocol, Extension, URLSession 请求 |
 | **C / C++** | `.c`, `.cpp`, `.h`, `.hpp` | **Unreal Engine (虚幻引擎)**, 基础库 | Struct, Class, Function, Include, 多继承与宏方法 |
 | **C#** | `.cs` | **Unity 游戏引擎**, **Godot (C#)**, .NET | MonoBehaviour, Class, Interface, Method, Using |
 | **Rust** | `.rs` | Axum, Actix, Reqwest, 系统底层 | Struct, Enum, Fn, Impl, Trait, Use, HTTP 路由 |
 
-> 📌 **新语言规划路线图**：Kotlin (`.kt`)、Swift (`.swift`)、Lua (`.lua`, 覆盖游戏热更/Cocos/Roblox)、PHP (`.php`) 及 Ruby (`.rb`) 语义提取器正在按计划逐步落地中。
+> 📌 **后续路线图规划 (梯队推进中)**：Lua (`.lua`, 覆盖游戏热更/Cocos/Roblox)、Unity (`.asmdef`)、Protobuf (`.proto`, gRPC 跨语言中枢对齐)、SQL DDL、Dart (`.dart`)、PHP 及 Ruby 正在依序推进中。
 
 ---
 

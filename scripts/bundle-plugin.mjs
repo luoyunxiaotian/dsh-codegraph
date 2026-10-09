@@ -105,6 +105,9 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
     'tree-sitter-c.wasm',
     'tree-sitter-cpp.wasm',
     'tree-sitter-c_sharp.wasm',
+    'tree-sitter-vue.wasm',
+    'tree-sitter-kotlin.wasm',
+    'tree-sitter-swift.wasm',
   ]);
 
   // 寻找 tree-sitter-wasms 的 out 目录

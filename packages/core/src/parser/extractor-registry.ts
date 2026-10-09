@@ -7,6 +7,9 @@ import { JavaExtractor } from './extractors/java-extractor.js';
 import { RustExtractor } from './extractors/rust-extractor.js';
 import { CppExtractor } from './extractors/cpp-extractor.js';
 import { CSharpExtractor } from './extractors/csharp-extractor.js';
+import { VueExtractor } from './extractors/vue-extractor.js';
+import { KotlinExtractor } from './extractors/kotlin-extractor.js';
+import { SwiftExtractor } from './extractors/swift-extractor.js';
 
 export class ExtractorRegistry {
   private static extractors: LanguageExtractor[] = [
@@ -17,6 +20,9 @@ export class ExtractorRegistry {
     new RustExtractor(),
     new CppExtractor(),
     new CSharpExtractor(),
+    new VueExtractor(),
+    new KotlinExtractor(),
+    new SwiftExtractor(),
   ];
 
   private static extMap: Map<string, LanguageExtractor> = new Map();
@@ -52,6 +58,9 @@ export class ExtractorRegistry {
     if (ext === '.java') return 'java';
     if (ext === '.py') return 'python';
     if (ext === '.ts') return 'typescript';
+    if (ext === '.vue') return 'vue';
+    if (ext === '.kt' || ext === '.kts') return 'kotlin';
+    if (ext === '.swift') return 'swift';
 
     const extractor = this.extMap.get(ext);
     return extractor ? extractor.wasmGrammarName : undefined;

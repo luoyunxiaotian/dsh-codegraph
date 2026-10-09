@@ -466,6 +466,113 @@ func main() {
   }
   console.log('  ✓ 成功验证本地私有排除机制，用户工作区保持绝对干净！');
 
+  // =========================================================================
+  // 测试 13: 验证 Vue / Kotlin / Swift 全链路 AST 提取与跨端图谱编译
+  // =========================================================================
+  console.log('\n[测试 13] 验证 Vue SFC / Kotlin Android / Swift iOS 全链路图谱提取...');
+  const newLangsFixture = path.resolve(__dirname, 'fixtures/new_langs_repo');
+  if (fs.existsSync(newLangsFixture)) {
+    fs.rmSync(newLangsFixture, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.join(newLangsFixture, 'frontend'), { recursive: true });
+  fs.mkdirSync(path.join(newLangsFixture, 'android'), { recursive: true });
+  fs.mkdirSync(path.join(newLangsFixture, 'ios'), { recursive: true });
+
+  // 13.1 Vue 3 SFC
+  fs.writeFileSync(
+    path.join(newLangsFixture, 'frontend/UserCard.vue'),
+    `<template><div>User Card</div></template>
+<script lang="ts">
+export default { name: 'UserCard' }
+</script>`
+  );
+
+  fs.writeFileSync(
+    path.join(newLangsFixture, 'frontend/UserView.vue'),
+    `<template>
+  <div class="user-page">
+    <UserCard :id="userId" />
+  </div>
+</template>
+<script setup lang="ts">
+import { ref } from 'vue';
+import UserCard from './UserCard.vue';
+
+const userId = ref('123');
+function loadUserData() {
+  fetch('/api/v1/users');
+}
+</script>`
+  );
+
+  // 13.2 Kotlin
+  fs.writeFileSync(
+    path.join(newLangsFixture, 'android/UserApi.kt'),
+    `package com.app.android
+
+import retrofit2.http.GET
+
+interface UserApi {
+    @GET("/api/v1/users")
+    fun getUserProfile(): String
+}
+
+class UserRepository(private val api: UserApi) {
+    fun fetchUserProfile(): String {
+        return api.getUserProfile()
+    }
+}`
+  );
+
+  // 13.3 Swift
+  fs.writeFileSync(
+    path.join(newLangsFixture, 'ios/UserViewModel.swift'),
+    `import Foundation
+
+protocol UserViewModelProtocol {
+    func load()
+}
+
+class UserViewModel: UserViewModelProtocol {
+    func load() {
+        self.requestUser()
+    }
+
+    func requestUser() {
+        let url = URL(string: "/api/v1/users")!
+    }
+}`
+  );
+
+  const newLangsCore = new CodeGraphCore({
+    workspaceRoot: newLangsFixture,
+    scopePath: '.',
+  });
+
+  const newLangsResult = await newLangsCore.scan();
+  console.log(`  ✓ 跨语言全量编译成功: 识别文件=${newLangsResult.meta.fileCount}, 节点=${newLangsResult.meta.nodeCount}, 关系=${newLangsResult.meta.edgeCount}`);
+  if (newLangsResult.meta.fileCount !== 4) {
+    throw new Error(`预期解析 4 个新语言文件，实际解析了 ${newLangsResult.meta.fileCount} 个`);
+  }
+
+  // 断言 Vue 组件
+  const vueComp = Object.values(newLangsResult.allNodes).find((n) => n.name === 'UserView' && n.language === 'vue');
+  if (!vueComp) throw new Error('未能提取到 UserView.vue 组件节点');
+  console.log(`  ✓ 成功提取 Vue SFC 组件节点: ${vueComp.name} (${vueComp.entityType})`);
+
+  // 断言 Kotlin 接口与类
+  const ktInterface = Object.values(newLangsResult.allNodes).find((n) => n.name === 'UserApi' && n.language === 'kotlin');
+  const ktClass = Object.values(newLangsResult.allNodes).find((n) => n.name === 'UserRepository' && n.language === 'kotlin');
+  if (!ktInterface || !ktClass) throw new Error('未能提取到 Kotlin UserApi / UserRepository 符号');
+  console.log(`  ✓ 成功提取 Kotlin 接口与实现类: ${ktInterface.name} (${ktInterface.entityType}), ${ktClass.name} (${ktClass.entityType})`);
+
+  // 断言 Swift 协议与类遵从
+  const swiftProto = Object.values(newLangsResult.allNodes).find((n) => n.name === 'UserViewModelProtocol' && n.language === 'swift');
+  const swiftClass = Object.values(newLangsResult.allNodes).find((n) => n.name === 'UserViewModel' && n.language === 'swift');
+  if (!swiftProto || !swiftClass) throw new Error('未能提取到 Swift UserViewModelProtocol / UserViewModel 符号');
+  console.log(`  ✓ 成功提取 Swift 协议与类符号: ${swiftProto.name} (${swiftProto.entityType}), ${swiftClass.name} (${swiftClass.entityType})`);
+
+  fs.rmSync(newLangsFixture, { recursive: true, force: true });
   fs.rmSync(mockRepoDir, { recursive: true, force: true });
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });
