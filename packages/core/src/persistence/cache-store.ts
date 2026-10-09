@@ -79,12 +79,12 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
       fs.mkdirSync(cacheDir, { recursive: true });
     }
 
-    // 确保将 .codegraph/ 登记至目标仓库的 .gitignore
+    // 确保将 .codegraph/ 登记至目标仓库本地私有排除项 (.git/info/exclude) 避免提交污染工作区
     ensureGitignore(resolvedRoot);
 
     const targetPath = getCacheFilePath(resolvedRoot);
     const tmpPath = `${targetPath}.tmp`;
-    const jsonStr = JSON.stringify(data, null, 2);
+    const jsonStr = JSON.stringify(data);
 
     // 原子化安全写入：先写临时文件再原子重命名
     try {
@@ -112,7 +112,8 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
 }
 
 /**
- * 若目标目录为 Git 仓库，自动在 .gitignore 中追加 .codegraph/ 避免提交污染
+ * 若目标目录为 Git 仓库，优先将 .codegraph/ 登记至 Git 本地私有排除文件 (.git/info/exclude)
+ * 具备与 .gitignore 相同的忽略机制，且绝对不会修改用户的 .gitignore 或污染工作区 git status。
  */
 export function ensureGitignore(workspaceRoot: string): void {
   try {
@@ -121,15 +122,30 @@ export function ensureGitignore(workspaceRoot: string): void {
       return;
     }
 
-    const gitignorePath = path.join(workspaceRoot, '.gitignore');
-    if (!fs.existsSync(gitignorePath)) {
-      const content = '# CodeGraph local cache\n.codegraph/\n';
-      fs.writeFileSync(gitignorePath, content, 'utf-8');
-      console.log(`[CodeGraph] 已为目标仓库自动创建 .gitignore 并添加 .codegraph/`);
-      return;
+    // 解析真实的 Git 数据目录 (兼容标准 Git 仓库、submodule 与 worktree)
+    let actualGitDir = gitDir;
+    try {
+      const stat = fs.statSync(gitDir);
+      if (stat.isFile()) {
+        const gitFileContent = fs.readFileSync(gitDir, 'utf-8').trim();
+        const match = gitFileContent.match(/^gitdir:\s*(.+)$/i);
+        if (match) {
+          actualGitDir = path.resolve(workspaceRoot, match[1].trim());
+        }
+      }
+    } catch {}
+
+    const infoDir = path.join(actualGitDir, 'info');
+    if (!fs.existsSync(infoDir)) {
+      fs.mkdirSync(infoDir, { recursive: true });
     }
 
-    const content = fs.readFileSync(gitignorePath, 'utf-8');
+    const excludePath = path.join(infoDir, 'exclude');
+    let content = '';
+    if (fs.existsSync(excludePath)) {
+      content = fs.readFileSync(excludePath, 'utf-8');
+    }
+
     const lines = content.split(/\r?\n/);
     const hasCodegraph = lines.some((line) => {
       const trimmed = line.trim();
@@ -142,12 +158,12 @@ export function ensureGitignore(workspaceRoot: string): void {
     });
 
     if (!hasCodegraph) {
-      const endsWithNewline = content.endsWith('\n') || content.endsWith('\r\n');
+      const endsWithNewline = content.length === 0 || content.endsWith('\n') || content.endsWith('\r\n');
       const appendContent = `${endsWithNewline ? '' : '\n'}# CodeGraph local cache\n.codegraph/\n`;
-      fs.appendFileSync(gitignorePath, appendContent, 'utf-8');
-      console.log(`[CodeGraph] 已向目标仓库 .gitignore 追加 .codegraph/`);
+      fs.appendFileSync(excludePath, appendContent, 'utf-8');
+      console.log(`[CodeGraph] 已为目标仓库自动登记本地排除规则 (.git/info/exclude: .codegraph/)`);
     }
   } catch (err) {
-    console.warn(`[CodeGraph] 自动更新 .gitignore 失败:`, err);
+    console.warn(`[CodeGraph] 自动更新本地排除规则失败:`, err);
   }
 }

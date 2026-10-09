@@ -105455,6 +105455,10 @@ var WASM_FILE_MAP = {
   csharp: "tree-sitter-c_sharp.wasm",
   cs: "tree-sitter-c_sharp.wasm"
 };
+var SUPPORTED_WASM_FILES = Object.freeze([
+  "tree-sitter.wasm",
+  ...Array.from(new Set(Object.values(WASM_FILE_MAP)))
+]);
 var isInitialized = false;
 var loadedLanguages = /* @__PURE__ */ new Map();
 function resolveWasmPath(filename) {
@@ -109937,7 +109941,7 @@ function saveCache(workspaceRoot, data) {
     ensureGitignore(resolvedRoot);
     const targetPath = getCacheFilePath(resolvedRoot);
     const tmpPath = `${targetPath}.tmp`;
-    const jsonStr = JSON.stringify(data, null, 2);
+    const jsonStr = JSON.stringify(data);
     try {
       fs5.writeFileSync(tmpPath, jsonStr, "utf-8");
       if (fs5.existsSync(targetPath)) {
@@ -109967,29 +109971,42 @@ function ensureGitignore(workspaceRoot) {
     if (!fs5.existsSync(gitDir)) {
       return;
     }
-    const gitignorePath = path6.join(workspaceRoot, ".gitignore");
-    if (!fs5.existsSync(gitignorePath)) {
-      const content2 = "# CodeGraph local cache\n.codegraph/\n";
-      fs5.writeFileSync(gitignorePath, content2, "utf-8");
-      console.log(`[CodeGraph] \u5DF2\u4E3A\u76EE\u6807\u4ED3\u5E93\u81EA\u52A8\u521B\u5EFA .gitignore \u5E76\u6DFB\u52A0 .codegraph/`);
-      return;
+    let actualGitDir = gitDir;
+    try {
+      const stat = fs5.statSync(gitDir);
+      if (stat.isFile()) {
+        const gitFileContent = fs5.readFileSync(gitDir, "utf-8").trim();
+        const match = gitFileContent.match(/^gitdir:\s*(.+)$/i);
+        if (match) {
+          actualGitDir = path6.resolve(workspaceRoot, match[1].trim());
+        }
+      }
+    } catch {
     }
-    const content = fs5.readFileSync(gitignorePath, "utf-8");
+    const infoDir = path6.join(actualGitDir, "info");
+    if (!fs5.existsSync(infoDir)) {
+      fs5.mkdirSync(infoDir, { recursive: true });
+    }
+    const excludePath = path6.join(infoDir, "exclude");
+    let content = "";
+    if (fs5.existsSync(excludePath)) {
+      content = fs5.readFileSync(excludePath, "utf-8");
+    }
     const lines = content.split(/\r?\n/);
     const hasCodegraph = lines.some((line) => {
       const trimmed = line.trim();
       return trimmed === ".codegraph" || trimmed === ".codegraph/" || trimmed === "/.codegraph" || trimmed === "/.codegraph/";
     });
     if (!hasCodegraph) {
-      const endsWithNewline = content.endsWith("\n") || content.endsWith("\r\n");
+      const endsWithNewline = content.length === 0 || content.endsWith("\n") || content.endsWith("\r\n");
       const appendContent = `${endsWithNewline ? "" : "\n"}# CodeGraph local cache
 .codegraph/
 `;
-      fs5.appendFileSync(gitignorePath, appendContent, "utf-8");
-      console.log(`[CodeGraph] \u5DF2\u5411\u76EE\u6807\u4ED3\u5E93 .gitignore \u8FFD\u52A0 .codegraph/`);
+      fs5.appendFileSync(excludePath, appendContent, "utf-8");
+      console.log(`[CodeGraph] \u5DF2\u4E3A\u76EE\u6807\u4ED3\u5E93\u81EA\u52A8\u767B\u8BB0\u672C\u5730\u6392\u9664\u89C4\u5219 (.git/info/exclude: .codegraph/)`);
     }
   } catch (err2) {
-    console.warn(`[CodeGraph] \u81EA\u52A8\u66F4\u65B0 .gitignore \u5931\u8D25:`, err2);
+    console.warn(`[CodeGraph] \u81EA\u52A8\u66F4\u65B0\u672C\u5730\u6392\u9664\u89C4\u5219\u5931\u8D25:`, err2);
   }
 }
 
@@ -112040,7 +112057,11 @@ var CodeGraphCore = class {
     }
     await this.watcher.buildBaseline(globPatterns);
     const archetypeMatch = this.forceArchetype ? { archetype: this.forceArchetype, confidence: 1, matchedRules: ["\u7528\u6237\u624B\u52A8\u5F3A\u5236\u6307\u5B9A"] } : ArchetypeEngine.detectArchetype(this.workspaceRoot, normalizedFiles);
+    let scannedFilesCount = 0;
     for (const relPath of normalizedFiles) {
+      if (++scannedFilesCount % 5 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
       const fullPath = path9.join(this.workspaceRoot, relPath);
       const extractor = ExtractorRegistry.getExtractorForFile(relPath);
       if (!extractor)
@@ -112062,7 +112083,9 @@ var CodeGraphCore = class {
         console.warn(`[CodeGraph] \u89E3\u6790\u6587\u4EF6\u5931\u8D25: ${relPath}`, err2);
       }
     }
+    await new Promise((resolve) => setImmediate(resolve));
     this.symbolTable.resolveCrossFileReferences();
+    await new Promise((resolve) => setImmediate(resolve));
     const projectName = path9.basename(this.workspaceRoot);
     const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
     const result = DualModelCompiler.compile(projectName, this.scopePath, normalizedFiles, this.symbolTable.getAllNodes(), this.symbolTable.getAllEdges(), archetypeMatch.archetype, {
@@ -112092,7 +112115,11 @@ var CodeGraphCore = class {
     for (const del of changes.deleted) {
       this.symbolTable.invalidateFile(del);
     }
+    let incProcessedCount = 0;
     for (const changedFile of [...changes.added, ...changes.modified]) {
+      if (++incProcessedCount % 5 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
       const fullPath = path9.join(this.workspaceRoot, changedFile);
       const extractor = ExtractorRegistry.getExtractorForFile(changedFile);
       if (fs8.existsSync(fullPath) && extractor) {
@@ -112114,7 +112141,9 @@ var CodeGraphCore = class {
         }
       }
     }
+    await new Promise((resolve) => setImmediate(resolve));
     this.symbolTable.resolveCrossFileReferences();
+    await new Promise((resolve) => setImmediate(resolve));
     const allFiles = Array.from(new Set(this.symbolTable.getAllNodes().map((n) => n.filePath).filter((f) => !f.startsWith("contracts/"))));
     const projectName = path9.basename(this.workspaceRoot);
     const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));

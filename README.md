@@ -79,20 +79,32 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 
 ---
 
-## 🌐 支持的编程语言
+## 🌐 支持的编程语言与引擎生态
 
-得益于 Tree-Sitter 语法解析能力，本图谱开箱支持主流工程语言的语法提取与跨文件调用分析：
+得益于 WebAssembly 驱动的 Tree-Sitter 语法解析能力与专属 AST 语义提取器，本图谱开箱支持以下核心语言生态与游戏引擎：
 
-| 语言 | 扩展名 | 提取内容 |
-| :--- | :--- | :--- |
-| **Python** | `.py` | Class, Def, Import, Calls, Decorator, Docstring |
-| **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | Class, Interface, Function, Import/Export, Calls |
-| **Go** | `.go` | Struct, Interface, Func, Package Import, Method |
-| **Java** | `.java` | Class, Interface, Method, Import, Package |
-| **C / C++** | `.c`, `.cpp`, `.h`, `.hpp` | Struct, Class, Function, Include |
-| **C#** | `.cs` | Class, Interface, Method, Using, Namespace |
-| **Rust** | `.rs` | Struct, Enum, Fn, Impl, Use |
-| **更多语言** | PHP, Ruby, Kotlin, Swift 等 | 基础符号与调用关联 |
+| 语言生态 | 扩展名 | 适用技术栈 / 游戏引擎 | 核心提取能力 |
+| :--- | :--- | :--- | :--- |
+| **Python** | `.py` | FastAPI, Django, Flask, 脚本工具 | Class, Def, Import, Calls, Decorator, Docstring |
+| **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | React, Vue, Node.js, Next.js | Class, Interface, Function, Import/Export, Calls |
+| **Go** | `.go` | Gin, gRPC, 云原生后端微服务 | Struct, Interface, Func, Package Import, Method |
+| **Java** | `.java` | Spring Boot, Android 后端 | Class, Interface, Method, Import, Package |
+| **C / C++** | `.c`, `.cpp`, `.h`, `.hpp` | **Unreal Engine (虚幻引擎)**, 基础库 | Struct, Class, Function, Include, 多继承与宏方法 |
+| **C#** | `.cs` | **Unity 游戏引擎**, **Godot (C#)**, .NET | MonoBehaviour, Class, Interface, Method, Using |
+| **Rust** | `.rs` | Axum, Actix, Reqwest, 系统底层 | Struct, Enum, Fn, Impl, Trait, Use, HTTP 路由 |
+
+> 📌 **新语言规划路线图**：Kotlin (`.kt`)、Swift (`.swift`)、Lua (`.lua`, 覆盖游戏热更/Cocos/Roblox)、PHP (`.php`) 及 Ruby (`.rb`) 语义提取器正在按计划逐步落地中。
+
+---
+
+## 💾 缓存机制与工作区零污染设计
+
+1. **秒级持久化缓存**：首次扫描会在被分析工程根目录生成 `.codegraph/graph-cache.json`。后续启动或切换视图无需重复耗时解析，极速秒开。
+2. **非侵入式 Git 本地排除 (Zero Git-Status Pollution)**：
+   - 插件会自动将 `.codegraph/` 登记至目标仓库本地私有排除文件 **`.git/info/exclude`** 中；
+   - 与常规 `.gitignore` 具备完全相同的忽略能力，但**绝对不会修改您的工作区 `.gitignore` 文件**，不会造成任何意外的代码改动或干扰 CI/CD 流水线。
+3. **事件循环友好 (Non-blocking)**：
+   - 全量解析采用宏任务批次切片机制（Time-slicing via `setImmediate`），在大规模仓库扫描期间不占死 Node.js 事件循环，确保 HTTP API 响应正常且支持优雅中断。
 
 ---
 

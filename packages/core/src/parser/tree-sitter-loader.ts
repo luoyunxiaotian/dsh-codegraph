@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 语言支持列表及对应的 wasm 文件名映射
-const WASM_FILE_MAP: Record<string, string> = {
+export const WASM_FILE_MAP: Record<string, string> = {
   python: 'tree-sitter-python.wasm',
   typescript: 'tree-sitter-typescript.wasm',
   javascript: 'tree-sitter-javascript.wasm',
@@ -22,6 +22,14 @@ const WASM_FILE_MAP: Record<string, string> = {
   csharp: 'tree-sitter-c_sharp.wasm',
   cs: 'tree-sitter-c_sharp.wasm',
 };
+
+/**
+ * 当前运行时所登记的所有 Tree-Sitter 语法 WASM 文件名集合 (包含核心运行时 tree-sitter.wasm)
+ */
+export const SUPPORTED_WASM_FILES: readonly string[] = Object.freeze([
+  'tree-sitter.wasm',
+  ...Array.from(new Set(Object.values(WASM_FILE_MAP))),
+]);
 
 let isInitialized = false;
 const loadedLanguages: Map<string, Parser.Language> = new Map();

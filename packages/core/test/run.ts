@@ -1,7 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { CodeGraphCore, WorkspaceProfiler, CallPathFinder } from '../src/index.js';
+import {
+  CodeGraphCore,
+  WorkspaceProfiler,
+  CallPathFinder,
+  SUPPORTED_WASM_FILES,
+  WASM_FILE_MAP,
+  ensureGitignore,
+} from '../src/index.js';
 import { runWatcherIncrementalTests } from './watcher-incremental.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -401,6 +408,65 @@ func main() {
   // 增量变更检测回归（未提交 / 已提交 / 重命名 都要能检出；见 watcher-incremental.ts）
   await runWatcherIncrementalTests();
 
+  // =========================================================================
+  // 测试 11: 验证 WASM 语法集合一致性 (避免登记清单与发布白名单漂移)
+  // =========================================================================
+  console.log('\n[测试 11] 验证 WASM 语法注册清单与发布集合一致性...');
+  const expectedWasmSet = new Set(SUPPORTED_WASM_FILES);
+  for (const filename of Object.values(WASM_FILE_MAP)) {
+    if (!expectedWasmSet.has(filename)) {
+      throw new Error(`WASM_FILE_MAP 中的 ${filename} 未在 SUPPORTED_WASM_FILES 白名单中登记`);
+    }
+  }
+  console.log(`  ✓ 语法映射一致性检验通过: 涵盖 ${Object.keys(WASM_FILE_MAP).length} 别名, ${SUPPORTED_WASM_FILES.length} 个核心 WASM`);
+
+  // 若项目 dist/wasm 存在，断言物理文件集合与白名单严格相等
+  const rootWasmDir = path.resolve(__dirname, '../../../dist/wasm');
+  if (fs.existsSync(rootWasmDir)) {
+    const physicalFiles = fs.readdirSync(rootWasmDir).filter((f) => f.endsWith('.wasm'));
+    const physicalSet = new Set(physicalFiles);
+    for (const expected of SUPPORTED_WASM_FILES) {
+      if (!physicalSet.has(expected)) {
+        throw new Error(`dist/wasm 缺少预期核心语法文件: ${expected}`);
+      }
+    }
+    for (const physical of physicalFiles) {
+      if (!expectedWasmSet.has(physical)) {
+        throw new Error(`dist/wasm 存在未在白名单登记的冗余文件: ${physical}`);
+      }
+    }
+    console.log(`  ✓ dist/wasm 物理打包校验通过: 严格匹配 ${physicalFiles.length} 个核心语法包 (无多余冗余)`);
+  }
+
+  // =========================================================================
+  // 测试 12: 验证 Git 本地私有排除规则 (不侵入修改用户工作区 .gitignore)
+  // =========================================================================
+  console.log('\n[测试 12] 验证 .codegraph 排除项写入 .git/info/exclude 且绝不污染 .gitignore...');
+  const mockRepoDir = path.resolve(__dirname, 'fixtures/git_exclude_test');
+  if (fs.existsSync(mockRepoDir)) {
+    fs.rmSync(mockRepoDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.join(mockRepoDir, '.git/info'), { recursive: true });
+
+  ensureGitignore(mockRepoDir);
+
+  const gitignorePath = path.join(mockRepoDir, '.gitignore');
+  if (fs.existsSync(gitignorePath)) {
+    throw new Error('测试失败: ensureGitignore 不应该创建或修改 .gitignore 文件');
+  }
+
+  const excludePath = path.join(mockRepoDir, '.git/info/exclude');
+  if (!fs.existsSync(excludePath)) {
+    throw new Error('测试失败: 未能在 .git/info/exclude 中生成本地排除文件');
+  }
+
+  const excludeContent = fs.readFileSync(excludePath, 'utf-8');
+  if (!excludeContent.includes('.codegraph/')) {
+    throw new Error('测试失败: .git/info/exclude 中未包含 .codegraph/ 规则');
+  }
+  console.log('  ✓ 成功验证本地私有排除机制，用户工作区保持绝对干净！');
+
+  fs.rmSync(mockRepoDir, { recursive: true, force: true });
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });
   console.log('\n🎉 所有核心测试全部通过！\n');

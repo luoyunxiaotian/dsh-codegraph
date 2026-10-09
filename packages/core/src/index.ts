@@ -254,7 +254,14 @@ export class CodeGraphCore {
       : ArchetypeEngine.detectArchetype(this.workspaceRoot, normalizedFiles);
 
     // 4. 遍历解析所有源码文件的 AST
+    let scannedFilesCount = 0;
     for (const relPath of normalizedFiles) {
+      // 批次切片让出：每解析 5 个文件主动向 Node.js 事件循环让出时间片，
+      // 防止密集型同步 AST 解析占死事件循环，确保外部 HTTP 请求 (/api/status) 与系统信号 (SIGINT) 能得到及时响应
+      if (++scannedFilesCount % 5 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+
       const fullPath = path.join(this.workspaceRoot, relPath);
       const extractor = ExtractorRegistry.getExtractorForFile(relPath);
       if (!extractor) continue;
@@ -280,8 +287,14 @@ export class CodeGraphCore {
       }
     }
 
+    // 在跨文件复杂符号决议前让出一次事件循环
+    await new Promise((resolve) => setImmediate(resolve));
+
     // 5. 全局跨文件调用与依赖关系解析 + 跨语言契约中枢自动链接
     this.symbolTable.resolveCrossFileReferences();
+
+    // 在双模型拓扑编译前让出一次事件循环
+    await new Promise((resolve) => setImmediate(resolve));
 
     // 6. 双模型编译 (含一致性校验与自动纠错回滚及多端生态聚合)
     const projectName = path.basename(this.workspaceRoot);
@@ -330,7 +343,12 @@ export class CodeGraphCore {
     }
 
     // 2. 局部重新解析新增与修改的文件
+    let incProcessedCount = 0;
     for (const changedFile of [...changes.added, ...changes.modified]) {
+      if (++incProcessedCount % 5 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+
       const fullPath = path.join(this.workspaceRoot, changedFile);
       const extractor = ExtractorRegistry.getExtractorForFile(changedFile);
       if (fs.existsSync(fullPath) && extractor) {
@@ -355,8 +373,12 @@ export class CodeGraphCore {
       }
     }
 
+    await new Promise((resolve) => setImmediate(resolve));
+
     // 3. 重新建立跨文件调用依赖关系与契约链接
     this.symbolTable.resolveCrossFileReferences();
+
+    await new Promise((resolve) => setImmediate(resolve));
 
     // 4. 重新编译图谱
     const allFiles = Array.from(

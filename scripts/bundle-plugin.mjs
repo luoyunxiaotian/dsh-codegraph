@@ -92,6 +92,21 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
     fs.mkdirSync(wasmDestDir, { recursive: true });
   }
 
+  // 核心白名单：仅打包已在运行时登记且具备成熟 Extractor 语义提取器的语法 wasm
+  const ACTIVE_WASM_WHITELIST = new Set([
+    'tree-sitter.wasm',
+    'tree-sitter-python.wasm',
+    'tree-sitter-typescript.wasm',
+    'tree-sitter-javascript.wasm',
+    'tree-sitter-tsx.wasm',
+    'tree-sitter-go.wasm',
+    'tree-sitter-java.wasm',
+    'tree-sitter-rust.wasm',
+    'tree-sitter-c.wasm',
+    'tree-sitter-cpp.wasm',
+    'tree-sitter-c_sharp.wasm',
+  ]);
+
   // 寻找 tree-sitter-wasms 的 out 目录
   const candidateWasmDirs = [
     path.join(rootDir, 'node_modules/tree-sitter-wasms/out'),
@@ -117,8 +132,15 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
   }
 
   if (foundWasmDir) {
-    fs.cpSync(foundWasmDir, wasmDestDir, { recursive: true });
-    console.log(`     已复制 WASM 语法包 (${fs.readdirSync(wasmDestDir).length} 个语法文件)`);
+    let copiedCount = 0;
+    const entries = fs.readdirSync(foundWasmDir);
+    for (const file of entries) {
+      if (ACTIVE_WASM_WHITELIST.has(file)) {
+        fs.copyFileSync(path.join(foundWasmDir, file), path.join(wasmDestDir, file));
+        copiedCount++;
+      }
+    }
+    console.log(`     已按白名单复制 WASM 语法包 (${copiedCount} 个核心语法文件)`);
   }
 
   // 寻找 web-tree-sitter 的 tree-sitter.wasm
@@ -146,6 +168,19 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
   if (foundTreeSitterWasm) {
     fs.copyFileSync(foundTreeSitterWasm, path.join(distDir, 'tree-sitter.wasm'));
     fs.copyFileSync(foundTreeSitterWasm, path.join(wasmDestDir, 'tree-sitter.wasm'));
+  }
+
+  // 清理 dist/wasm 中未在白名单中的冗余/废弃 wasm 文件，收缩打包体积
+  const existingFiles = fs.readdirSync(wasmDestDir);
+  let purgedCount = 0;
+  for (const file of existingFiles) {
+    if (!ACTIVE_WASM_WHITELIST.has(file)) {
+      fs.unlinkSync(path.join(wasmDestDir, file));
+      purgedCount++;
+    }
+  }
+  if (purgedCount > 0) {
+    console.log(`     已清理 ${purgedCount} 个未在白名单中的冗余 WASM 文件`);
   }
 
   console.log('✅ DeepSeek Harness 插件打包完成！输出路径: dist/');
