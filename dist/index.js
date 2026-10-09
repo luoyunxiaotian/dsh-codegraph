@@ -105594,6 +105594,9 @@ function formatContractEndpointId(method, normalizedRoute) {
   const cleanRoute = normalizedRoute.replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
   return `contract_rest_${cleanMethod.toLowerCase()}_${cleanRoute}`;
 }
+function formatContractRpcId(serviceName, methodName) {
+  return `contract_rpc_${sanitizeIdentifier(serviceName).toLowerCase()}_${sanitizeIdentifier(methodName).toLowerCase()}`;
+}
 function formatContractTopicId(topicName) {
   return `contract_topic_${sanitizeIdentifier(topicName).toLowerCase()}`;
 }
@@ -109562,8 +109565,585 @@ function extractGodotSceneFile(filePath, sourceCode) {
   };
 }
 
+// packages/core/dist/parser/extractors/proto-extractor.js
+var ProtoExtractor = class {
+  language = "protobuf";
+  fileExtensions = [".proto"];
+  wasmGrammarName = "none";
+  extractFile(_tree, filePath, sourceCode) {
+    return extractProtobufFile(filePath, sourceCode);
+  }
+};
+function extractProtobufFile(filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lines = sourceCode.split("\n");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "protobuf",
+    scipUri: formatScipUri("protobuf", filePath, "", fileName, "def"),
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(fileNode);
+  const cleanCode = sourceCode.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  let packageName = "";
+  const packageMatch = cleanCode.match(/\bpackage\s+([a-zA-Z0-9_.]+)\s*;/);
+  if (packageMatch) {
+    packageName = packageMatch[1].trim();
+  }
+  const importMatches = cleanCode.matchAll(/\bimport\s+["']([^"']+)["']\s*;/g);
+  for (const im of importMatches) {
+    const importPath = im[1].trim();
+    const modName = importPath.split("/").pop()?.replace(/\.proto$/i, "") || importPath;
+    imports.push({
+      modulePath: importPath,
+      importedNames: [{ name: modName }],
+      line: 1
+    });
+    edges.push({
+      id: `import_${fileNodeId}_${importPath}`,
+      source: fileNodeId,
+      target: importPath,
+      relation: "IMPORTS",
+      confidence: "EXTRACTED",
+      sourceLine: 1
+    });
+  }
+  const messageMatches = cleanCode.matchAll(/\bmessage\s+([a-zA-Z0-9_]+)\s*\{([\s\S]*?)\}/g);
+  for (const mm of messageMatches) {
+    const msgName = mm[1];
+    const msgNodeId = formatNodeId(filePath, msgName);
+    const msgNode = {
+      id: msgNodeId,
+      name: msgName,
+      qualifiedName: packageName ? `${packageName}.${msgName}` : msgName,
+      entityType: "CLASS",
+      semanticRole: "MODEL",
+      filePath,
+      language: "protobuf",
+      scipUri: formatScipUri("protobuf", filePath, "", msgName, "class"),
+      loc: { startLine: 1, endLine: lines.length }
+    };
+    nodes.push(msgNode);
+    edges.push({
+      id: `contains_${fileNodeId}_${msgNodeId}`,
+      source: fileNodeId,
+      target: msgNodeId,
+      relation: "CONTAINS",
+      confidence: "EXTRACTED"
+    });
+  }
+  const enumMatches = cleanCode.matchAll(/\benum\s+([a-zA-Z0-9_]+)\s*\{([\s\S]*?)\}/g);
+  for (const em of enumMatches) {
+    const enumName = em[1];
+    const enumNodeId = formatNodeId(filePath, enumName);
+    const enumNode = {
+      id: enumNodeId,
+      name: enumName,
+      qualifiedName: packageName ? `${packageName}.${enumName}` : enumName,
+      entityType: "CLASS",
+      semanticRole: "MODEL",
+      filePath,
+      language: "protobuf",
+      scipUri: formatScipUri("protobuf", filePath, "", enumName, "class"),
+      loc: { startLine: 1, endLine: lines.length }
+    };
+    nodes.push(enumNode);
+    edges.push({
+      id: `contains_${fileNodeId}_${enumNodeId}`,
+      source: fileNodeId,
+      target: enumNodeId,
+      relation: "CONTAINS",
+      confidence: "EXTRACTED"
+    });
+  }
+  const serviceMatches = cleanCode.matchAll(/\bservice\s+([a-zA-Z0-9_]+)\s*\{([\s\S]*?)\}/g);
+  for (const sm of serviceMatches) {
+    const serviceName = sm[1];
+    const serviceBody = sm[2];
+    const serviceNodeId = formatNodeId(filePath, serviceName);
+    const serviceNode = {
+      id: serviceNodeId,
+      name: serviceName,
+      qualifiedName: packageName ? `${packageName}.${serviceName}` : serviceName,
+      entityType: "INTERFACE",
+      semanticRole: "CONTRACT",
+      filePath,
+      language: "protobuf",
+      scipUri: formatScipUri("protobuf", filePath, "", serviceName, "interface"),
+      loc: { startLine: 1, endLine: lines.length }
+    };
+    nodes.push(serviceNode);
+    edges.push({
+      id: `contains_${fileNodeId}_${serviceNodeId}`,
+      source: fileNodeId,
+      target: serviceNodeId,
+      relation: "CONTAINS",
+      confidence: "EXTRACTED"
+    });
+    const rpcMatches = serviceBody.matchAll(/\brpc\s+([a-zA-Z0-9_]+)\s*\(\s*(?:stream\s+)?([a-zA-Z0-9_.]+)\s*\)\s*returns\s*\(\s*(?:stream\s+)?([a-zA-Z0-9_.]+)\s*\)/g);
+    for (const rm of rpcMatches) {
+      const methodName = rm[1];
+      const reqType = rm[2].split(".").pop() || rm[2];
+      const respType = rm[3].split(".").pop() || rm[3];
+      const rpcContractId = formatContractRpcId(serviceName, methodName);
+      const rpcNode = {
+        id: rpcContractId,
+        name: `${serviceName}.${methodName}`,
+        qualifiedName: packageName ? `${packageName}.${serviceName}.${methodName}` : `${serviceName}.${methodName}`,
+        entityType: "CONTRACT_RPC",
+        semanticRole: "CONTRACT",
+        filePath,
+        language: "protobuf",
+        scipUri: `scip/protobuf/contract/${serviceName}/${methodName}`,
+        signature: `rpc ${methodName}(${rm[2]}) returns (${rm[3]})`,
+        rpcMeta: {
+          serviceName,
+          methodName,
+          isClientCall: false
+        },
+        loc: { startLine: 1, endLine: lines.length }
+      };
+      nodes.push(rpcNode);
+      edges.push({
+        id: `contains_${serviceNodeId}_${rpcContractId}`,
+        source: serviceNodeId,
+        target: rpcContractId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const reqMsgId = formatNodeId(filePath, reqType);
+      edges.push({
+        id: `rpc_in_${rpcContractId}_${reqMsgId}`,
+        source: rpcContractId,
+        target: reqMsgId,
+        relation: "READS_WRITES",
+        confidence: "INFERRED"
+      });
+      const respMsgId = formatNodeId(filePath, respType);
+      edges.push({
+        id: `rpc_out_${rpcContractId}_${respMsgId}`,
+        source: rpcContractId,
+        target: respMsgId,
+        relation: "READS_WRITES",
+        confidence: "INFERRED"
+      });
+    }
+  }
+  return {
+    filePath,
+    language: "protobuf",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/openapi-extractor.js
+var OpenApiExtractor = class {
+  language = "openapi";
+  fileExtensions = [
+    ".openapi.json",
+    ".swagger.json",
+    ".openapi.yaml",
+    ".openapi.yml",
+    ".swagger.yaml",
+    ".swagger.yml"
+  ];
+  wasmGrammarName = "none";
+  extractFile(_tree, filePath, sourceCode) {
+    return extractOpenApiFile(filePath, sourceCode);
+  }
+};
+function parseSimpleYaml(yamlStr) {
+  const lines = yamlStr.split("\n");
+  const root = {};
+  const stack = [
+    { indent: -1, obj: root, key: null }
+  ];
+  for (const rawLine of lines) {
+    const commentIdx = rawLine.indexOf("#");
+    const line = commentIdx >= 0 ? rawLine.slice(0, commentIdx) : rawLine;
+    if (!line.trim())
+      continue;
+    const indent = line.search(/\S/);
+    const trimmed = line.trim();
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+    const current = stack[stack.length - 1].obj;
+    if (trimmed.startsWith("- ")) {
+      const valStr = trimmed.slice(2).trim();
+      const parentContext = stack[stack.length - 1];
+      if (parentContext.key && !Array.isArray(parentContext.obj[parentContext.key])) {
+        parentContext.obj[parentContext.key] = [];
+      }
+      const targetArr = Array.isArray(current) ? current : parentContext.key ? parentContext.obj[parentContext.key] : null;
+      if (valStr.includes(":")) {
+        const colonIdx2 = valStr.indexOf(":");
+        const k = valStr.slice(0, colonIdx2).trim().replace(/^["']|["']$/g, "");
+        const v = valStr.slice(colonIdx2 + 1).trim().replace(/^["']|["']$/g, "");
+        const itemObj = { [k]: v };
+        if (targetArr)
+          targetArr.push(itemObj);
+        stack.push({ indent, obj: itemObj, key: k });
+      } else {
+        if (targetArr)
+          targetArr.push(valStr.replace(/^["']|["']$/g, ""));
+      }
+      continue;
+    }
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx > 0) {
+      const key = trimmed.slice(0, colonIdx).trim().replace(/^["']|["']$/g, "");
+      const value = trimmed.slice(colonIdx + 1).trim();
+      if (!value) {
+        const newObj = {};
+        if (Array.isArray(current)) {
+          current.push({ [key]: newObj });
+        } else {
+          current[key] = newObj;
+        }
+        stack.push({ indent, obj: newObj, key });
+      } else {
+        const cleanVal = value.replace(/^["']|["']$/g, "");
+        if (Array.isArray(current)) {
+          current.push({ [key]: cleanVal });
+        } else {
+          current[key] = cleanVal;
+        }
+      }
+    }
+  }
+  return root;
+}
+function extractOpenApiFile(filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lines = sourceCode.split("\n");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "openapi",
+    scipUri: formatScipUri("openapi", filePath, "", fileName, "def"),
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(fileNode);
+  let spec = {};
+  try {
+    const trimmedCode = sourceCode.trim();
+    if (trimmedCode.startsWith("{") || trimmedCode.startsWith("[")) {
+      spec = JSON.parse(sourceCode);
+    } else {
+      spec = parseSimpleYaml(sourceCode);
+    }
+  } catch (err2) {
+    console.warn(`[OpenApiExtractor] \u89E3\u6790 OpenAPI \u89C4\u8303\u5931\u8D25: ${filePath}`, err2);
+    return {
+      filePath,
+      language: "openapi",
+      nodes,
+      edges,
+      imports,
+      unresolvedCalls,
+      unresolvedInheritance
+    };
+  }
+  const title = spec.info && typeof spec.info.title === "string" ? spec.info.title : fileName.replace(/\.(json|yaml|yml)$/i, "");
+  const version = spec.info?.version ? ` (v${spec.info.version})` : "";
+  const specNodeId = formatNodeId(filePath, "spec");
+  const specNode = {
+    id: specNodeId,
+    name: `${title}${version}`,
+    qualifiedName: formatQualifiedName(filePath, "spec"),
+    entityType: "MODULE",
+    semanticRole: "CONTRACT",
+    filePath,
+    language: "openapi",
+    scipUri: formatScipUri("openapi", filePath, "", "spec", "class"),
+    metadata: {
+      title,
+      version: spec.info?.version,
+      openapiVersion: spec.openapi || spec.swagger
+    },
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(specNode);
+  edges.push({
+    id: `contains_${fileNodeId}_${specNodeId}`,
+    source: fileNodeId,
+    target: specNodeId,
+    relation: "CONTAINS",
+    confidence: "EXTRACTED"
+  });
+  const paths = spec.paths || {};
+  const httpMethods = ["get", "post", "put", "delete", "patch", "options", "head"];
+  for (const [routePath, pathItem] of Object.entries(paths)) {
+    if (!pathItem || typeof pathItem !== "object")
+      continue;
+    for (const [method, opItem] of Object.entries(pathItem)) {
+      if (!httpMethods.includes(method.toLowerCase()))
+        continue;
+      const op = opItem;
+      const upperMethod = method.toUpperCase();
+      const normRoute = normalizeRoutePattern(routePath);
+      const contractId = formatContractEndpointId(upperMethod, normRoute);
+      const endpointNode = {
+        id: contractId,
+        name: `${upperMethod} ${normRoute}`,
+        qualifiedName: `contract.rest.${method.toLowerCase()}.${normRoute}`,
+        entityType: "CONTRACT_ENDPOINT",
+        semanticRole: "CONTRACT",
+        filePath,
+        language: "openapi",
+        scipUri: `scip/openapi/contract/${upperMethod}${normRoute}`,
+        docstring: typeof op.summary === "string" ? op.summary : typeof op.description === "string" ? op.description : void 0,
+        endpointMeta: {
+          httpMethod: upperMethod,
+          routePath: normRoute,
+          isClientCall: false
+        },
+        metadata: {
+          operationId: op.operationId,
+          tags: op.tags
+        },
+        loc: { startLine: 1, endLine: lines.length }
+      };
+      nodes.push(endpointNode);
+      edges.push({
+        id: `contains_${specNodeId}_${contractId}`,
+        source: specNodeId,
+        target: contractId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+    }
+  }
+  const schemas = spec.components && spec.components.schemas || spec.definitions || {};
+  for (const [schemaName, schemaObj] of Object.entries(schemas)) {
+    if (!schemaObj || typeof schemaObj !== "object")
+      continue;
+    const schemaNodeId = formatNodeId(filePath, schemaName);
+    const schemaNode = {
+      id: schemaNodeId,
+      name: schemaName,
+      qualifiedName: formatQualifiedName(filePath, schemaName),
+      entityType: "CLASS",
+      semanticRole: "MODEL",
+      filePath,
+      language: "openapi",
+      scipUri: formatScipUri("openapi", filePath, "", schemaName, "class"),
+      loc: { startLine: 1, endLine: lines.length }
+    };
+    nodes.push(schemaNode);
+    edges.push({
+      id: `contains_${specNodeId}_${schemaNodeId}`,
+      source: specNodeId,
+      target: schemaNodeId,
+      relation: "CONTAINS",
+      confidence: "EXTRACTED"
+    });
+  }
+  return {
+    filePath,
+    language: "openapi",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/sql-extractor.js
+var SqlExtractor = class {
+  language = "sql";
+  fileExtensions = [".sql"];
+  wasmGrammarName = "none";
+  extractFile(_tree, filePath, sourceCode) {
+    return extractSqlFile(filePath, sourceCode);
+  }
+};
+function extractSqlFile(filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lines = sourceCode.split("\n");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "sql",
+    scipUri: formatScipUri("sql", filePath, "", fileName, "def"),
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(fileNode);
+  const cleanSql = sourceCode.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  const statements = cleanSql.split(";").map((s) => s.trim()).filter(Boolean);
+  const tableNodesMap = /* @__PURE__ */ new Map();
+  for (const stmt of statements) {
+    const createTableMatch = stmt.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`|"|\[)?(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)(?:`|"|\])?\s*\(([\s\S]*)\)/i);
+    if (createTableMatch) {
+      const tableName = createTableMatch[1];
+      const body2 = createTableMatch[2];
+      const tableNodeId = formatNodeId(filePath, tableName);
+      const tableNode = {
+        id: tableNodeId,
+        name: tableName,
+        qualifiedName: formatQualifiedName(filePath, tableName),
+        entityType: "CLASS",
+        semanticRole: "REPOSITORY",
+        filePath,
+        language: "sql",
+        scipUri: formatScipUri("sql", filePath, "", tableName, "class"),
+        loc: { startLine: 1, endLine: lines.length }
+      };
+      nodes.push(tableNode);
+      tableNodesMap.set(tableName.toLowerCase(), tableNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${tableNodeId}`,
+        source: fileNodeId,
+        target: tableNodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const fkMatches = body2.matchAll(/(?:CONSTRAINT\s+[a-zA-Z0-9_]+\s+)?FOREIGN\s+KEY\s*\(([a-zA-Z0-9_,\s`"]+)\)\s*REFERENCES\s+(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\s*(?:\(([a-zA-Z0-9_,\s`"]+)\))?/gi);
+      for (const fkm of fkMatches) {
+        const targetTable = fkm[2].trim();
+        unresolvedCalls.push({
+          callerNodeId: tableNodeId,
+          calleeExpression: targetTable,
+          line: 1
+        });
+        edges.push({
+          id: `fk_${tableNodeId}_${targetTable}`,
+          source: tableNodeId,
+          target: targetTable,
+          relation: "READS_WRITES",
+          confidence: "EXTRACTED"
+        });
+      }
+      const inlineFkMatches = body2.matchAll(/([a-zA-Z0-9_]+)\s+[^,]+\s+REFERENCES\s+(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\s*(?:\(([a-zA-Z0-9_,\s`"]+)\))?/gi);
+      for (const ifkm of inlineFkMatches) {
+        const targetTable = ifkm[2].trim();
+        unresolvedCalls.push({
+          callerNodeId: tableNodeId,
+          calleeExpression: targetTable,
+          line: 1
+        });
+        const edgeId = `fk_inline_${tableNodeId}_${targetTable}`;
+        if (!edges.some((e) => e.id === edgeId)) {
+          edges.push({
+            id: edgeId,
+            source: tableNodeId,
+            target: targetTable,
+            relation: "READS_WRITES",
+            confidence: "EXTRACTED"
+          });
+        }
+      }
+      continue;
+    }
+    const alterTableMatch = stmt.match(/ALTER\s+TABLE\s+(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\s+ADD\s+(?:CONSTRAINT\s+[a-zA-Z0-9_]+\s+)?FOREIGN\s+KEY\s*\(([a-zA-Z0-9_,\s`"]+)\)\s*REFERENCES\s+(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)/i);
+    if (alterTableMatch) {
+      const sourceTable = alterTableMatch[1].trim();
+      const targetTable = alterTableMatch[3].trim();
+      const sourceNodeId = formatNodeId(filePath, sourceTable);
+      unresolvedCalls.push({
+        callerNodeId: sourceNodeId,
+        calleeExpression: targetTable,
+        line: 1
+      });
+      edges.push({
+        id: `fk_alter_${sourceTable}_${targetTable}`,
+        source: sourceNodeId,
+        target: targetTable,
+        relation: "READS_WRITES",
+        confidence: "EXTRACTED"
+      });
+      continue;
+    }
+    const createViewMatch = stmt.match(/CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\s+AS\s+SELECT\s+([\s\S]+)/i);
+    if (createViewMatch) {
+      const viewName = createViewMatch[1];
+      const selectBody = createViewMatch[2];
+      const viewNodeId = formatNodeId(filePath, viewName);
+      const viewNode = {
+        id: viewNodeId,
+        name: `${viewName} (View)`,
+        qualifiedName: formatQualifiedName(filePath, viewName),
+        entityType: "CLASS",
+        semanticRole: "MODEL",
+        filePath,
+        language: "sql",
+        scipUri: formatScipUri("sql", filePath, "", viewName, "class"),
+        loc: { startLine: 1, endLine: lines.length }
+      };
+      nodes.push(viewNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${viewNodeId}`,
+        source: fileNodeId,
+        target: viewNodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const fromMatches = selectBody.matchAll(/\b(?:FROM|JOIN)\s+(?:[a-zA-Z0-9_]+\.)?([a-zA-Z0-9_]+)\b/gi);
+      for (const fm of fromMatches) {
+        const sourceTable = fm[1].trim();
+        edges.push({
+          id: `view_source_${viewNodeId}_${sourceTable}`,
+          source: viewNodeId,
+          target: sourceTable,
+          relation: "READS_WRITES",
+          confidence: "EXTRACTED"
+        });
+      }
+    }
+  }
+  return {
+    filePath,
+    language: "sql",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
 // packages/core/dist/parser/extractor-registry.js
-var ExtractorRegistry = class {
+var ExtractorRegistry = class _ExtractorRegistry {
+  static protoExtractor = new ProtoExtractor();
+  static openApiExtractor = new OpenApiExtractor();
+  static sqlExtractor = new SqlExtractor();
   static extractors = [
     new PythonExtractor(),
     new TypeScriptExtractor(),
@@ -109577,7 +110157,10 @@ var ExtractorRegistry = class {
     new SwiftExtractor(),
     new LuaExtractor(),
     new UnityAsmdefExtractor(),
-    new GodotExtractor()
+    new GodotExtractor(),
+    _ExtractorRegistry.protoExtractor,
+    _ExtractorRegistry.openApiExtractor,
+    _ExtractorRegistry.sqlExtractor
   ];
   static extMap = /* @__PURE__ */ new Map();
   static {
@@ -109591,13 +110174,25 @@ var ExtractorRegistry = class {
    * 根据文件路径查找适用的提取器
    */
   static getExtractorForFile(filePath) {
+    const baseName = path2.basename(filePath).toLowerCase();
+    if (/^(openapi|swagger)\.(json|yaml|yml)$/i.test(baseName) || baseName.endsWith(".openapi.json") || baseName.endsWith(".swagger.json") || baseName.endsWith(".openapi.yaml") || baseName.endsWith(".openapi.yml") || baseName.endsWith(".swagger.yaml") || baseName.endsWith(".swagger.yml") || (baseName.includes("openapi") || baseName.includes("swagger")) && /\.(json|yaml|yml)$/i.test(baseName)) {
+      return this.openApiExtractor;
+    }
     const ext = path2.extname(filePath).toLowerCase();
+    if (ext === ".proto")
+      return this.protoExtractor;
+    if (ext === ".sql")
+      return this.sqlExtractor;
     return this.extMap.get(ext);
   }
   /**
    * 获取文件对应的 Tree-Sitter Wasm 语法模块名
    */
   static getWasmGrammarForFile(filePath) {
+    const baseName = path2.basename(filePath).toLowerCase();
+    if (/^(openapi|swagger)\.(json|yaml|yml)$/i.test(baseName) || baseName.includes("openapi") || baseName.includes("swagger")) {
+      return "none";
+    }
     const ext = path2.extname(filePath).toLowerCase();
     if (ext === ".tsx")
       return "tsx";
@@ -109631,21 +110226,38 @@ var ExtractorRegistry = class {
       return "none";
     if (ext === ".gd" || ext === ".tscn")
       return "none";
-    const extractor = this.extMap.get(ext);
+    if (ext === ".proto")
+      return "none";
+    if (ext === ".sql")
+      return "none";
+    const extractor = this.getExtractorForFile(filePath);
     return extractor ? extractor.wasmGrammarName : void 0;
   }
   /**
    * 获取所有支持的文件后缀列表 (包含点号)
    */
   static getAllSupportedExtensions() {
-    return Array.from(this.extMap.keys());
+    const exts = Array.from(this.extMap.keys());
+    if (!exts.includes(".proto"))
+      exts.push(".proto");
+    if (!exts.includes(".sql"))
+      exts.push(".sql");
+    return exts;
   }
   /**
    * 获取 fast-glob 扫描模式串
    */
   static getGlobPatterns() {
-    const cleanExts = Array.from(this.extMap.keys()).map((e) => e.replace(/^\./, ""));
-    return [`**/*.{${cleanExts.join(",")}}`];
+    const cleanExts = Array.from(this.extMap.keys()).filter((e) => !e.includes("." + e.slice(1) + ".")).map((e) => e.replace(/^\./, ""));
+    if (!cleanExts.includes("proto"))
+      cleanExts.push("proto");
+    if (!cleanExts.includes("sql"))
+      cleanExts.push("sql");
+    return [
+      `**/*.{${cleanExts.join(",")}}`,
+      `**/*openapi*.{json,yaml,yml}`,
+      `**/*swagger*.{json,yaml,yml}`
+    ];
   }
   /**
    * 获取当前支持的所有语言名称
@@ -109664,6 +110276,7 @@ var ContractLinker = class {
     const contractNodesMap = /* @__PURE__ */ new Map();
     const contractEdges = [];
     const serverEndpointMap = /* @__PURE__ */ new Map();
+    const serverRpcMap = /* @__PURE__ */ new Map();
     for (const node of nodes.values()) {
       if (node.endpointMeta && !node.endpointMeta.isClientCall) {
         const method = (node.endpointMeta.httpMethod || "GET").toUpperCase();
@@ -109718,6 +110331,30 @@ var ContractLinker = class {
           confidence: "EXTRACTED",
           weight: 3
         });
+      }
+      if (node.rpcMeta && !node.rpcMeta.isClientCall && node.rpcMeta.serviceName && node.rpcMeta.methodName) {
+        const { serviceName, methodName } = node.rpcMeta;
+        const rpcContractId = formatContractRpcId(serviceName, methodName);
+        const list = serverRpcMap.get(rpcContractId) || [];
+        list.push(node);
+        serverRpcMap.set(rpcContractId, list);
+        if (!contractNodesMap.has(rpcContractId)) {
+          contractNodesMap.set(rpcContractId, {
+            id: rpcContractId,
+            name: `${serviceName}.${methodName}`,
+            qualifiedName: `contract.rpc.${serviceName.toLowerCase()}.${methodName.toLowerCase()}`,
+            entityType: "CONTRACT_RPC",
+            semanticRole: "CONTRACT",
+            filePath: "contracts/rpc",
+            language: "contract",
+            scipUri: `scip/contract/rpc/${serviceName}/${methodName}`,
+            loc: { startLine: 1, endLine: 1 },
+            rpcMeta: {
+              serviceName,
+              methodName
+            }
+          });
+        }
       }
     }
     for (const ext of extractions) {
@@ -109784,11 +110421,55 @@ var ContractLinker = class {
             weight: 3
           });
         }
+        if (call.rpcCallMeta && call.rpcCallMeta.serviceName && call.rpcCallMeta.methodName) {
+          const { serviceName, methodName } = call.rpcCallMeta;
+          const rpcContractId = formatContractRpcId(serviceName, methodName);
+          if (!contractNodesMap.has(rpcContractId)) {
+            contractNodesMap.set(rpcContractId, {
+              id: rpcContractId,
+              name: `${serviceName}.${methodName}`,
+              qualifiedName: `contract.rpc.${serviceName.toLowerCase()}.${methodName.toLowerCase()}`,
+              entityType: "CONTRACT_RPC",
+              semanticRole: "CONTRACT",
+              filePath: "contracts/rpc",
+              language: "contract",
+              scipUri: `scip/contract/rpc/${serviceName}/${methodName}`,
+              loc: { startLine: 1, endLine: 1 },
+              rpcMeta: {
+                serviceName,
+                methodName
+              }
+            });
+          }
+          const edgeId = `contract_rpc_${call.callerNodeId}_${rpcContractId}_${call.line}`;
+          contractEdges.push({
+            id: edgeId,
+            source: call.callerNodeId,
+            target: rpcContractId,
+            relation: "CALLS_CONTRACT",
+            confidence: "EXTRACTED",
+            sourceLine: call.line,
+            weight: 3
+          });
+        }
       }
     }
     for (const [contractId, handlers] of serverEndpointMap.entries()) {
       for (const handler of handlers) {
         const edgeId = `contract_handled_${contractId}_${handler.id}`;
+        contractEdges.push({
+          id: edgeId,
+          source: contractId,
+          target: handler.id,
+          relation: "HANDLED_BY",
+          confidence: "EXTRACTED",
+          weight: 3
+        });
+      }
+    }
+    for (const [contractId, handlers] of serverRpcMap.entries()) {
+      for (const handler of handlers) {
+        const edgeId = `contract_rpc_handled_${contractId}_${handler.id}`;
         contractEdges.push({
           id: edgeId,
           source: contractId,
@@ -110135,7 +110816,7 @@ var SymbolTable = class {
     const normSource = sourceFilePath.replace(/\\/g, "/");
     const sourceDir = path3.posix.dirname(normSource);
     const sourceExt = path3.posix.extname(normSource).toLowerCase();
-    const exts = sourceExt === ".py" ? [".py"] : [".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rs", ".cpp", ".c", ".h", ".hpp", ".cs", ".py", ".vue", ".kt", ".kts", ".swift", ".lua", ".asmdef", ".asmref", ".gd", ".tscn"];
+    const exts = sourceExt === ".py" ? [".py"] : [".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rs", ".cpp", ".c", ".h", ".hpp", ".cs", ".py", ".vue", ".kt", ".kts", ".swift", ".lua", ".asmdef", ".asmref", ".gd", ".tscn", ".proto", ".sql"];
     if (modulePath.startsWith(".")) {
       const match = modulePath.match(/^(\.+)(.*)$/);
       if (match) {
@@ -111933,7 +112614,7 @@ var WorkspaceProfiler = class {
             }
           } else {
             const ext = path7.extname(item.name).toLowerCase();
-            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn)$/.test(ext)) {
+            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn|proto|sql)$/.test(ext)) {
               extStats[ext] = (extStats[ext] || 0) + 1;
               fileCount++;
               try {
@@ -111977,6 +112658,10 @@ var WorkspaceProfiler = class {
           primaryLanguage = "unity";
         else if ([".gd", ".tscn"].includes(ext))
           primaryLanguage = "godot";
+        else if (ext === ".proto")
+          primaryLanguage = "protobuf";
+        else if (ext === ".sql")
+          primaryLanguage = "sql";
         else if (ext === ".rs")
           primaryLanguage = "rust";
         else if ([".cpp", ".cc", ".cxx", ".hpp"].includes(ext))
@@ -112018,6 +112703,10 @@ var WorkspaceProfiler = class {
       frameworks.push("Godot");
     if (primaryLanguage === "unity" || fs6.existsSync(path7.join(projectDir, "ProjectSettings")))
       frameworks.push("Unity");
+    if (extStats[".proto"] > 0 || /(grpc|protobuf)/i.test(depContent))
+      frameworks.push("gRPC/Protobuf");
+    if (extStats[".sql"] > 0 || /(prisma|typeorm|sequelize|gorm|sqlx)/i.test(depContent))
+      frameworks.push("SQL/Database");
     let platform = "UNKNOWN";
     const lowerRel = relPath.toLowerCase();
     if (frameworks.includes("Godot") || frameworks.includes("Unity") || primaryLanguage === "godot" || primaryLanguage === "unity" || primaryLanguage === "lua" && /(game|engine|scripts|roblox|cocos)/i.test(lowerRel)) {

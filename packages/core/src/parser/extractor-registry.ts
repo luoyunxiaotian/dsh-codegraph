@@ -13,8 +13,15 @@ import { SwiftExtractor } from './extractors/swift-extractor.js';
 import { LuaExtractor } from './extractors/lua-extractor.js';
 import { UnityAsmdefExtractor } from './extractors/unity-asmdef-extractor.js';
 import { GodotExtractor } from './extractors/godot-extractor.js';
+import { ProtoExtractor } from './extractors/proto-extractor.js';
+import { OpenApiExtractor } from './extractors/openapi-extractor.js';
+import { SqlExtractor } from './extractors/sql-extractor.js';
 
 export class ExtractorRegistry {
+  private static protoExtractor = new ProtoExtractor();
+  private static openApiExtractor = new OpenApiExtractor();
+  private static sqlExtractor = new SqlExtractor();
+
   private static extractors: LanguageExtractor[] = [
     new PythonExtractor(),
     new TypeScriptExtractor(),
@@ -29,6 +36,9 @@ export class ExtractorRegistry {
     new LuaExtractor(),
     new UnityAsmdefExtractor(),
     new GodotExtractor(),
+    ExtractorRegistry.protoExtractor,
+    ExtractorRegistry.openApiExtractor,
+    ExtractorRegistry.sqlExtractor,
   ];
 
   private static extMap: Map<string, LanguageExtractor> = new Map();
@@ -45,7 +55,25 @@ export class ExtractorRegistry {
    * 根据文件路径查找适用的提取器
    */
   public static getExtractorForFile(filePath: string): LanguageExtractor | undefined {
+    const baseName = path.basename(filePath).toLowerCase();
+    // 优先匹配 OpenAPI / Swagger 规范契约文件
+    if (
+      /^(openapi|swagger)\.(json|yaml|yml)$/i.test(baseName) ||
+      baseName.endsWith('.openapi.json') ||
+      baseName.endsWith('.swagger.json') ||
+      baseName.endsWith('.openapi.yaml') ||
+      baseName.endsWith('.openapi.yml') ||
+      baseName.endsWith('.swagger.yaml') ||
+      baseName.endsWith('.swagger.yml') ||
+      ((baseName.includes('openapi') || baseName.includes('swagger')) && /\.(json|yaml|yml)$/i.test(baseName))
+    ) {
+      return this.openApiExtractor;
+    }
+
     const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.proto') return this.protoExtractor;
+    if (ext === '.sql') return this.sqlExtractor;
+
     return this.extMap.get(ext);
   }
 
@@ -53,6 +81,15 @@ export class ExtractorRegistry {
    * 获取文件对应的 Tree-Sitter Wasm 语法模块名
    */
   public static getWasmGrammarForFile(filePath: string): string | undefined {
+    const baseName = path.basename(filePath).toLowerCase();
+    if (
+      /^(openapi|swagger)\.(json|yaml|yml)$/i.test(baseName) ||
+      baseName.includes('openapi') ||
+      baseName.includes('swagger')
+    ) {
+      return 'none';
+    }
+
     const ext = path.extname(filePath).toLowerCase();
     if (ext === '.tsx') return 'tsx';
     if (ext === '.jsx' || ext === '.js' || ext === '.mjs' || ext === '.cjs') return 'javascript';
@@ -70,8 +107,10 @@ export class ExtractorRegistry {
     if (ext === '.lua') return 'lua';
     if (ext === '.asmdef' || ext === '.asmref') return 'none';
     if (ext === '.gd' || ext === '.tscn') return 'none';
+    if (ext === '.proto') return 'none';
+    if (ext === '.sql') return 'none';
 
-    const extractor = this.extMap.get(ext);
+    const extractor = this.getExtractorForFile(filePath);
     return extractor ? extractor.wasmGrammarName : undefined;
   }
 
@@ -79,15 +118,29 @@ export class ExtractorRegistry {
    * 获取所有支持的文件后缀列表 (包含点号)
    */
   public static getAllSupportedExtensions(): string[] {
-    return Array.from(this.extMap.keys());
+    const exts = Array.from(this.extMap.keys());
+    if (!exts.includes('.proto')) exts.push('.proto');
+    if (!exts.includes('.sql')) exts.push('.sql');
+    return exts;
   }
 
   /**
    * 获取 fast-glob 扫描模式串
    */
   public static getGlobPatterns(): string[] {
-    const cleanExts = Array.from(this.extMap.keys()).map((e) => e.replace(/^\./, ''));
-    return [`**/*.{${cleanExts.join(',')}}`];
+    const cleanExts = Array.from(this.extMap.keys())
+      .filter((e) => !e.includes('.' + e.slice(1) + '.')) // 过滤多段后缀如 .openapi.json
+      .map((e) => e.replace(/^\./, ''));
+    
+    // 确保核心后缀均包含
+    if (!cleanExts.includes('proto')) cleanExts.push('proto');
+    if (!cleanExts.includes('sql')) cleanExts.push('sql');
+
+    return [
+      `**/*.{${cleanExts.join(',')}}`,
+      `**/*openapi*.{json,yaml,yml}`,
+      `**/*swagger*.{json,yaml,yml}`,
+    ];
   }
 
   /**

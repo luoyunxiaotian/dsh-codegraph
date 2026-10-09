@@ -270,7 +270,7 @@ export class WorkspaceProfiler {
             }
           } else {
             const ext = path.extname(item.name).toLowerCase();
-            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn)$/.test(ext)) {
+            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn|proto|sql)$/.test(ext)) {
               extStats[ext] = (extStats[ext] || 0) + 1;
               fileCount++;
               try {
@@ -304,6 +304,8 @@ export class WorkspaceProfiler {
         else if (ext === '.lua') primaryLanguage = 'lua';
         else if (['.asmdef', '.asmref'].includes(ext)) primaryLanguage = 'unity';
         else if (['.gd', '.tscn'].includes(ext)) primaryLanguage = 'godot';
+        else if (ext === '.proto') primaryLanguage = 'protobuf';
+        else if (ext === '.sql') primaryLanguage = 'sql';
         else if (ext === '.rs') primaryLanguage = 'rust';
         else if (['.cpp', '.cc', '.cxx', '.hpp'].includes(ext)) primaryLanguage = 'cpp';
         else if (['.c', '.h'].includes(ext)) primaryLanguage = 'c';
@@ -328,6 +330,8 @@ export class WorkspaceProfiler {
     if (/(tauri)/i.test(depContent)) frameworks.push('Tauri');
     if (primaryLanguage === 'godot' || fs.existsSync(path.join(projectDir, 'project.godot'))) frameworks.push('Godot');
     if (primaryLanguage === 'unity' || fs.existsSync(path.join(projectDir, 'ProjectSettings'))) frameworks.push('Unity');
+    if (extStats['.proto'] > 0 || /(grpc|protobuf)/i.test(depContent)) frameworks.push('gRPC/Protobuf');
+    if (extStats['.sql'] > 0 || /(prisma|typeorm|sequelize|gorm|sqlx)/i.test(depContent)) frameworks.push('SQL/Database');
 
     // 5. 判定目标平台形态 (Platform Fingerprinting)
     let platform: ProjectPlatform = 'UNKNOWN';

@@ -7,6 +7,7 @@ import {
   normalizeRoutePattern,
   formatContractEndpointId,
   formatContractTopicId,
+  formatContractRpcId,
 } from '../parser/scip-utils.js';
 
 export interface ContractLinkResult {
@@ -16,7 +17,7 @@ export interface ContractLinkResult {
 
 /**
  * 跨语言契约中枢链接引擎 (Polyglot Contract Hub Linker)
- * 消除多语言孤岛：将前端 fetch/axios、后端 FastAPI/Express/Gin/Spring/Axum/ASP.NET 路由与消息总线自动对齐
+ * 消除多语言孤岛：将前端 fetch/axios、后端 FastAPI/Express/Gin/Spring/Axum/ASP.NET 路由与消息总线、gRPC/Protobuf 自动对齐
  */
 export class ContractLinker {
   public static linkContracts(
@@ -26,9 +27,10 @@ export class ContractLinker {
     const contractNodesMap = new Map<string, CodeNode>();
     const contractEdges: CodeEdge[] = [];
 
-    // 1. 索引后端路由端点 (Server Endpoints)
+    // 1. 索引后端路由端点 (Server Endpoints) 与 RPC 服务端点
     // Map: contractEndpointId -> CodeNode (Handler)
     const serverEndpointMap = new Map<string, CodeNode[]>();
+    const serverRpcMap = new Map<string, CodeNode[]>();
 
     for (const node of nodes.values()) {
       if (node.endpointMeta && !node.endpointMeta.isClientCall) {
@@ -92,6 +94,34 @@ export class ContractLinker {
           confidence: 'EXTRACTED',
           weight: 3,
         });
+      }
+
+      // 索引后端 RPC 服务端点 (gRPC / Protobuf RPC Services)
+      if (node.rpcMeta && !node.rpcMeta.isClientCall && node.rpcMeta.serviceName && node.rpcMeta.methodName) {
+        const { serviceName, methodName } = node.rpcMeta;
+        const rpcContractId = formatContractRpcId(serviceName, methodName);
+
+        const list = serverRpcMap.get(rpcContractId) || [];
+        list.push(node);
+        serverRpcMap.set(rpcContractId, list);
+
+        if (!contractNodesMap.has(rpcContractId)) {
+          contractNodesMap.set(rpcContractId, {
+            id: rpcContractId,
+            name: `${serviceName}.${methodName}`,
+            qualifiedName: `contract.rpc.${serviceName.toLowerCase()}.${methodName.toLowerCase()}`,
+            entityType: 'CONTRACT_RPC',
+            semanticRole: 'CONTRACT',
+            filePath: 'contracts/rpc',
+            language: 'contract',
+            scipUri: `scip/contract/rpc/${serviceName}/${methodName}`,
+            loc: { startLine: 1, endLine: 1 },
+            rpcMeta: {
+              serviceName,
+              methodName,
+            },
+          });
+        }
       }
     }
 
@@ -170,13 +200,63 @@ export class ContractLinker {
             weight: 3,
           });
         }
+
+        // 2.3 客户端 gRPC / RPC 方法调用
+        if (call.rpcCallMeta && call.rpcCallMeta.serviceName && call.rpcCallMeta.methodName) {
+          const { serviceName, methodName } = call.rpcCallMeta;
+          const rpcContractId = formatContractRpcId(serviceName, methodName);
+
+          if (!contractNodesMap.has(rpcContractId)) {
+            contractNodesMap.set(rpcContractId, {
+              id: rpcContractId,
+              name: `${serviceName}.${methodName}`,
+              qualifiedName: `contract.rpc.${serviceName.toLowerCase()}.${methodName.toLowerCase()}`,
+              entityType: 'CONTRACT_RPC',
+              semanticRole: 'CONTRACT',
+              filePath: 'contracts/rpc',
+              language: 'contract',
+              scipUri: `scip/contract/rpc/${serviceName}/${methodName}`,
+              loc: { startLine: 1, endLine: 1 },
+              rpcMeta: {
+                serviceName,
+                methodName,
+              },
+            });
+          }
+
+          // 客户端 Caller -> 契约中枢: CALLS_CONTRACT
+          const edgeId = `contract_rpc_${call.callerNodeId}_${rpcContractId}_${call.line}`;
+          contractEdges.push({
+            id: edgeId,
+            source: call.callerNodeId,
+            target: rpcContractId,
+            relation: 'CALLS_CONTRACT',
+            confidence: 'EXTRACTED',
+            sourceLine: call.line,
+            weight: 3,
+          });
+        }
       }
     }
 
-    // 3. 将所有已注册的契约中枢连接至服务端路由实现 (HANDLED_BY)
+    // 3. 将所有已注册的契约中枢连接至服务端实现 (HANDLED_BY)
     for (const [contractId, handlers] of serverEndpointMap.entries()) {
       for (const handler of handlers) {
         const edgeId = `contract_handled_${contractId}_${handler.id}`;
+        contractEdges.push({
+          id: edgeId,
+          source: contractId,
+          target: handler.id,
+          relation: 'HANDLED_BY',
+          confidence: 'EXTRACTED',
+          weight: 3,
+        });
+      }
+    }
+
+    for (const [contractId, handlers] of serverRpcMap.entries()) {
+      for (const handler of handlers) {
+        const edgeId = `contract_rpc_handled_${contractId}_${handler.id}`;
         contractEdges.push({
           id: edgeId,
           source: contractId,

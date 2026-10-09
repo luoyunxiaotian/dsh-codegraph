@@ -424,7 +424,7 @@ export class SymbolTable {
 
     const exts = sourceExt === '.py'
       ? ['.py']
-      : ['.ts', '.tsx', '.js', '.jsx', '.go', '.java', '.rs', '.cpp', '.c', '.h', '.hpp', '.cs', '.py', '.vue', '.kt', '.kts', '.swift', '.lua', '.asmdef', '.asmref', '.gd', '.tscn'];
+      : ['.ts', '.tsx', '.js', '.jsx', '.go', '.java', '.rs', '.cpp', '.c', '.h', '.hpp', '.cs', '.py', '.vue', '.kt', '.kts', '.swift', '.lua', '.asmdef', '.asmref', '.gd', '.tscn', '.proto', '.sql'];
 
     // 1. 处理相对导入 (以 . 开头)
     if (modulePath.startsWith('.')) {

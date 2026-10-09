@@ -95,12 +95,14 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 | **Lua** | `.lua` | **游戏热更新 (xLua/ToLua)**, **Cocos**, **Roblox**, OpenResty | Table/Class, Metatable OOP 继承, Colon/Dot 方法, require 模块, API 请求 |
 | **Unity Assembly** | `.asmdef`, `.asmref` | **Unity 商业级游戏架构解耦** | Assembly Module, References 依赖总线, Namespace 映射, 0-WASM 极速解析 |
 | **Godot Engine** | `.gd`, `.tscn` | **Godot 4.x / 3.x 跨平台游戏引擎** | GDScript 类继承, Signal 信号中枢, 生命周期回调, Preload, TSCN 场景与脚本挂载 |
+| **Protobuf IDL** | `.proto` | **gRPC / 跨语言微服务契约中枢** | Service, RPC 契约中枢 (`CONTRACT_RPC`), Message 模型 (`MODEL`), Enum, 跨服务依赖 |
+| **OpenAPI / Swagger** | `openapi.*`, `swagger.*` | **RESTful API 契约与接口规范** | REST API 契约中枢 (`CONTRACT_ENDPOINT`), 路径参数归一化, Schema 实体模型 |
+| **SQL DDL** | `.sql` | **关系型数据库结构与数据模型** | Table 模型 (`REPOSITORY`), 主键/外键关联网 (`READS_WRITES`), View 视图消费 |
 | **C / C++** | `.c`, `.cpp`, `.h`, `.hpp` | **Unreal Engine (虚幻引擎)**, 基础库 | Struct, Class, Function, Include, 多继承与宏方法 |
 | **C#** | `.cs` | **Unity 游戏引擎**, **Godot (C#)**, .NET | MonoBehaviour, Class, Interface, Method, Using |
 | **Rust** | `.rs` | Axum, Actix, Reqwest, 系统底层 | Struct, Enum, Fn, Impl, Trait, Use, HTTP 路由 |
 
 > 📌 **后续路线图规划 (梯队推进中)**：
-> - **Phase 3 (v1.9.0)**：微服务跨语言契约与数据架构 —— **Protobuf (`.proto`)**、**OpenAPI/Swagger**、**SQL DDL (`.sql`)**
 > - **Phase 4 (v2.0.0)**：存量全栈与垂直跨端 —— **Dart (`.dart`)**、**PHP (`.php`)**、**Ruby (`.rb`)**
 
 ---

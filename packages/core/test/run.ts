@@ -704,6 +704,146 @@ script = ExtResource("1_abc")
   console.log(`  ✓ 成功提取 Godot 场景与脚本挂载关系: ${tscnNode.name} -> ${tscnScriptEdge.target}`);
 
   fs.rmSync(gameFixture, { recursive: true, force: true });
+
+  // 测试 15: 验证微服务跨语言契约与数据架构全链路 (Phase 3: Protobuf, OpenAPI / Swagger, SQL DDL)
+  console.log('\n[测试 15] 验证 Phase 3 微服务跨语言契约与数据架构 (Protobuf, OpenAPI / Swagger, SQL DDL)...');
+  const msFixture = path.resolve(__dirname, 'fixtures/microservices_ecosystem');
+  if (fs.existsSync(msFixture)) {
+    fs.rmSync(msFixture, { recursive: true, force: true });
+  }
+
+  fs.mkdirSync(path.join(msFixture, 'contracts'), { recursive: true });
+  fs.mkdirSync(path.join(msFixture, 'db'), { recursive: true });
+
+  // 15.1 Protobuf IDL
+  fs.writeFileSync(
+    path.join(msFixture, 'contracts/user.proto'),
+    `syntax = "proto3";
+
+package com.company.user;
+
+import "google/protobuf/empty.proto";
+
+message UserProfile {
+    int64 id = 1;
+    string username = 2;
+}
+
+message GetUserRequest {
+    int64 id = 1;
+}
+
+service UserService {
+    rpc GetUser (GetUserRequest) returns (UserProfile);
+}
+`
+  );
+
+  // 15.2 OpenAPI / Swagger Spec (JSON)
+  fs.writeFileSync(
+    path.join(msFixture, 'contracts/petstore.openapi.json'),
+    JSON.stringify(
+      {
+        openapi: "3.0.0",
+        info: {
+          title: "Petstore Service API",
+          version: "1.0.0"
+        },
+        paths: {
+          "/api/v1/pets/{id}": {
+            get: {
+              summary: "Get pet by id"
+            },
+            delete: {
+              summary: "Delete pet"
+            }
+          }
+        },
+        components: {
+          schemas: {
+            PetDTO: {
+              type: "object"
+            }
+          }
+        }
+      },
+      null,
+      2
+    )
+  );
+
+  // 15.3 SQL DDL (Schema)
+  fs.writeFileSync(
+    path.join(msFixture, 'db/schema.sql'),
+    `CREATE TABLE roles (
+    id INT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE users (
+    id BIGINT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    role_id INT REFERENCES roles(id)
+);
+
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount DECIMAL(10, 2),
+    CONSTRAINT fk_order_user FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE VIEW v_user_orders AS
+SELECT u.username, o.id, o.amount
+FROM users u
+JOIN orders o ON u.id = o.user_id;
+`
+  );
+
+  const msCore = new CodeGraphCore({
+    workspaceRoot: msFixture,
+    scopePath: '.',
+  });
+
+  const msResult = await msCore.scan();
+  console.log(`  ✓ 微服务与数据架构全量编译成功: 识别文件=${msResult.meta.fileCount}, 节点=${msResult.meta.nodeCount}, 关系=${msResult.meta.edgeCount}`);
+  if (msResult.meta.fileCount !== 3) {
+    throw new Error(`预期解析 3 个微服务契约与数据库文件，实际解析了 ${msResult.meta.fileCount} 个`);
+  }
+
+  // 断言 1: Protobuf 契约与数据模型
+  const protoService = Object.values(msResult.allNodes).find((n) => n.name === 'UserService' && n.entityType === 'INTERFACE');
+  const protoRpc = Object.values(msResult.allNodes).find((n) => n.name === 'UserService.GetUser' && n.entityType === 'CONTRACT_RPC');
+  const protoMsg = Object.values(msResult.allNodes).find((n) => n.name === 'UserProfile' && n.entityType === 'CLASS');
+  if (!protoService || !protoRpc || !protoMsg) {
+    throw new Error('未能提取到 Protobuf UserService / UserService.GetUser / UserProfile 符号');
+  }
+  console.log(`  ✓ 成功提取 Protobuf 服务与 RPC 契约中枢: 服务=${protoService.name}, RPC=${protoRpc.name} (${protoRpc.entityType}), 模型=${protoMsg.name}`);
+
+  // 断言 2: OpenAPI REST API 契约中枢与 Schema
+  const openApiSpec = Object.values(msResult.allNodes).find((n) => n.language === 'openapi' && n.entityType === 'MODULE');
+  const openApiGet = Object.values(msResult.allNodes).find((n) => n.name === 'GET /api/v1/pets/{param}' && n.entityType === 'CONTRACT_ENDPOINT');
+  const openApiDelete = Object.values(msResult.allNodes).find((n) => n.name === 'DELETE /api/v1/pets/{param}' && n.entityType === 'CONTRACT_ENDPOINT');
+  const openApiSchema = Object.values(msResult.allNodes).find((n) => n.name === 'PetDTO' && n.language === 'openapi' && n.entityType === 'CLASS');
+  if (!openApiSpec || !openApiGet || !openApiDelete || !openApiSchema) {
+    throw new Error('未能提取到 OpenAPI 规范模块 / GET 端点 / DELETE 端点 / PetDTO 符号');
+  }
+  console.log(`  ✓ 成功提取 OpenAPI 契约中枢与 Schema: 规范=${openApiSpec.name}, 端点=${openApiGet.name}, 模型=${openApiSchema.name}`);
+
+  // 断言 3: SQL DDL 表结构、外键与视图
+  const sqlUsers = Object.values(msResult.allNodes).find((n) => n.name === 'users' && n.language === 'sql');
+  const sqlOrders = Object.values(msResult.allNodes).find((n) => n.name === 'orders' && n.language === 'sql');
+  const sqlView = Object.values(msResult.allNodes).find((n) => n.name.includes('v_user_orders') && n.language === 'sql');
+  if (!sqlUsers || !sqlOrders || !sqlView) {
+    throw new Error('未能提取到 SQL 数据表 users / orders 或视图 v_user_orders');
+  }
+  const orderUserFkEdge = msResult.allEdges.find((e) => e.source === sqlOrders.id && (e.target === 'users' || e.target.includes('users')));
+  if (!orderUserFkEdge) {
+    throw new Error('未能提取到 SQL 外键依赖关系: orders -> users');
+  }
+  console.log(`  ✓ 成功提取 SQL DDL 表结构与外键依赖网: 表=${sqlUsers.name}, ${sqlOrders.name}, 视图=${sqlView.name}, 外键=${sqlOrders.name} -> ${orderUserFkEdge.target}`);
+
+  fs.rmSync(msFixture, { recursive: true, force: true });
   fs.rmSync(mockRepoDir, { recursive: true, force: true });
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });

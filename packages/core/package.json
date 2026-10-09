@@ -1,6 +1,6 @@
 {
   "name": "@codegraph/core",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "type": "module",
   "description": "Core engine for 0-Token code graph parsing, archetype detection, dual-model compilation, and incremental tracking",
   "main": "dist/index.js",
