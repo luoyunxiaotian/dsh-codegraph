@@ -109,43 +109,43 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
     'tree-sitter-kotlin.wasm',
     'tree-sitter-swift.wasm',
     'tree-sitter-lua.wasm',
+    'tree-sitter-dart.wasm',
+    'tree-sitter-php.wasm',
+    'tree-sitter-ruby.wasm',
   ]);
 
-  // 寻找 tree-sitter-wasms 的 out 目录
+  // 寻找所有包含 wasm 的候选目录 (包含本地嵌入仓库与 node_modules)
   const candidateWasmDirs = [
     path.join(rootDir, 'node_modules/tree-sitter-wasms/out'),
     path.join(rootDir, 'packages/core/node_modules/tree-sitter-wasms/out'),
+    path.join(rootDir, 'packages/core/wasm'),
   ];
-  let foundWasmDir = candidateWasmDirs.find((d) => fs.existsSync(d));
 
-  if (!foundWasmDir) {
-    // 递归寻找 .pnpm 下的 tree-sitter-wasms
-    const pnpmDir = path.join(rootDir, 'node_modules/.pnpm');
-    if (fs.existsSync(pnpmDir)) {
-      const entries = fs.readdirSync(pnpmDir);
-      for (const entry of entries) {
-        if (entry.startsWith('tree-sitter-wasms@')) {
-          const testPath = path.join(pnpmDir, entry, 'node_modules/tree-sitter-wasms/out');
-          if (fs.existsSync(testPath)) {
-            foundWasmDir = testPath;
-            break;
-          }
+  const pnpmDir = path.join(rootDir, 'node_modules/.pnpm');
+  if (fs.existsSync(pnpmDir)) {
+    const entries = fs.readdirSync(pnpmDir);
+    for (const entry of entries) {
+      if (entry.startsWith('tree-sitter-wasms@')) {
+        const testPath = path.join(pnpmDir, entry, 'node_modules/tree-sitter-wasms/out');
+        if (fs.existsSync(testPath)) {
+          candidateWasmDirs.push(testPath);
         }
       }
     }
   }
 
-  if (foundWasmDir) {
-    let copiedCount = 0;
-    const entries = fs.readdirSync(foundWasmDir);
+  const copiedFiles = new Set();
+  for (const dir of candidateWasmDirs) {
+    if (!fs.existsSync(dir)) continue;
+    const entries = fs.readdirSync(dir);
     for (const file of entries) {
       if (ACTIVE_WASM_WHITELIST.has(file)) {
-        fs.copyFileSync(path.join(foundWasmDir, file), path.join(wasmDestDir, file));
-        copiedCount++;
+        fs.copyFileSync(path.join(dir, file), path.join(wasmDestDir, file));
+        copiedFiles.add(file);
       }
     }
-    console.log(`     已按白名单复制 WASM 语法包 (${copiedCount} 个核心语法文件)`);
   }
+  console.log(`     已按白名单复制 WASM 语法包 (${copiedFiles.size} 个核心语法文件)`);
 
   // 寻找 web-tree-sitter 的 tree-sitter.wasm
   const candidateTreeSitterWasm = [

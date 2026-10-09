@@ -16,6 +16,9 @@ import { GodotExtractor } from './extractors/godot-extractor.js';
 import { ProtoExtractor } from './extractors/proto-extractor.js';
 import { OpenApiExtractor } from './extractors/openapi-extractor.js';
 import { SqlExtractor } from './extractors/sql-extractor.js';
+import { DartExtractor } from './extractors/dart-extractor.js';
+import { PhpExtractor } from './extractors/php-extractor.js';
+import { RubyExtractor } from './extractors/ruby-extractor.js';
 
 export class ExtractorRegistry {
   private static protoExtractor = new ProtoExtractor();
@@ -39,6 +42,9 @@ export class ExtractorRegistry {
     ExtractorRegistry.protoExtractor,
     ExtractorRegistry.openApiExtractor,
     ExtractorRegistry.sqlExtractor,
+    new DartExtractor(),
+    new PhpExtractor(),
+    new RubyExtractor(),
   ];
 
   private static extMap: Map<string, LanguageExtractor> = new Map();
@@ -105,6 +111,9 @@ export class ExtractorRegistry {
     if (ext === '.kt' || ext === '.kts') return 'kotlin';
     if (ext === '.swift') return 'swift';
     if (ext === '.lua') return 'lua';
+    if (ext === '.dart') return 'dart';
+    if (ext === '.php') return 'php';
+    if (ext === '.rb') return 'ruby';
     if (ext === '.asmdef' || ext === '.asmref') return 'none';
     if (ext === '.gd' || ext === '.tscn') return 'none';
     if (ext === '.proto') return 'none';

@@ -92,6 +92,9 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 | **Java** | `.java` | Spring Boot, Android 后端 | Class, Interface, Method, Import, Package |
 | **Kotlin** | `.kt`, `.kts` | Android 原生, KMP 跨端, 现代 JVM | Class, Interface, Object, Retrofit/Ktor 路由与请求 |
 | **Swift** | `.swift` | iOS / macOS / SwiftUI 原生全家桶 | Class, Struct, Protocol, Extension, URLSession 请求 |
+| **Dart** | `.dart` | **Flutter 跨平台移动/桌面开发** | Widget 组件, 生命周期/Build 入口, Mixin, http/dio 网络客户端请求 |
+| **PHP** | `.php` | **Laravel, Symfony, WordPress 全栈** | Namespace, Controller, Model, Route 路由端点 (`ENDPOINT`), Http 客户端请求 |
+| **Ruby** | `.rb` | **Ruby on Rails, Sinatra 敏捷全栈** | Module, Class 继承, Controller 动作 (`ENDPOINT`), Model 关联, Net::HTTP 请求 |
 | **Lua** | `.lua` | **游戏热更新 (xLua/ToLua)**, **Cocos**, **Roblox**, OpenResty | Table/Class, Metatable OOP 继承, Colon/Dot 方法, require 模块, API 请求 |
 | **Unity Assembly** | `.asmdef`, `.asmref` | **Unity 商业级游戏架构解耦** | Assembly Module, References 依赖总线, Namespace 映射, 0-WASM 极速解析 |
 | **Godot Engine** | `.gd`, `.tscn` | **Godot 4.x / 3.x 跨平台游戏引擎** | GDScript 类继承, Signal 信号中枢, 生命周期回调, Preload, TSCN 场景与脚本挂载 |
@@ -102,8 +105,8 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 | **C#** | `.cs` | **Unity 游戏引擎**, **Godot (C#)**, .NET | MonoBehaviour, Class, Interface, Method, Using |
 | **Rust** | `.rs` | Axum, Actix, Reqwest, 系统底层 | Struct, Enum, Fn, Impl, Trait, Use, HTTP 路由 |
 
-> 📌 **后续路线图规划 (梯队推进中)**：
-> - **Phase 4 (v2.0.0)**：存量全栈与垂直跨端 —— **Dart (`.dart`)**、**PHP (`.php`)**、**Ruby (`.rb`)**
+> 📌 **版本演进里程碑 (v2.0.0 Milestone)**：
+> - **v2.0.0 (当前版本)**：存量全栈与垂直跨端 —— **Dart (`.dart`)**、**PHP (`.php`)**、**Ruby (`.rb`)** 全面就绪！已覆盖 19 种主流语言与 4 大游戏引擎/微服务格式。
 
 ---
 

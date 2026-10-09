@@ -844,6 +844,155 @@ JOIN orders o ON u.id = o.user_id;
   console.log(`  ✓ 成功提取 SQL DDL 表结构与外键依赖网: 表=${sqlUsers.name}, ${sqlOrders.name}, 视图=${sqlView.name}, 外键=${sqlOrders.name} -> ${orderUserFkEdge.target}`);
 
   fs.rmSync(msFixture, { recursive: true, force: true });
+
+  // =========================================================================
+  // 测试 16: 验证 Phase 4 存量全栈与垂直跨端生态 (Dart / Flutter, PHP / Laravel, Ruby / Rails)
+  // =========================================================================
+  console.log('\n[测试 16] 验证 Phase 4 跨端与全栈生态 (Dart Flutter, PHP Laravel, Ruby Rails)...');
+  const fullstackFixture = path.resolve(__dirname, 'fixtures/fullstack_ecosystem');
+  if (fs.existsSync(fullstackFixture)) {
+    fs.rmSync(fullstackFixture, { recursive: true, force: true });
+  }
+
+  fs.mkdirSync(path.join(fullstackFixture, 'flutter_app/lib'), { recursive: true });
+  fs.mkdirSync(path.join(fullstackFixture, 'laravel_api/app/Http/Controllers'), { recursive: true });
+  fs.mkdirSync(path.join(fullstackFixture, 'rails_backend/app/controllers/admin'), { recursive: true });
+
+  // 16.1 Flutter Dart 源码
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'flutter_app/pubspec.yaml'),
+    'name: flutter_app\ndependencies:\n  flutter:\n    sdk: flutter\n  http: ^1.2.0\n'
+  );
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'flutter_app/lib/login_page.dart'),
+    `import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+class LoginPage extends StatefulWidget {
+  @override
+  Widget build(BuildContext context) {
+    loadProfile();
+    return Container();
+  }
+
+  void loadProfile() {
+    http.get('https://api.example.com/api/v1/user/profile');
+  }
+}
+`
+  );
+
+  // 16.2 Laravel PHP 源码
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'laravel_api/composer.json'),
+    '{\\n  "name": "laravel/api",\\n  "require": { "laravel/framework": "^11.0" }\\n}\\n'
+  );
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'laravel_api/artisan'),
+    '#!/usr/bin/env php\\n<?php // artisan CLI\\n'
+  );
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'laravel_api/app/Http/Controllers/UserController.php'),
+    `<?php
+namespace App\\Http\\Controllers;
+
+use App\\Services\\AuthService;
+
+class UserController extends Controller {
+  public function index() {
+    Route::get('/api/v1/users', [UserController::class, 'index']);
+    $this->fetchData();
+  }
+
+  public function fetchData() {
+    Http::post('https://api.example.com/api/v1/internal/sync');
+  }
+}
+`
+  );
+
+  // 16.3 Ruby on Rails 源码
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'rails_backend/Gemfile'),
+    'source "https://rubygems.org"\\ngem "rails", "~> 7.1"\\n'
+  );
+  fs.writeFileSync(
+    path.join(fullstackFixture, 'rails_backend/app/controllers/admin/orders_controller.rb'),
+    `require 'net/http'
+
+module Admin
+  class OrdersController < ApplicationController
+    def index
+      fetch_orders
+    end
+
+    def fetch_orders
+      Net::HTTP.get('https://api.example.com/api/v1/orders/summary')
+    end
+  end
+end
+`
+  );
+
+  const fullstackCore = new CodeGraphCore({
+    workspaceRoot: fullstackFixture,
+    scopePath: '.',
+  });
+
+  const fullstackDiscovery = fullstackCore.discoverProjects();
+  console.log(`  ✓ 嗅探到 Phase 4 工程生态: ${fullstackDiscovery.projects.length} 个子工程`);
+  for (const p of fullstackDiscovery.projects) {
+    console.log(`    - [${p.platform}] ${p.name} (语言: ${p.primaryLanguage}, 框架: [${p.frameworks.join(', ')}])`);
+  }
+
+  const dartProject = fullstackDiscovery.projects.find((p) => p.primaryLanguage === 'dart');
+  const phpProject = fullstackDiscovery.projects.find((p) => p.primaryLanguage === 'php');
+  const rubyProject = fullstackDiscovery.projects.find((p) => p.primaryLanguage === 'ruby');
+
+  if (!dartProject || !dartProject.frameworks.includes('Flutter')) {
+    throw new Error('未能正确嗅探到 Flutter / Dart 移动工程与框架画像');
+  }
+  if (!phpProject || !phpProject.frameworks.includes('Laravel')) {
+    throw new Error('未能正确嗅探到 Laravel / PHP 后端工程与框架画像');
+  }
+  if (!rubyProject || !rubyProject.frameworks.includes('Rails')) {
+    throw new Error('未能正确嗅探到 Rails / Ruby 后端工程与框架画像');
+  }
+
+  const fullstackResult = await fullstackCore.scan();
+  console.log(`  ✓ 跨端与存量 Web 全量编译成功: 识别文件=${fullstackResult.meta.fileCount}, 节点=${fullstackResult.meta.nodeCount}, 关系=${fullstackResult.meta.edgeCount}`);
+  if (fullstackResult.meta.fileCount !== 3) {
+    throw new Error(`预期解析 3 个跨端与存量 Web 源码文件，实际解析了 ${fullstackResult.meta.fileCount} 个`);
+  }
+
+  // 断言 1: Dart / Flutter 节点与方法
+  const dartLoginClass = Object.values(fullstackResult.allNodes).find((n) => n.name === 'LoginPage' && n.language === 'dart');
+  const dartBuildMethod = Object.values(fullstackResult.allNodes).find((n) => n.name === 'build' && n.language === 'dart' && n.semanticRole === 'ENTRY');
+  const dartLoadMethod = Object.values(fullstackResult.allNodes).find((n) => n.name === 'loadProfile' && n.language === 'dart');
+  if (!dartLoginClass || !dartBuildMethod || !dartLoadMethod) {
+    throw new Error('未能提取到 Dart LoginPage / build / loadProfile 符号');
+  }
+  console.log(`  ✓ 成功提取 Dart Flutter 组件与生命周期: 类=${dartLoginClass.name} (${dartLoginClass.entityType}), 入口=${dartBuildMethod.name} (${dartBuildMethod.semanticRole}), 方法=${dartLoadMethod.name}`);
+
+  // 断言 2: PHP / Laravel 控制器、方法与路由
+  const phpController = Object.values(fullstackResult.allNodes).find((n) => n.name === 'UserController' && n.language === 'php');
+  const phpIndexMethod = Object.values(fullstackResult.allNodes).find((n) => n.name === 'index' && n.language === 'php');
+  const phpRouteNode = Object.values(fullstackResult.allNodes).find((n) => n.name.includes('/api/v1/users') && n.language === 'php' && n.entityType === 'ENDPOINT');
+  if (!phpController || !phpIndexMethod || !phpRouteNode) {
+    throw new Error('未能提取到 PHP UserController / index / Route 端点符号');
+  }
+  console.log(`  ✓ 成功提取 PHP Laravel 控制器与路由端点: 控制器=${phpController.name}, 动作=${phpIndexMethod.name}, 路由=${phpRouteNode.name} (${phpRouteNode.entityType})`);
+
+  // 断言 3: Ruby / Rails 模块、控制器与动作
+  const rubyModule = Object.values(fullstackResult.allNodes).find((n) => n.name === 'Admin' && n.language === 'ruby' && n.entityType === 'MODULE');
+  const rubyController = Object.values(fullstackResult.allNodes).find((n) => n.name === 'OrdersController' && n.language === 'ruby');
+  const rubyIndexAction = Object.values(fullstackResult.allNodes).find((n) => n.name === 'index' && n.language === 'ruby');
+  if (!rubyModule || !rubyController || !rubyIndexAction) {
+    throw new Error('未能提取到 Ruby Admin 模块 / OrdersController / index 符号');
+  }
+  console.log(`  ✓ 成功提取 Ruby Rails 模块与控制器动作: 模块=${rubyModule.name}, 控制器=${rubyController.name}, 动作=${rubyIndexAction.name}`);
+
+  fs.rmSync(fullstackFixture, { recursive: true, force: true });
   fs.rmSync(mockRepoDir, { recursive: true, force: true });
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });

@@ -205,6 +205,10 @@ export class WorkspaceProfiler {
       'androidmanifest.xml',
       'tauri.conf.json',
       'project.godot',
+      'pubspec.yaml',
+      'composer.json',
+      'artisan',
+      'gemfile',
       '.git',
     ];
 
@@ -252,6 +256,9 @@ export class WorkspaceProfiler {
     readDep('build.gradle.kts');
     readDep('cargo.toml');
     readDep('cmakelists.txt');
+    readDep('pubspec.yaml');
+    readDep('composer.json');
+    readDep('gemfile');
 
     // 2. 统计文件数量、扩展名分布与最近编辑时间
     const extStats: Record<string, number> = {};
@@ -270,7 +277,7 @@ export class WorkspaceProfiler {
             }
           } else {
             const ext = path.extname(item.name).toLowerCase();
-            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn|proto|sql)$/.test(ext)) {
+            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn|proto|sql|dart|php|rb)$/.test(ext)) {
               extStats[ext] = (extStats[ext] || 0) + 1;
               fileCount++;
               try {
@@ -302,6 +309,9 @@ export class WorkspaceProfiler {
         else if (ext === '.swift') primaryLanguage = 'swift';
         else if (ext === '.vue') primaryLanguage = 'vue';
         else if (ext === '.lua') primaryLanguage = 'lua';
+        else if (ext === '.dart') primaryLanguage = 'dart';
+        else if (ext === '.php') primaryLanguage = 'php';
+        else if (ext === '.rb') primaryLanguage = 'ruby';
         else if (['.asmdef', '.asmref'].includes(ext)) primaryLanguage = 'unity';
         else if (['.gd', '.tscn'].includes(ext)) primaryLanguage = 'godot';
         else if (ext === '.proto') primaryLanguage = 'protobuf';
@@ -330,6 +340,9 @@ export class WorkspaceProfiler {
     if (/(tauri)/i.test(depContent)) frameworks.push('Tauri');
     if (primaryLanguage === 'godot' || fs.existsSync(path.join(projectDir, 'project.godot'))) frameworks.push('Godot');
     if (primaryLanguage === 'unity' || fs.existsSync(path.join(projectDir, 'ProjectSettings'))) frameworks.push('Unity');
+    if (primaryLanguage === 'dart' || fs.existsSync(path.join(projectDir, 'pubspec.yaml')) || /(flutter)/i.test(depContent)) frameworks.push('Flutter');
+    if (primaryLanguage === 'php' || fs.existsSync(path.join(projectDir, 'artisan')) || /(laravel)/i.test(depContent)) frameworks.push('Laravel');
+    if (primaryLanguage === 'ruby' || /(rails)/i.test(depContent)) frameworks.push('Rails');
     if (extStats['.proto'] > 0 || /(grpc|protobuf)/i.test(depContent)) frameworks.push('gRPC/Protobuf');
     if (extStats['.sql'] > 0 || /(prisma|typeorm|sequelize|gorm|sqlx)/i.test(depContent)) frameworks.push('SQL/Database');
 
@@ -347,8 +360,10 @@ export class WorkspaceProfiler {
     ) {
       platform = 'GAME_ENGINE';
     }
-    // 5.2 Android
+    // 5.2 Android / Flutter
     else if (
+      frameworks.includes('Flutter') ||
+      primaryLanguage === 'dart' ||
       fs.existsSync(path.join(projectDir, 'AndroidManifest.xml')) ||
       fs.existsSync(path.join(projectDir, 'src/main/AndroidManifest.xml')) ||
       /com\.android\.(application|library)/i.test(depContent) ||
@@ -389,12 +404,14 @@ export class WorkspaceProfiler {
     ) {
       platform = 'WEB_FRONTEND';
     }
-    // 5.8 后端服务
+    // 5.8 后端服务 (Go, Java, Rust, C#, Python, PHP, Ruby, Laravel, Rails)
     else if (
       frameworks.includes('FastAPI/Web') ||
       frameworks.includes('Gin') ||
       frameworks.includes('Spring Boot') ||
       frameworks.includes('Axum') ||
+      frameworks.includes('Laravel') ||
+      frameworks.includes('Rails') ||
       /(server|backend|service|api|microservice)/i.test(lowerRel) ||
       fs.existsSync(path.join(projectDir, 'Dockerfile'))
     ) {
@@ -413,7 +430,7 @@ export class WorkspaceProfiler {
       platform = 'WEB_FRONTEND';
     } else if (primaryLanguage === 'lua') {
       platform = 'GAME_ENGINE';
-    } else if (['go', 'java', 'rust', 'csharp'].includes(primaryLanguage)) {
+    } else if (['go', 'java', 'rust', 'csharp', 'php', 'ruby'].includes(primaryLanguage)) {
       platform = 'BACKEND_SERVICE';
     }
 
@@ -488,6 +505,15 @@ export class WorkspaceProfiler {
       // 筛选活跃候选工程 (优先排除归档目录)
       const activeCandidates = group.filter((p) => !this.isArchiveDirectory(p.relPath));
       const pool = activeCandidates.length > 0 ? activeCandidates : group;
+
+      // 对于后端微服务架构 (BACKEND)：同一仓库下允许多个不同业务领域的微服务共存，均推荐为主力服务集群
+      if (family === 'BACKEND') {
+        for (const item of pool) {
+          item.isRecommended = true;
+          item.recommendReason = `${this.getPlatformDisplayName(item.platform)} 核心服务组件 (${item.primaryLanguage})`;
+        }
+        continue;
+      }
 
       // 按 (版本号 SemVer 降序, 代码规模降序, 最近修改时间降序) 排序
       pool.sort((a, b) => {

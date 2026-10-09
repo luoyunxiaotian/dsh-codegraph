@@ -105459,7 +105459,11 @@ var WASM_FILE_MAP = {
   kt: "tree-sitter-kotlin.wasm",
   kts: "tree-sitter-kotlin.wasm",
   swift: "tree-sitter-swift.wasm",
-  lua: "tree-sitter-lua.wasm"
+  lua: "tree-sitter-lua.wasm",
+  dart: "tree-sitter-dart.wasm",
+  php: "tree-sitter-php.wasm",
+  ruby: "tree-sitter-ruby.wasm",
+  rb: "tree-sitter-ruby.wasm"
 };
 var SUPPORTED_WASM_FILES = Object.freeze([
   "tree-sitter.wasm",
@@ -105469,11 +105473,13 @@ var isInitialized = false;
 var loadedLanguages = /* @__PURE__ */ new Map();
 function resolveWasmPath(filename) {
   const candidateDirs = [
-    // 0. 打包分发目录 (插件自身内置 wasm)
+    // 0. 打包分发目录与本地嵌入 wasm 仓库
     path.resolve(process.cwd(), "dist/wasm"),
     path.resolve(__dirname2, "wasm"),
     path.resolve(__dirname2, "../wasm"),
+    path.resolve(__dirname2, "../../wasm"),
     path.resolve(__dirname2, "../../dist/wasm"),
+    path.resolve(process.cwd(), "packages/core/wasm"),
     // 1. 本地 node_modules
     path.resolve(process.cwd(), "node_modules/tree-sitter-wasms/out"),
     path.resolve(process.cwd(), "packages/core/node_modules/tree-sitter-wasms/out"),
@@ -110139,6 +110145,975 @@ function extractSqlFile(filePath, sourceCode) {
   };
 }
 
+// packages/core/dist/parser/extractors/dart-extractor.js
+var DartExtractor = class {
+  language = "dart";
+  fileExtensions = [".dart"];
+  wasmGrammarName = "dart";
+  extractFile(tree, filePath, sourceCode) {
+    return extractDartFile(tree, filePath, sourceCode);
+  }
+};
+function extractDartFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("dart", filePath, "", fileName, "def");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "dart",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  };
+  nodes.push(fileNode);
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function extractTypeIdentifiers(node) {
+    const results = [];
+    function scan(n) {
+      if (n.type === "type_identifier" || n.type === "identifier") {
+        const txt = n.text.trim();
+        if (txt && !["extends", "implements", "with"].includes(txt)) {
+          results.push(txt);
+        }
+      }
+      for (let i2 = 0; i2 < n.namedChildCount; i2++) {
+        const c = n.namedChild(i2);
+        if (c)
+          scan(c);
+      }
+    }
+    scan(node);
+    return results;
+  }
+  function findUrlLiteral(node) {
+    if (node.type === "string_literal") {
+      const text = node.text.trim().replace(/^['"]|['"]$/g, "");
+      if (text.startsWith("/") || text.startsWith("http://") || text.startsWith("https://")) {
+        return text;
+      }
+    }
+    for (let i2 = 0; i2 < node.namedChildCount; i2++) {
+      const c = node.namedChild(i2);
+      if (c) {
+        const found = findUrlLiteral(c);
+        if (found)
+          return found;
+      }
+    }
+    return void 0;
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "import_or_export" || nodeType === "library_import") {
+      let uriText = "";
+      let aliasText;
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const child = cursorNode.namedChild(i2);
+        if (!child)
+          continue;
+        if (child.type === "import_specification" || child.type === "string_literal") {
+          uriText = child.text.trim().replace(/^['"]|['"]$/g, "");
+        } else if (child.type === "prefix") {
+          const id = child.namedChildren.find((c) => c.type === "identifier");
+          if (id)
+            aliasText = id.text.trim();
+        }
+      }
+      if (!uriText) {
+        const match = cursorNode.text.match(/['"]([^'"]+)['"]/);
+        if (match)
+          uriText = match[1];
+      }
+      if (uriText) {
+        const modName = aliasText || uriText.split("/").pop()?.replace(".dart", "") || uriText;
+        imports.push({
+          modulePath: uriText,
+          importedNames: [{ name: modName, alias: aliasText }],
+          isFromImport: uriText.startsWith("package:") || uriText.startsWith("dart:"),
+          line: cursorNode.startPosition.row + 1
+        });
+      }
+      return;
+    }
+    if (nodeType === "class_definition" || nodeType === "mixin_declaration") {
+      const isMixin = nodeType === "mixin_declaration";
+      const nameNode = cursorNode.namedChildren.find((c) => c.type === "identifier");
+      if (!nameNode)
+        return;
+      const className = nameNode.text.trim();
+      const classId = formatNodeId(filePath, className);
+      const classScip = formatScipUri("dart", filePath, "", className, isMixin ? "interface" : "class");
+      let semanticRole = "UNKNOWN";
+      const fullHeader = cursorNode.text.slice(0, 200);
+      if (fullHeader.includes("Widget") || fullHeader.includes("State<") || className.endsWith("Page") || className.endsWith("Screen") || className.endsWith("Widget") || className.endsWith("View")) {
+        semanticRole = "ENTRY";
+      } else if (className.endsWith("Controller") || className.endsWith("Bloc") || className.endsWith("Cubit") || className.endsWith("Notifier") || className.endsWith("ViewModel")) {
+        semanticRole = "ENTRY";
+      } else if (className.endsWith("Service") || className.endsWith("Repository") || className.endsWith("Client") || className.endsWith("Api")) {
+        semanticRole = "SERVICE";
+      } else if (className.endsWith("Model") || className.endsWith("Dto") || className.endsWith("Entity")) {
+        semanticRole = "MODEL";
+      } else {
+        semanticRole = "UNKNOWN";
+      }
+      const classNode = {
+        id: classId,
+        name: className,
+        qualifiedName: formatQualifiedName(filePath, className),
+        entityType: isMixin ? "INTERFACE" : "CLASS",
+        semanticRole,
+        filePath,
+        language: "dart",
+        scipUri: classScip,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(classNode);
+      edges.push({
+        id: `defines_${fileNodeId}_${classId}`,
+        source: fileNodeId,
+        target: classId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const child = cursorNode.namedChild(i2);
+        if (!child)
+          continue;
+        if (child.type === "superclass" || child.type === "mixins" || child.type === "interfaces") {
+          const parentNames = extractTypeIdentifiers(child);
+          for (const parentName of parentNames) {
+            unresolvedInheritance.push({
+              classNodeId: classId,
+              superclassName: parentName,
+              line: child.startPosition.row + 1
+            });
+          }
+        }
+      }
+      contextStack.push(classNode);
+      const bodyNode = cursorNode.namedChildren.find((c) => c.type === "class_body");
+      if (bodyNode) {
+        for (let j = 0; j < bodyNode.namedChildCount; j++) {
+          const child = bodyNode.namedChild(j);
+          if (!child)
+            continue;
+          if (child.type === "method_signature") {
+            const funcSig = child.namedChildren.find((c) => c.type === "function_signature") || child;
+            const idNode = funcSig.namedChildren.find((c) => c.type === "identifier") || child.namedChildren.find((c) => c.type === "identifier");
+            if (idNode) {
+              const methodName = idNode.text.trim();
+              const methodId = formatNodeId(filePath, `${className}.${methodName}`);
+              const methodScip = formatScipUri("dart", filePath, className, methodName, "method");
+              let role = "UNKNOWN";
+              if (["build", "initState", "dispose", "didUpdateWidget"].includes(methodName)) {
+                role = "ENTRY";
+              }
+              const methodNode = {
+                id: methodId,
+                name: methodName,
+                qualifiedName: formatQualifiedName(filePath, `${className}.${methodName}`),
+                entityType: "METHOD",
+                semanticRole: role,
+                filePath,
+                language: "dart",
+                scipUri: methodScip,
+                loc: {
+                  startLine: child.startPosition.row + 1,
+                  endLine: child.endPosition.row + 1
+                }
+              };
+              nodes.push(methodNode);
+              edges.push({
+                id: `contains_${classId}_${methodId}`,
+                source: classId,
+                target: methodId,
+                relation: "CONTAINS",
+                confidence: "EXTRACTED"
+              });
+              const nextNode = bodyNode.namedChild(j + 1);
+              if (nextNode && nextNode.type === "function_body") {
+                contextStack.push(methodNode);
+                traverse(nextNode);
+                contextStack.pop();
+                j++;
+                continue;
+              }
+            }
+          } else {
+            traverse(child);
+          }
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "function_signature") {
+      const idNode = cursorNode.namedChildren.find((c) => c.type === "identifier");
+      if (idNode) {
+        const funcName = idNode.text.trim();
+        const funcId = formatNodeId(filePath, funcName);
+        const funcScip = formatScipUri("dart", filePath, "", funcName, "def");
+        const funcNode = {
+          id: funcId,
+          name: funcName,
+          qualifiedName: formatQualifiedName(filePath, funcName),
+          entityType: "FUNCTION",
+          semanticRole: funcName === "main" ? "ENTRY" : "SERVICE",
+          filePath,
+          language: "dart",
+          scipUri: funcScip,
+          loc: {
+            startLine: cursorNode.startPosition.row + 1,
+            endLine: cursorNode.endPosition.row + 1
+          }
+        };
+        nodes.push(funcNode);
+        edges.push({
+          id: `defines_${fileNodeId}_${funcId}`,
+          source: fileNodeId,
+          target: funcId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+        const parent = cursorNode.parent;
+        if (parent) {
+          const body2 = parent.namedChildren.find((c) => c.type === "function_body");
+          if (body2) {
+            contextStack.push(funcNode);
+            traverse(body2);
+            contextStack.pop();
+          }
+        }
+      }
+      return;
+    }
+    if (nodeType === "expression_statement" || nodeType === "selector" || nodeType === "argument_part") {
+      const exprText = cursorNode.text;
+      const httpMatch = exprText.match(/\b(http|dio|client)\s*\.\s*(get|post|put|delete|patch|head)\s*\(/i);
+      if (httpMatch) {
+        const method = httpMatch[2].toUpperCase();
+        const caller = getCurrentCaller();
+        const urlCandidate = findUrlLiteral(cursorNode);
+        if (caller && urlCandidate) {
+          const normPattern = normalizeRoutePattern(urlCandidate);
+          unresolvedCalls.push({
+            callerNodeId: caller.id,
+            calleeExpression: `HTTP_${method}_${normPattern}`,
+            apiCallMeta: {
+              httpMethod: method,
+              routePattern: normPattern
+            },
+            line: cursorNode.startPosition.row + 1
+          });
+        }
+      }
+    }
+    if (nodeType === "selector" && cursorNode.namedChildren.some((c) => c.type === "argument_part")) {
+      const caller = getCurrentCaller();
+      if (caller) {
+        const firstId = cursorNode.namedChildren.find((c) => c.type === "identifier");
+        if (firstId) {
+          const calleeName = firstId.text.trim();
+          if (calleeName && calleeName.length > 1) {
+            unresolvedCalls.push({
+              callerNodeId: caller.id,
+              calleeExpression: calleeName,
+              line: cursorNode.startPosition.row + 1
+            });
+          }
+        }
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "dart",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/php-extractor.js
+var PhpExtractor = class {
+  language = "php";
+  fileExtensions = [".php"];
+  wasmGrammarName = "php";
+  extractFile(tree, filePath, sourceCode) {
+    return extractPhpFile(tree, filePath, sourceCode);
+  }
+};
+function extractPhpFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("php", filePath, "", fileName, "def");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "php",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  };
+  nodes.push(fileNode);
+  let currentNamespace = "";
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "namespace_definition") {
+      const nsNameNode = cursorNode.namedChildren.find((c) => c.type === "namespace_name");
+      if (nsNameNode) {
+        currentNamespace = nsNameNode.text.trim();
+      }
+    }
+    if (nodeType === "namespace_use_declaration") {
+      for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+        const clause = cursorNode.namedChild(i2);
+        if (!clause || clause.type !== "namespace_use_clause")
+          continue;
+        const fullName = clause.text.trim().replace(/;$/, "");
+        const aliasMatch = fullName.match(/\s+as\s+(\w+)$/i);
+        const modPath = aliasMatch ? fullName.replace(/\s+as\s+\w+$/i, "").trim() : fullName;
+        const alias = aliasMatch ? aliasMatch[1] : void 0;
+        const shortName = alias || modPath.split("\\").pop() || modPath;
+        imports.push({
+          modulePath: modPath,
+          importedNames: [{ name: shortName, alias }],
+          isFromImport: true,
+          line: cursorNode.startPosition.row + 1
+        });
+      }
+      return;
+    }
+    if (nodeType === "class_declaration" || nodeType === "interface_declaration" || nodeType === "trait_declaration") {
+      const isInterface = nodeType === "interface_declaration";
+      const isTrait = nodeType === "trait_declaration";
+      const nameNode = cursorNode.namedChildren.find((c) => c.type === "name");
+      if (!nameNode)
+        return;
+      const className = nameNode.text.trim();
+      const qualifiedName = currentNamespace ? `${currentNamespace}\\${className}` : className;
+      const classId = formatNodeId(filePath, className);
+      const classScip = formatScipUri("php", filePath, currentNamespace, className, isInterface || isTrait ? "interface" : "class");
+      let role = "UNKNOWN";
+      if (className.endsWith("Controller") || cursorNode.text.includes("extends Controller")) {
+        role = "ENTRY";
+      } else if (className.endsWith("Model") || className.endsWith("Entity") || cursorNode.text.includes("extends Model")) {
+        role = "MODEL";
+      } else if (className.endsWith("Service") || className.endsWith("Repository") || className.endsWith("Provider")) {
+        role = "SERVICE";
+      }
+      const classNode = {
+        id: classId,
+        name: className,
+        qualifiedName,
+        entityType: isInterface || isTrait ? "INTERFACE" : "CLASS",
+        semanticRole: role,
+        filePath,
+        language: "php",
+        scipUri: classScip,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(classNode);
+      edges.push({
+        id: `defines_${fileNodeId}_${classId}`,
+        source: fileNodeId,
+        target: classId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      const baseClause = cursorNode.namedChildren.find((c) => c.type === "base_clause");
+      if (baseClause) {
+        const parentNameNode = baseClause.namedChildren.find((c) => c.type === "name" || c.type === "qualified_name");
+        if (parentNameNode) {
+          const parentName = parentNameNode.text.trim();
+          unresolvedInheritance.push({
+            classNodeId: classId,
+            superclassName: parentName,
+            line: baseClause.startPosition.row + 1
+          });
+        }
+      }
+      const interfaceClause = cursorNode.namedChildren.find((c) => c.type === "class_interface_clause");
+      if (interfaceClause) {
+        for (let i2 = 0; i2 < interfaceClause.namedChildCount; i2++) {
+          const item = interfaceClause.namedChild(i2);
+          if (item && (item.type === "name" || item.type === "qualified_name")) {
+            const ifaceName = item.text.trim();
+            unresolvedInheritance.push({
+              classNodeId: classId,
+              superclassName: ifaceName,
+              line: item.startPosition.row + 1
+            });
+          }
+        }
+      }
+      contextStack.push(classNode);
+      const declList = cursorNode.namedChildren.find((c) => c.type === "declaration_list");
+      if (declList) {
+        for (let j = 0; j < declList.namedChildCount; j++) {
+          const member = declList.namedChild(j);
+          if (!member)
+            continue;
+          if (member.type === "use_declaration") {
+            const traitNameNode = member.namedChildren.find((c) => c.type === "name" || c.type === "qualified_name");
+            if (traitNameNode) {
+              unresolvedInheritance.push({
+                classNodeId: classId,
+                superclassName: traitNameNode.text.trim(),
+                line: member.startPosition.row + 1
+              });
+            }
+            continue;
+          }
+          if (member.type === "method_declaration") {
+            const methodNameNode = member.namedChildren.find((c) => c.type === "name");
+            if (methodNameNode) {
+              const methodName = methodNameNode.text.trim();
+              const methodId = formatNodeId(filePath, `${className}.${methodName}`);
+              const methodScip = formatScipUri("php", filePath, className, methodName, "method");
+              const isControllerMethod = role === "ENTRY";
+              const methodNode = {
+                id: methodId,
+                name: methodName,
+                qualifiedName: `${qualifiedName}::${methodName}`,
+                entityType: isControllerMethod ? "ENDPOINT" : "METHOD",
+                semanticRole: isControllerMethod ? "ENTRY" : "SERVICE",
+                filePath,
+                language: "php",
+                scipUri: methodScip,
+                loc: {
+                  startLine: member.startPosition.row + 1,
+                  endLine: member.endPosition.row + 1
+                }
+              };
+              nodes.push(methodNode);
+              edges.push({
+                id: `contains_${classId}_${methodId}`,
+                source: classId,
+                target: methodId,
+                relation: "CONTAINS",
+                confidence: "EXTRACTED"
+              });
+              contextStack.push(methodNode);
+              const body2 = member.namedChildren.find((c) => c.type === "compound_statement");
+              if (body2) {
+                traverse(body2);
+              }
+              contextStack.pop();
+            }
+            continue;
+          }
+          traverse(member);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "function_definition") {
+      const nameNode = cursorNode.namedChildren.find((c) => c.type === "name");
+      if (nameNode) {
+        const funcName = nameNode.text.trim();
+        const funcId = formatNodeId(filePath, funcName);
+        const funcScip = formatScipUri("php", filePath, currentNamespace, funcName, "def");
+        const funcNode = {
+          id: funcId,
+          name: funcName,
+          qualifiedName: currentNamespace ? `${currentNamespace}\\${funcName}` : funcName,
+          entityType: "FUNCTION",
+          semanticRole: "SERVICE",
+          filePath,
+          language: "php",
+          scipUri: funcScip,
+          loc: {
+            startLine: cursorNode.startPosition.row + 1,
+            endLine: cursorNode.endPosition.row + 1
+          }
+        };
+        nodes.push(funcNode);
+        edges.push({
+          id: `defines_${fileNodeId}_${funcId}`,
+          source: fileNodeId,
+          target: funcId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+        contextStack.push(funcNode);
+        const body2 = cursorNode.namedChildren.find((c) => c.type === "compound_statement");
+        if (body2) {
+          traverse(body2);
+        }
+        contextStack.pop();
+      }
+      return;
+    }
+    if (nodeType === "scoped_call_expression" || nodeType === "member_call_expression") {
+      const text = cursorNode.text;
+      const caller = getCurrentCaller();
+      const routeMatch = text.match(/Route::(get|post|put|delete|patch|match|any)\s*\(\s*['"]([^'"]+)['"]/i);
+      if (routeMatch) {
+        const verb = routeMatch[1].toUpperCase();
+        const path11 = routeMatch[2];
+        const normPath = normalizeRoutePattern(path11);
+        const routeId = formatNodeId(filePath, `route_${verb}_${normPath}`);
+        const routeNode = {
+          id: routeId,
+          name: `${verb} ${normPath}`,
+          qualifiedName: `${verb} ${normPath}`,
+          entityType: "ENDPOINT",
+          semanticRole: "ENTRY",
+          filePath,
+          language: "php",
+          scipUri: formatScipUri("php", filePath, "Route", `${verb}_${normPath}`, "def"),
+          loc: {
+            startLine: cursorNode.startPosition.row + 1,
+            endLine: cursorNode.endPosition.row + 1
+          }
+        };
+        nodes.push(routeNode);
+        edges.push({
+          id: `defines_${fileNodeId}_${routeId}`,
+          source: fileNodeId,
+          target: routeId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+        if (caller) {
+          edges.push({
+            id: `calls_${caller.id}_${routeId}`,
+            source: caller.id,
+            target: routeId,
+            relation: "CALLS",
+            confidence: "EXTRACTED"
+          });
+        }
+      }
+      const httpMatch = text.match(/\b(Http::|\$client->|\$httpClient->)(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/i);
+      if (httpMatch && caller) {
+        const method = httpMatch[2].toUpperCase();
+        const url = httpMatch[3];
+        const normPattern = normalizeRoutePattern(url);
+        unresolvedCalls.push({
+          callerNodeId: caller.id,
+          calleeExpression: `HTTP_${method}_${normPattern}`,
+          apiCallMeta: {
+            httpMethod: method,
+            routePattern: normPattern
+          },
+          line: cursorNode.startPosition.row + 1
+        });
+      }
+      if (caller) {
+        const memberName = cursorNode.namedChildren.find((c) => c.type === "name")?.text.trim();
+        if (memberName && !["get", "post", "put", "delete"].includes(memberName)) {
+          unresolvedCalls.push({
+            callerNodeId: caller.id,
+            calleeExpression: memberName,
+            line: cursorNode.startPosition.row + 1
+          });
+        }
+      }
+    }
+    if (nodeType === "object_creation_expression") {
+      const caller = getCurrentCaller();
+      const clsNameNode = cursorNode.namedChildren.find((c) => c.type === "name" || c.type === "qualified_name");
+      if (caller && clsNameNode) {
+        unresolvedCalls.push({
+          callerNodeId: caller.id,
+          calleeExpression: clsNameNode.text.trim(),
+          line: cursorNode.startPosition.row + 1
+        });
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "php",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/ruby-extractor.js
+var RubyExtractor = class {
+  language = "ruby";
+  fileExtensions = [".rb"];
+  wasmGrammarName = "ruby";
+  extractFile(tree, filePath, sourceCode) {
+    return extractRubyFile(tree, filePath, sourceCode);
+  }
+};
+function extractRubyFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("ruby", filePath, "", fileName, "def");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "ruby",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  };
+  nodes.push(fileNode);
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function getScopePrefix() {
+    const modules = [];
+    for (const n of contextStack) {
+      if (n.entityType === "MODULE" || n.entityType === "CLASS") {
+        modules.push(n.name);
+      }
+    }
+    return modules.join("::");
+  }
+  function findStringLiteral(node) {
+    if (node.type === "string" || node.type === "string_content") {
+      return node.text.trim().replace(/^['"]|['"]$/g, "");
+    }
+    for (let i2 = 0; i2 < node.namedChildCount; i2++) {
+      const c = node.namedChild(i2);
+      if (c) {
+        const found = findStringLiteral(c);
+        if (found)
+          return found;
+      }
+    }
+    return void 0;
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "call") {
+      const idNode = cursorNode.namedChildren.find((c) => c.type === "identifier");
+      if (idNode && (idNode.text === "require" || idNode.text === "require_relative")) {
+        const argList = cursorNode.namedChildren.find((c) => c.type === "argument_list");
+        if (argList) {
+          const strNode = argList.namedChildren.find((c) => c.type === "string");
+          if (strNode) {
+            const reqPath = strNode.text.trim().replace(/^['"]|['"]$/g, "");
+            const modName = reqPath.split("/").pop() || reqPath;
+            imports.push({
+              modulePath: reqPath,
+              importedNames: [{ name: modName }],
+              isFromImport: idNode.text === "require",
+              line: cursorNode.startPosition.row + 1
+            });
+            return;
+          }
+        }
+      }
+    }
+    if (nodeType === "module") {
+      const nameNode = cursorNode.namedChildren.find((c) => c.type === "constant");
+      if (!nameNode)
+        return;
+      const modName = nameNode.text.trim();
+      const parentScope = getScopePrefix();
+      const fullModName = parentScope ? `${parentScope}::${modName}` : modName;
+      const modId = formatNodeId(filePath, fullModName);
+      const modScip = formatScipUri("ruby", filePath, parentScope, modName, "interface");
+      const modNode = {
+        id: modId,
+        name: modName,
+        qualifiedName: fullModName,
+        entityType: "MODULE",
+        semanticRole: "SERVICE",
+        filePath,
+        language: "ruby",
+        scipUri: modScip,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(modNode);
+      const parentId = contextStack.length > 0 ? contextStack[contextStack.length - 1].id : fileNodeId;
+      edges.push({
+        id: `defines_${parentId}_${modId}`,
+        source: parentId,
+        target: modId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      contextStack.push(modNode);
+      const body2 = cursorNode.namedChildren.find((c) => c.type === "body_statement");
+      if (body2) {
+        traverse(body2);
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "class") {
+      const nameNode = cursorNode.namedChildren.find((c) => c.type === "constant" || c.type === "scope_resolution");
+      if (!nameNode)
+        return;
+      const className = nameNode.text.trim();
+      const parentScope = getScopePrefix();
+      const fullClassName = parentScope ? `${parentScope}::${className}` : className;
+      const classId = formatNodeId(filePath, fullClassName);
+      const classScip = formatScipUri("ruby", filePath, parentScope, className, "class");
+      let superclassName;
+      const superNode = cursorNode.namedChildren.find((c) => c.type === "superclass");
+      if (superNode) {
+        const supConst = superNode.namedChildren.find((c) => c.type === "constant" || c.type === "scope_resolution");
+        if (supConst) {
+          superclassName = supConst.text.trim();
+        }
+      }
+      let role = "UNKNOWN";
+      if (className.endsWith("Controller") || superclassName && (superclassName.includes("Controller") || superclassName === "ApplicationController")) {
+        role = "ENTRY";
+      } else if (superclassName && (superclassName.includes("Record") || superclassName === "ApplicationRecord" || superclassName === "ActiveRecord::Base")) {
+        role = "MODEL";
+      } else if (className.endsWith("Service") || className.endsWith("Worker") || className.endsWith("Job") || className.endsWith("Mailer")) {
+        role = "SERVICE";
+      }
+      const classNode = {
+        id: classId,
+        name: className,
+        qualifiedName: fullClassName,
+        entityType: "CLASS",
+        semanticRole: role,
+        filePath,
+        language: "ruby",
+        scipUri: classScip,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(classNode);
+      const parentId = contextStack.length > 0 ? contextStack[contextStack.length - 1].id : fileNodeId;
+      edges.push({
+        id: `defines_${parentId}_${classId}`,
+        source: parentId,
+        target: classId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      if (superclassName) {
+        unresolvedInheritance.push({
+          classNodeId: classId,
+          superclassName,
+          line: superNode.startPosition.row + 1
+        });
+      }
+      contextStack.push(classNode);
+      const body2 = cursorNode.namedChildren.find((c) => c.type === "body_statement");
+      if (body2) {
+        for (let i2 = 0; i2 < body2.namedChildCount; i2++) {
+          const item = body2.namedChild(i2);
+          if (!item)
+            continue;
+          if (item.type === "call") {
+            const callId = item.namedChildren.find((c) => c.type === "identifier");
+            if (callId && (callId.text === "include" || callId.text === "extend")) {
+              const argList = item.namedChildren.find((c) => c.type === "argument_list");
+              if (argList) {
+                const mixinConst = argList.namedChildren.find((c) => c.type === "constant" || c.type === "scope_resolution");
+                if (mixinConst) {
+                  unresolvedInheritance.push({
+                    classNodeId: classId,
+                    superclassName: mixinConst.text.trim(),
+                    line: item.startPosition.row + 1
+                  });
+                }
+              }
+            }
+          }
+          traverse(item);
+        }
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "method" || nodeType === "singleton_method") {
+      const isSingleton = nodeType === "singleton_method";
+      const nameNode = cursorNode.namedChildren.find((c) => c.type === "identifier");
+      if (!nameNode)
+        return;
+      const rawName = nameNode.text.trim();
+      const methodName = isSingleton ? `self.${rawName}` : rawName;
+      const parentClass = contextStack.length > 0 ? contextStack[contextStack.length - 1] : void 0;
+      const classPrefix = parentClass ? `${parentClass.name}.` : "";
+      const methodId = formatNodeId(filePath, `${classPrefix}${methodName}`);
+      const methodScip = formatScipUri("ruby", filePath, parentClass?.name || "", methodName, "method");
+      const isControllerAction = parentClass?.semanticRole === "ENTRY";
+      const methodNode = {
+        id: methodId,
+        name: methodName,
+        qualifiedName: `${parentClass?.qualifiedName || ""}#${methodName}`,
+        entityType: isControllerAction ? "ENDPOINT" : "METHOD",
+        semanticRole: isControllerAction ? "ENTRY" : "SERVICE",
+        filePath,
+        language: "ruby",
+        scipUri: methodScip,
+        loc: {
+          startLine: cursorNode.startPosition.row + 1,
+          endLine: cursorNode.endPosition.row + 1
+        }
+      };
+      nodes.push(methodNode);
+      if (parentClass) {
+        edges.push({
+          id: `contains_${parentClass.id}_${methodId}`,
+          source: parentClass.id,
+          target: methodId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+      } else {
+        edges.push({
+          id: `defines_${fileNodeId}_${methodId}`,
+          source: fileNodeId,
+          target: methodId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+      }
+      contextStack.push(methodNode);
+      const body2 = cursorNode.namedChildren.find((c) => c.type === "body_statement");
+      if (body2) {
+        traverse(body2);
+      }
+      contextStack.pop();
+      return;
+    }
+    if (nodeType === "call") {
+      const text = cursorNode.text;
+      const caller = getCurrentCaller();
+      const httpMatch = text.match(/\b(Net::HTTP|Faraday|HTTParty|RestClient)\s*\.\s*(get|post|put|delete|patch)\s*\(/i);
+      if (httpMatch && caller) {
+        const method = httpMatch[2].toUpperCase();
+        const urlCandidate = findStringLiteral(cursorNode);
+        if (urlCandidate && (urlCandidate.startsWith("/") || urlCandidate.startsWith("http://") || urlCandidate.startsWith("https://"))) {
+          const normPattern = normalizeRoutePattern(urlCandidate);
+          unresolvedCalls.push({
+            callerNodeId: caller.id,
+            calleeExpression: `HTTP_${method}_${normPattern}`,
+            apiCallMeta: {
+              httpMethod: method,
+              routePattern: normPattern
+            },
+            line: cursorNode.startPosition.row + 1
+          });
+        }
+      }
+      if (caller) {
+        const idNode = cursorNode.namedChildren.find((c) => c.type === "identifier");
+        if (idNode) {
+          const callee = idNode.text.trim();
+          if (callee && !["require", "require_relative", "include", "extend", "before_action"].includes(callee)) {
+            unresolvedCalls.push({
+              callerNodeId: caller.id,
+              calleeExpression: callee,
+              line: cursorNode.startPosition.row + 1
+            });
+          }
+        }
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "ruby",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
 // packages/core/dist/parser/extractor-registry.js
 var ExtractorRegistry = class _ExtractorRegistry {
   static protoExtractor = new ProtoExtractor();
@@ -110160,7 +111135,10 @@ var ExtractorRegistry = class _ExtractorRegistry {
     new GodotExtractor(),
     _ExtractorRegistry.protoExtractor,
     _ExtractorRegistry.openApiExtractor,
-    _ExtractorRegistry.sqlExtractor
+    _ExtractorRegistry.sqlExtractor,
+    new DartExtractor(),
+    new PhpExtractor(),
+    new RubyExtractor()
   ];
   static extMap = /* @__PURE__ */ new Map();
   static {
@@ -110222,6 +111200,12 @@ var ExtractorRegistry = class _ExtractorRegistry {
       return "swift";
     if (ext === ".lua")
       return "lua";
+    if (ext === ".dart")
+      return "dart";
+    if (ext === ".php")
+      return "php";
+    if (ext === ".rb")
+      return "ruby";
     if (ext === ".asmdef" || ext === ".asmref")
       return "none";
     if (ext === ".gd" || ext === ".tscn")
@@ -112554,6 +113538,10 @@ var WorkspaceProfiler = class {
       "androidmanifest.xml",
       "tauri.conf.json",
       "project.godot",
+      "pubspec.yaml",
+      "composer.json",
+      "artisan",
+      "gemfile",
       ".git"
     ];
     try {
@@ -112598,6 +113586,9 @@ var WorkspaceProfiler = class {
     readDep("build.gradle.kts");
     readDep("cargo.toml");
     readDep("cmakelists.txt");
+    readDep("pubspec.yaml");
+    readDep("composer.json");
+    readDep("gemfile");
     const extStats = {};
     let lastModifiedMs = 0;
     let fileCount = 0;
@@ -112614,7 +113605,7 @@ var WorkspaceProfiler = class {
             }
           } else {
             const ext = path7.extname(item.name).toLowerCase();
-            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn|proto|sql)$/.test(ext)) {
+            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn|proto|sql|dart|php|rb)$/.test(ext)) {
               extStats[ext] = (extStats[ext] || 0) + 1;
               fileCount++;
               try {
@@ -112654,6 +113645,12 @@ var WorkspaceProfiler = class {
           primaryLanguage = "vue";
         else if (ext === ".lua")
           primaryLanguage = "lua";
+        else if (ext === ".dart")
+          primaryLanguage = "dart";
+        else if (ext === ".php")
+          primaryLanguage = "php";
+        else if (ext === ".rb")
+          primaryLanguage = "ruby";
         else if ([".asmdef", ".asmref"].includes(ext))
           primaryLanguage = "unity";
         else if ([".gd", ".tscn"].includes(ext))
@@ -112703,6 +113700,12 @@ var WorkspaceProfiler = class {
       frameworks.push("Godot");
     if (primaryLanguage === "unity" || fs6.existsSync(path7.join(projectDir, "ProjectSettings")))
       frameworks.push("Unity");
+    if (primaryLanguage === "dart" || fs6.existsSync(path7.join(projectDir, "pubspec.yaml")) || /(flutter)/i.test(depContent))
+      frameworks.push("Flutter");
+    if (primaryLanguage === "php" || fs6.existsSync(path7.join(projectDir, "artisan")) || /(laravel)/i.test(depContent))
+      frameworks.push("Laravel");
+    if (primaryLanguage === "ruby" || /(rails)/i.test(depContent))
+      frameworks.push("Rails");
     if (extStats[".proto"] > 0 || /(grpc|protobuf)/i.test(depContent))
       frameworks.push("gRPC/Protobuf");
     if (extStats[".sql"] > 0 || /(prisma|typeorm|sequelize|gorm|sqlx)/i.test(depContent))
@@ -112711,7 +113714,7 @@ var WorkspaceProfiler = class {
     const lowerRel = relPath.toLowerCase();
     if (frameworks.includes("Godot") || frameworks.includes("Unity") || primaryLanguage === "godot" || primaryLanguage === "unity" || primaryLanguage === "lua" && /(game|engine|scripts|roblox|cocos)/i.test(lowerRel)) {
       platform = "GAME_ENGINE";
-    } else if (fs6.existsSync(path7.join(projectDir, "AndroidManifest.xml")) || fs6.existsSync(path7.join(projectDir, "src/main/AndroidManifest.xml")) || /com\.android\.(application|library)/i.test(depContent) || /(android)/i.test(lowerRel)) {
+    } else if (frameworks.includes("Flutter") || primaryLanguage === "dart" || fs6.existsSync(path7.join(projectDir, "AndroidManifest.xml")) || fs6.existsSync(path7.join(projectDir, "src/main/AndroidManifest.xml")) || /com\.android\.(application|library)/i.test(depContent) || /(android)/i.test(lowerRel)) {
       platform = "MOBILE_ANDROID";
     } else if (fs6.existsSync(path7.join(projectDir, "Podfile")) || primaryLanguage === "swift" || /(ios|apple)/i.test(lowerRel)) {
       platform = "MOBILE_IOS";
@@ -112723,7 +113726,7 @@ var WorkspaceProfiler = class {
       platform = "DESKTOP_ELECTRON";
     } else if ((primaryLanguage === "typescript" || primaryLanguage === "javascript" || primaryLanguage === "vue") && (frameworks.includes("React") || frameworks.includes("Vue") || frameworks.includes("Next.js") || frameworks.includes("Vite") || /(web|frontend|client|portal)/i.test(lowerRel))) {
       platform = "WEB_FRONTEND";
-    } else if (frameworks.includes("FastAPI/Web") || frameworks.includes("Gin") || frameworks.includes("Spring Boot") || frameworks.includes("Axum") || /(server|backend|service|api|microservice)/i.test(lowerRel) || fs6.existsSync(path7.join(projectDir, "Dockerfile"))) {
+    } else if (frameworks.includes("FastAPI/Web") || frameworks.includes("Gin") || frameworks.includes("Spring Boot") || frameworks.includes("Axum") || frameworks.includes("Laravel") || frameworks.includes("Rails") || /(server|backend|service|api|microservice)/i.test(lowerRel) || fs6.existsSync(path7.join(projectDir, "Dockerfile"))) {
       platform = "BACKEND_SERVICE";
     } else if (/(tools?|scripts?|util(s)?|benchmark|test)/i.test(lowerRel)) {
       platform = "TOOL_SCRIPT";
@@ -112735,7 +113738,7 @@ var WorkspaceProfiler = class {
       platform = "WEB_FRONTEND";
     } else if (primaryLanguage === "lua") {
       platform = "GAME_ENGINE";
-    } else if (["go", "java", "rust", "csharp"].includes(primaryLanguage)) {
+    } else if (["go", "java", "rust", "csharp", "php", "ruby"].includes(primaryLanguage)) {
       platform = "BACKEND_SERVICE";
     }
     let versionString;
@@ -112800,6 +113803,13 @@ var WorkspaceProfiler = class {
       }
       const activeCandidates = group.filter((p) => !this.isArchiveDirectory(p.relPath));
       const pool = activeCandidates.length > 0 ? activeCandidates : group;
+      if (family === "BACKEND") {
+        for (const item of pool) {
+          item.isRecommended = true;
+          item.recommendReason = `${this.getPlatformDisplayName(item.platform)} \u6838\u5FC3\u670D\u52A1\u7EC4\u4EF6 (${item.primaryLanguage})`;
+        }
+        continue;
+      }
       pool.sort((a, b) => {
         const verA = this.parseSemVer(a.versionString);
         const verB = this.parseSemVer(b.versionString);

@@ -27,6 +27,10 @@ export const WASM_FILE_MAP: Record<string, string> = {
   kts: 'tree-sitter-kotlin.wasm',
   swift: 'tree-sitter-swift.wasm',
   lua: 'tree-sitter-lua.wasm',
+  dart: 'tree-sitter-dart.wasm',
+  php: 'tree-sitter-php.wasm',
+  ruby: 'tree-sitter-ruby.wasm',
+  rb: 'tree-sitter-ruby.wasm',
 };
 
 /**
@@ -46,11 +50,13 @@ const loadedLanguages: Map<string, Parser.Language> = new Map();
 function resolveWasmPath(filename: string): string {
   // 备选路径搜索列表
   const candidateDirs = [
-    // 0. 打包分发目录 (插件自身内置 wasm)
+    // 0. 打包分发目录与本地嵌入 wasm 仓库
     path.resolve(process.cwd(), 'dist/wasm'),
     path.resolve(__dirname, 'wasm'),
     path.resolve(__dirname, '../wasm'),
+    path.resolve(__dirname, '../../wasm'),
     path.resolve(__dirname, '../../dist/wasm'),
+    path.resolve(process.cwd(), 'packages/core/wasm'),
     // 1. 本地 node_modules
     path.resolve(process.cwd(), 'node_modules/tree-sitter-wasms/out'),
     path.resolve(process.cwd(), 'packages/core/node_modules/tree-sitter-wasms/out'),
