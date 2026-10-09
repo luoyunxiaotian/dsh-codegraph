@@ -10,6 +10,9 @@ import { CSharpExtractor } from './extractors/csharp-extractor.js';
 import { VueExtractor } from './extractors/vue-extractor.js';
 import { KotlinExtractor } from './extractors/kotlin-extractor.js';
 import { SwiftExtractor } from './extractors/swift-extractor.js';
+import { LuaExtractor } from './extractors/lua-extractor.js';
+import { UnityAsmdefExtractor } from './extractors/unity-asmdef-extractor.js';
+import { GodotExtractor } from './extractors/godot-extractor.js';
 
 export class ExtractorRegistry {
   private static extractors: LanguageExtractor[] = [
@@ -23,6 +26,9 @@ export class ExtractorRegistry {
     new VueExtractor(),
     new KotlinExtractor(),
     new SwiftExtractor(),
+    new LuaExtractor(),
+    new UnityAsmdefExtractor(),
+    new GodotExtractor(),
   ];
 
   private static extMap: Map<string, LanguageExtractor> = new Map();
@@ -61,6 +67,9 @@ export class ExtractorRegistry {
     if (ext === '.vue') return 'vue';
     if (ext === '.kt' || ext === '.kts') return 'kotlin';
     if (ext === '.swift') return 'swift';
+    if (ext === '.lua') return 'lua';
+    if (ext === '.asmdef' || ext === '.asmref') return 'none';
+    if (ext === '.gd' || ext === '.tscn') return 'none';
 
     const extractor = this.extMap.get(ext);
     return extractor ? extractor.wasmGrammarName : undefined;

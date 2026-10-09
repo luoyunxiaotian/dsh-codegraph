@@ -26,6 +26,7 @@ export const WASM_FILE_MAP: Record<string, string> = {
   kt: 'tree-sitter-kotlin.wasm',
   kts: 'tree-sitter-kotlin.wasm',
   swift: 'tree-sitter-swift.wasm',
+  lua: 'tree-sitter-lua.wasm',
 };
 
 /**

@@ -272,8 +272,11 @@ export class CodeGraphCore {
       try {
         const sourceCode = fs.readFileSync(fullPath, 'utf-8');
         const grammarName = ExtractorRegistry.getWasmGrammarForFile(relPath) || extractor.wasmGrammarName;
-        const parser = await getParserForLanguage(grammarName);
-        const tree = parser.parse(sourceCode);
+        let tree: any = null;
+        if (grammarName && grammarName !== 'none') {
+          const parser = await getParserForLanguage(grammarName);
+          tree = parser.parse(sourceCode);
+        }
         const extraction = extractor.extractFile(tree, relPath, sourceCode);
 
         // 为该文件提取出的所有符号节点注入所属工程 projectId
@@ -358,8 +361,11 @@ export class CodeGraphCore {
         try {
           const sourceCode = fs.readFileSync(fullPath, 'utf-8');
           const grammarName = ExtractorRegistry.getWasmGrammarForFile(changedFile) || extractor.wasmGrammarName;
-          const parser = await getParserForLanguage(grammarName);
-          const tree = parser.parse(sourceCode);
+          let tree: any = null;
+          if (grammarName && grammarName !== 'none') {
+            const parser = await getParserForLanguage(grammarName);
+            tree = parser.parse(sourceCode);
+          }
           const extraction = extractor.extractFile(tree, changedFile, sourceCode);
 
           const fileProjId = this.getFileProjectId(changedFile);

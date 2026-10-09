@@ -45,6 +45,7 @@ export type ProjectPlatform =
   | 'DESKTOP_ELECTRON' // PC 桌面端 (Electron / Tauri)
   | 'WEB_FRONTEND'     // Web 网页前端 (React / Vue / Next / Vite)
   | 'BACKEND_SERVICE'  // 后端服务 / 微服务 (Go / Java / Python / Node)
+  | 'GAME_ENGINE'      // 游戏引擎项目 (Unity / Godot / Cocos / Lua / Unreal)
   | 'SHARED_SDK'       // 共享库 / SDK
   | 'TOOL_SCRIPT'      // 辅助工具 / 测试脚本
   | 'UNKNOWN';

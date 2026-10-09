@@ -83,7 +83,7 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 
 得益于 WebAssembly 驱动的 Tree-Sitter 语法解析能力与专属 AST 语义提取器，本图谱开箱支持以下核心语言生态与游戏引擎：
 
-| 语言生态 | 扩展名 | 适用技术栈 / 游戏引擎 | 核心提取能力 |
+| 语言生态 / 引擎体系 | 扩展名 | 适用技术栈 / 游戏引擎 | 核心提取能力 |
 | :--- | :--- | :--- | :--- |
 | **Python** | `.py` | FastAPI, Django, Flask, 脚本工具 | Class, Def, Import, Calls, Decorator, Docstring |
 | **TypeScript / JavaScript** | `.ts`, `.tsx`, `.js`, `.jsx` | React, Vue, Node.js, Next.js | Class, Interface, Function, Import/Export, Calls |
@@ -92,11 +92,16 @@ git clone https://github.com/luoyunxiaotian/dsh-codegraph.git dsh-codegraph
 | **Java** | `.java` | Spring Boot, Android 后端 | Class, Interface, Method, Import, Package |
 | **Kotlin** | `.kt`, `.kts` | Android 原生, KMP 跨端, 现代 JVM | Class, Interface, Object, Retrofit/Ktor 路由与请求 |
 | **Swift** | `.swift` | iOS / macOS / SwiftUI 原生全家桶 | Class, Struct, Protocol, Extension, URLSession 请求 |
+| **Lua** | `.lua` | **游戏热更新 (xLua/ToLua)**, **Cocos**, **Roblox**, OpenResty | Table/Class, Metatable OOP 继承, Colon/Dot 方法, require 模块, API 请求 |
+| **Unity Assembly** | `.asmdef`, `.asmref` | **Unity 商业级游戏架构解耦** | Assembly Module, References 依赖总线, Namespace 映射, 0-WASM 极速解析 |
+| **Godot Engine** | `.gd`, `.tscn` | **Godot 4.x / 3.x 跨平台游戏引擎** | GDScript 类继承, Signal 信号中枢, 生命周期回调, Preload, TSCN 场景与脚本挂载 |
 | **C / C++** | `.c`, `.cpp`, `.h`, `.hpp` | **Unreal Engine (虚幻引擎)**, 基础库 | Struct, Class, Function, Include, 多继承与宏方法 |
 | **C#** | `.cs` | **Unity 游戏引擎**, **Godot (C#)**, .NET | MonoBehaviour, Class, Interface, Method, Using |
 | **Rust** | `.rs` | Axum, Actix, Reqwest, 系统底层 | Struct, Enum, Fn, Impl, Trait, Use, HTTP 路由 |
 
-> 📌 **后续路线图规划 (梯队推进中)**：Lua (`.lua`, 覆盖游戏热更/Cocos/Roblox)、Unity (`.asmdef`)、Protobuf (`.proto`, gRPC 跨语言中枢对齐)、SQL DDL、Dart (`.dart`)、PHP 及 Ruby 正在依序推进中。
+> 📌 **后续路线图规划 (梯队推进中)**：
+> - **Phase 3 (v1.9.0)**：微服务跨语言契约与数据架构 —— **Protobuf (`.proto`)**、**OpenAPI/Swagger**、**SQL DDL (`.sql`)**
+> - **Phase 4 (v2.0.0)**：存量全栈与垂直跨端 —— **Dart (`.dart`)**、**PHP (`.php`)**、**Ruby (`.rb`)**
 
 ---
 

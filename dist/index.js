@@ -105458,7 +105458,8 @@ var WASM_FILE_MAP = {
   kotlin: "tree-sitter-kotlin.wasm",
   kt: "tree-sitter-kotlin.wasm",
   kts: "tree-sitter-kotlin.wasm",
-  swift: "tree-sitter-swift.wasm"
+  swift: "tree-sitter-swift.wasm",
+  lua: "tree-sitter-lua.wasm"
 };
 var SUPPORTED_WASM_FILES = Object.freeze([
   "tree-sitter.wasm",
@@ -108637,6 +108638,930 @@ function extractSwiftFile(tree, filePath, sourceCode) {
   };
 }
 
+// packages/core/dist/parser/extractors/lua-extractor.js
+var LuaExtractor = class {
+  language = "lua";
+  fileExtensions = [".lua"];
+  wasmGrammarName = "lua";
+  extractFile(tree, filePath, sourceCode) {
+    return extractLuaFile(tree, filePath, sourceCode);
+  }
+};
+function extractLuaFile(tree, filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const fileScip = formatScipUri("lua", filePath, "", fileName, "def");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "lua",
+    scipUri: fileScip,
+    loc: {
+      startLine: tree.rootNode.startPosition.row + 1,
+      endLine: tree.rootNode.endPosition.row + 1
+    }
+  };
+  nodes.push(fileNode);
+  const classMap = /* @__PURE__ */ new Map();
+  function getOrCreateClassNode(className, line) {
+    let node = classMap.get(className);
+    if (!node) {
+      const classId = formatNodeId(filePath, className);
+      node = {
+        id: classId,
+        name: className,
+        qualifiedName: formatQualifiedName(filePath, className),
+        entityType: "CLASS",
+        semanticRole: "SERVICE",
+        filePath,
+        language: "lua",
+        scipUri: formatScipUri("lua", filePath, "", className, "class"),
+        loc: {
+          startLine: line,
+          endLine: line
+        }
+      };
+      nodes.push(node);
+      classMap.set(className, node);
+      edges.push({
+        id: `contains_${fileNodeId}_${classId}`,
+        source: fileNodeId,
+        target: classId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+    }
+    return node;
+  }
+  const contextStack = [];
+  function getCurrentCaller() {
+    for (let i2 = contextStack.length - 1; i2 >= 0; i2--) {
+      const n = contextStack[i2];
+      if (n.entityType === "FUNCTION" || n.entityType === "METHOD" || n.entityType === "ENDPOINT") {
+        return n;
+      }
+    }
+    return void 0;
+  }
+  function cleanString(str) {
+    return str.replace(/^["']|["']$/g, "").trim();
+  }
+  function traverse(cursorNode) {
+    const nodeType = cursorNode.type;
+    if (nodeType === "call") {
+      const callee = cursorNode.childForFieldName("called") || cursorNode.namedChildren[0];
+      if (callee && callee.text === "require") {
+        const argsNode = cursorNode.namedChildren[1];
+        if (argsNode) {
+          let reqPath = "";
+          const strNode = argsNode.type === "string" ? argsNode : argsNode.namedChildren.find((c) => c.type === "string" || c.type === "expression_list" && c.namedChildren[0]?.type === "string");
+          if (strNode) {
+            reqPath = cleanString(strNode.text);
+          } else {
+            const raw = argsNode.text.replace(/[()]/g, "");
+            reqPath = cleanString(raw);
+          }
+          if (reqPath) {
+            const modName = reqPath.split(".").pop() || reqPath;
+            imports.push({
+              modulePath: reqPath,
+              importedNames: [{ name: modName }],
+              line: cursorNode.startPosition.row + 1
+            });
+            const caller = getCurrentCaller() || fileNode;
+            edges.push({
+              id: `import_${caller.id}_${reqPath}`,
+              source: caller.id,
+              target: reqPath,
+              relation: "IMPORTS",
+              confidence: "EXTRACTED",
+              sourceLine: cursorNode.startPosition.row + 1
+            });
+          }
+        }
+      }
+    }
+    if (nodeType === "call") {
+      const callee = cursorNode.namedChildren[0];
+      if (callee && callee.text === "setmetatable") {
+        const argsNode = cursorNode.namedChildren[1];
+        if (argsNode) {
+          const argText = argsNode.text;
+          const match = argText.match(/__index\s*=\s*([a-zA-Z0-9_]+)/);
+          if (match) {
+            const baseClass = match[1];
+            let subClassName = "";
+            const parent = cursorNode.parent;
+            if (parent && parent.type === "local_variable_declaration") {
+              const varList = parent.namedChildren.find((c) => c.type === "variable_list");
+              if (varList)
+                subClassName = varList.text.trim();
+            } else if (parent && parent.type === "variable_assignment") {
+              const varList = parent.namedChildren.find((c) => c.type === "variable_list");
+              if (varList)
+                subClassName = varList.text.trim();
+            }
+            if (subClassName) {
+              const subClassNode = getOrCreateClassNode(subClassName, cursorNode.startPosition.row + 1);
+              unresolvedInheritance.push({
+                classNodeId: subClassNode.id,
+                superclassName: baseClass,
+                line: cursorNode.startPosition.row + 1
+              });
+            }
+          }
+        }
+      }
+    }
+    if (nodeType === "function_definition_statement") {
+      const varNode = cursorNode.namedChildren[0];
+      const paramsNode = cursorNode.namedChildren[1]?.type === "parameter_list" ? cursorNode.namedChildren[1] : void 0;
+      const blockNode = cursorNode.namedChildren.find((c) => c.type === "block");
+      if (varNode) {
+        const fullFnName = varNode.text.trim();
+        const line = cursorNode.startPosition.row + 1;
+        const endLine = cursorNode.endPosition.row + 1;
+        if (fullFnName.includes(":") || fullFnName.includes(".")) {
+          const isColon = fullFnName.includes(":");
+          const delimiter = isColon ? ":" : ".";
+          const parts2 = fullFnName.split(delimiter);
+          const tblName = parts2[0];
+          const methodName = parts2.slice(1).join(delimiter);
+          const classNode = getOrCreateClassNode(tblName, line);
+          const methodNodeId = formatNodeId(filePath, `${tblName}_${methodName}`);
+          const methodNode = {
+            id: methodNodeId,
+            name: methodName,
+            qualifiedName: formatQualifiedName(filePath, `${tblName}.${methodName}`),
+            entityType: isColon ? "METHOD" : "FUNCTION",
+            semanticRole: methodName === "new" || methodName === "init" ? "SERVICE" : "SERVICE",
+            filePath,
+            language: "lua",
+            scipUri: formatScipUri("lua", filePath, tblName, methodName, "method"),
+            signature: `function ${fullFnName}(${paramsNode ? paramsNode.text : ""})`,
+            loc: { startLine: line, endLine }
+          };
+          nodes.push(methodNode);
+          edges.push({
+            id: `contains_${classNode.id}_${methodNodeId}`,
+            source: classNode.id,
+            target: methodNodeId,
+            relation: "CONTAINS",
+            confidence: "EXTRACTED"
+          });
+          contextStack.push(methodNode);
+          if (blockNode)
+            traverse(blockNode);
+          contextStack.pop();
+          return;
+        } else {
+          const fnNodeId = formatNodeId(filePath, fullFnName);
+          const fnNode = {
+            id: fnNodeId,
+            name: fullFnName,
+            qualifiedName: formatQualifiedName(filePath, fullFnName),
+            entityType: "FUNCTION",
+            semanticRole: "SERVICE",
+            filePath,
+            language: "lua",
+            scipUri: formatScipUri("lua", filePath, "", fullFnName, "def"),
+            signature: `function ${fullFnName}(${paramsNode ? paramsNode.text : ""})`,
+            loc: { startLine: line, endLine }
+          };
+          nodes.push(fnNode);
+          edges.push({
+            id: `contains_${fileNodeId}_${fnNodeId}`,
+            source: fileNodeId,
+            target: fnNodeId,
+            relation: "CONTAINS",
+            confidence: "EXTRACTED"
+          });
+          contextStack.push(fnNode);
+          if (blockNode)
+            traverse(blockNode);
+          contextStack.pop();
+          return;
+        }
+      }
+    }
+    if (nodeType === "local_function_definition_statement") {
+      const idNode = cursorNode.namedChildren[0];
+      const paramsNode = cursorNode.namedChildren[1]?.type === "parameter_list" ? cursorNode.namedChildren[1] : void 0;
+      const blockNode = cursorNode.namedChildren.find((c) => c.type === "block");
+      if (idNode) {
+        const fnName = idNode.text.trim();
+        const line = cursorNode.startPosition.row + 1;
+        const endLine = cursorNode.endPosition.row + 1;
+        const fnNodeId = formatNodeId(filePath, fnName);
+        const fnNode = {
+          id: fnNodeId,
+          name: fnName,
+          qualifiedName: formatQualifiedName(filePath, fnName),
+          entityType: "FUNCTION",
+          semanticRole: "UTIL",
+          filePath,
+          language: "lua",
+          scipUri: formatScipUri("lua", filePath, "", fnName, "def"),
+          signature: `local function ${fnName}(${paramsNode ? paramsNode.text : ""})`,
+          loc: { startLine: line, endLine }
+        };
+        nodes.push(fnNode);
+        edges.push({
+          id: `contains_${fileNodeId}_${fnNodeId}`,
+          source: fileNodeId,
+          target: fnNodeId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+        contextStack.push(fnNode);
+        if (blockNode)
+          traverse(blockNode);
+        contextStack.pop();
+        return;
+      }
+    }
+    if (nodeType === "variable_assignment") {
+      const varList = cursorNode.namedChildren.find((c) => c.type === "variable_list");
+      const exprList = cursorNode.namedChildren.find((c) => c.type === "expression_list");
+      if (varList && exprList) {
+        const fnExpr = exprList.namedChildren.find((c) => c.type === "function_definition");
+        if (fnExpr) {
+          const varName = varList.text.trim();
+          const line = cursorNode.startPosition.row + 1;
+          const endLine = cursorNode.endPosition.row + 1;
+          if (varName.includes(".")) {
+            const parts2 = varName.split(".");
+            const tblName = parts2[0];
+            const methodName = parts2.slice(1).join(".");
+            const classNode = getOrCreateClassNode(tblName, line);
+            const methodNodeId = formatNodeId(filePath, `${tblName}_${methodName}`);
+            const methodNode = {
+              id: methodNodeId,
+              name: methodName,
+              qualifiedName: formatQualifiedName(filePath, `${tblName}.${methodName}`),
+              entityType: "METHOD",
+              semanticRole: "SERVICE",
+              filePath,
+              language: "lua",
+              scipUri: formatScipUri("lua", filePath, tblName, methodName, "method"),
+              signature: `${varName} = function()`,
+              loc: { startLine: line, endLine }
+            };
+            nodes.push(methodNode);
+            edges.push({
+              id: `contains_${classNode.id}_${methodNodeId}`,
+              source: classNode.id,
+              target: methodNodeId,
+              relation: "CONTAINS",
+              confidence: "EXTRACTED"
+            });
+            contextStack.push(methodNode);
+            const block = fnExpr.namedChildren.find((c) => c.type === "block");
+            if (block)
+              traverse(block);
+            contextStack.pop();
+            return;
+          }
+        }
+      }
+    }
+    if (nodeType === "call") {
+      const caller = getCurrentCaller();
+      if (caller) {
+        const callee = cursorNode.namedChildren[0];
+        if (callee && callee.text !== "require" && callee.text !== "setmetatable") {
+          const callText = callee.text.trim();
+          const line = cursorNode.startPosition.row + 1;
+          let apiMeta;
+          const lowerCallee = callText.toLowerCase();
+          const httpMethodMatch = lowerCallee.match(/\b(get|post|put|delete|patch)\b/);
+          if (httpMethodMatch) {
+            const argsNode = cursorNode.namedChildren[1];
+            if (argsNode) {
+              const strChild = argsNode.text.match(/["'](\/[^"']+)["']/);
+              if (strChild) {
+                const method = httpMethodMatch[1].toUpperCase();
+                const route = normalizeRoutePattern(strChild[1]);
+                apiMeta = { httpMethod: method, routePattern: route };
+                const epId = formatNodeId(filePath, `${caller.name}_call_${method}_${route}`);
+                nodes.push({
+                  id: epId,
+                  name: `${method} ${route}`,
+                  qualifiedName: formatQualifiedName(filePath, `${method} ${route}`),
+                  entityType: "ENDPOINT",
+                  semanticRole: "CONTRACT",
+                  filePath,
+                  language: "lua",
+                  endpointMeta: {
+                    httpMethod: method,
+                    routePath: route,
+                    isClientCall: true
+                  },
+                  loc: { startLine: line, endLine: line }
+                });
+                edges.push({
+                  id: `client_call_${caller.id}_${epId}`,
+                  source: caller.id,
+                  target: epId,
+                  relation: "CALLS_CONTRACT",
+                  confidence: "EXTRACTED",
+                  sourceLine: line
+                });
+              }
+            }
+          }
+          unresolvedCalls.push({
+            callerNodeId: caller.id,
+            calleeExpression: callText,
+            line,
+            apiCallMeta: apiMeta
+          });
+        }
+      }
+    }
+    for (let i2 = 0; i2 < cursorNode.namedChildCount; i2++) {
+      const child = cursorNode.namedChild(i2);
+      if (child)
+        traverse(child);
+    }
+  }
+  traverse(tree.rootNode);
+  return {
+    filePath,
+    language: "lua",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/unity-asmdef-extractor.js
+var UnityAsmdefExtractor = class {
+  language = "unity";
+  fileExtensions = [".asmdef", ".asmref"];
+  wasmGrammarName = "none";
+  extractFile(_tree, filePath, sourceCode) {
+    return extractUnityAsmdefFile(filePath, sourceCode);
+  }
+};
+function extractUnityAsmdefFile(filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lineCount = sourceCode.split("\n").length;
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const isAsmref = filePath.toLowerCase().endsWith(".asmref");
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "unity",
+    scipUri: formatScipUri("unity", filePath, "", fileName, "def"),
+    loc: { startLine: 1, endLine: lineCount }
+  };
+  nodes.push(fileNode);
+  try {
+    const data = JSON.parse(sourceCode);
+    if (isAsmref) {
+      const refTarget = typeof data.reference === "string" ? data.reference.trim() : "";
+      const moduleName = fileName.replace(/\.asmref$/i, "");
+      const moduleId = formatNodeId(filePath, moduleName);
+      const moduleNode = {
+        id: moduleId,
+        name: moduleName,
+        qualifiedName: formatQualifiedName(filePath, moduleName),
+        entityType: "MODULE",
+        semanticRole: "UTIL",
+        filePath,
+        language: "unity",
+        scipUri: formatScipUri("unity", filePath, "", moduleName, "class"),
+        metadata: {
+          isAsmref: true,
+          reference: refTarget
+        },
+        loc: { startLine: 1, endLine: lineCount }
+      };
+      nodes.push(moduleNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${moduleId}`,
+        source: fileNodeId,
+        target: moduleId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      if (refTarget) {
+        imports.push({
+          modulePath: refTarget,
+          importedNames: [{ name: refTarget }],
+          line: 1
+        });
+        unresolvedCalls.push({
+          callerNodeId: moduleId,
+          calleeExpression: refTarget,
+          line: 1
+        });
+        edges.push({
+          id: `import_${moduleId}_${refTarget}`,
+          source: moduleId,
+          target: refTarget,
+          relation: "IMPORTS",
+          confidence: "EXTRACTED",
+          sourceLine: 1
+        });
+      }
+    } else {
+      const asmName = typeof data.name === "string" && data.name.trim() ? data.name.trim() : fileName.replace(/\.asmdef$/i, "");
+      const moduleId = formatNodeId(filePath, asmName);
+      const lowerName = asmName.toLowerCase();
+      let role = "SERVICE";
+      if (lowerName.includes("editor") || lowerName.includes("test")) {
+        role = "UTIL";
+      } else if (lowerName.includes("core") || lowerName.includes("infra") || lowerName.includes("engine")) {
+        role = "INFRA";
+      }
+      const moduleNode = {
+        id: moduleId,
+        name: asmName,
+        qualifiedName: data.rootNamespace ? `${data.rootNamespace}.${asmName}` : asmName,
+        entityType: "MODULE",
+        semanticRole: role,
+        filePath,
+        language: "unity",
+        scipUri: formatScipUri("unity", filePath, "", asmName, "class"),
+        metadata: {
+          rootNamespace: data.rootNamespace,
+          allowUnsafeCode: data.allowUnsafeCode,
+          includePlatforms: data.includePlatforms,
+          excludePlatforms: data.excludePlatforms,
+          autoReferenced: data.autoReferenced,
+          noEngineReferences: data.noEngineReferences
+        },
+        loc: { startLine: 1, endLine: lineCount }
+      };
+      nodes.push(moduleNode);
+      edges.push({
+        id: `contains_${fileNodeId}_${moduleId}`,
+        source: fileNodeId,
+        target: moduleId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      if (Array.isArray(data.references)) {
+        for (const ref of data.references) {
+          if (typeof ref === "string" && ref.trim()) {
+            const rawRef = ref.trim();
+            const cleanRef = rawRef.replace(/^guid:/i, "");
+            imports.push({
+              modulePath: cleanRef,
+              importedNames: [{ name: cleanRef }],
+              line: 1
+            });
+            unresolvedCalls.push({
+              callerNodeId: moduleId,
+              calleeExpression: cleanRef,
+              line: 1
+            });
+            edges.push({
+              id: `import_${moduleId}_${cleanRef}`,
+              source: moduleId,
+              target: cleanRef,
+              relation: "IMPORTS",
+              confidence: "EXTRACTED",
+              sourceLine: 1
+            });
+          }
+        }
+      }
+    }
+  } catch (err2) {
+    console.warn(`[UnityAsmdefExtractor] \u89E3\u6790 Unity \u6587\u4EF6\u5931\u8D25: ${filePath}`, err2);
+  }
+  return {
+    filePath,
+    language: "unity",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
+// packages/core/dist/parser/extractors/godot-extractor.js
+var GodotExtractor = class {
+  language = "godot";
+  fileExtensions = [".gd", ".tscn"];
+  wasmGrammarName = "none";
+  extractFile(_tree, filePath, sourceCode) {
+    const ext = filePath.toLowerCase().split(".").pop();
+    if (ext === "tscn") {
+      return extractGodotSceneFile(filePath, sourceCode);
+    }
+    return extractGodotScriptFile(filePath, sourceCode);
+  }
+};
+function extractGodotScriptFile(filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lines = sourceCode.split("\n");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const baseName = fileName.replace(/\.gd$/i, "");
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "godot",
+    scipUri: formatScipUri("godot", filePath, "", fileName, "def"),
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(fileNode);
+  let explicitClassName;
+  let superClassName;
+  for (let i2 = 0; i2 < lines.length; i2++) {
+    const line = lines[i2].trim();
+    const classMatch = line.match(/^class_name\s+([a-zA-Z0-9_]+)/);
+    if (classMatch) {
+      explicitClassName = classMatch[1];
+    }
+    const extendsMatch = line.match(/^extends\s+(["']?[a-zA-Z0-9_./:]+["']?)/);
+    if (extendsMatch) {
+      superClassName = extendsMatch[1].replace(/["']/g, "");
+    }
+  }
+  const className = explicitClassName || baseName.charAt(0).toUpperCase() + baseName.slice(1);
+  const classNodeId = formatNodeId(filePath, className);
+  const classNode = {
+    id: classNodeId,
+    name: className,
+    qualifiedName: formatQualifiedName(filePath, className),
+    entityType: "CLASS",
+    semanticRole: "SERVICE",
+    filePath,
+    language: "godot",
+    scipUri: formatScipUri("godot", filePath, "", className, "class"),
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(classNode);
+  edges.push({
+    id: `contains_${fileNodeId}_${classNodeId}`,
+    source: fileNodeId,
+    target: classNodeId,
+    relation: "CONTAINS",
+    confidence: "EXTRACTED"
+  });
+  if (superClassName) {
+    unresolvedInheritance.push({
+      classNodeId,
+      superclassName: superClassName,
+      line: 1
+    });
+  }
+  let currentMethodNode;
+  for (let idx = 0; idx < lines.length; idx++) {
+    const lineNum = idx + 1;
+    const line = lines[idx];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#"))
+      continue;
+    const preloadMatches = trimmed.matchAll(/(?:preload|load)\s*\(\s*["']([^"']+)["']\s*\)/g);
+    for (const match of preloadMatches) {
+      const resPath = match[1];
+      const cleanTarget = resPath.replace(/^res:\/\//, "");
+      const targetName = cleanTarget.split("/").pop() || cleanTarget;
+      imports.push({
+        modulePath: cleanTarget,
+        importedNames: [{ name: targetName }],
+        line: lineNum
+      });
+      const caller = currentMethodNode || classNode;
+      edges.push({
+        id: `import_${caller.id}_${cleanTarget}`,
+        source: caller.id,
+        target: cleanTarget,
+        relation: "IMPORTS",
+        confidence: "EXTRACTED",
+        sourceLine: lineNum
+      });
+    }
+    const signalMatch = trimmed.match(/^signal\s+([a-zA-Z0-9_]+)(?:\(([^)]*)\))?/);
+    if (signalMatch) {
+      const sigName = signalMatch[1];
+      const sigParams = signalMatch[2] || "";
+      const sigNodeId = formatNodeId(filePath, `signal_${sigName}`);
+      const sigNode = {
+        id: sigNodeId,
+        name: sigName,
+        qualifiedName: formatQualifiedName(filePath, `signal.${sigName}`),
+        entityType: "ENDPOINT",
+        semanticRole: "ENTRY",
+        filePath,
+        language: "godot",
+        signature: `signal ${sigName}(${sigParams})`,
+        scipUri: formatScipUri("godot", filePath, className, sigName, "def"),
+        topicMeta: {
+          topicName: sigName,
+          isPublisher: true
+        },
+        loc: { startLine: lineNum, endLine: lineNum }
+      };
+      nodes.push(sigNode);
+      edges.push({
+        id: `contains_${classNodeId}_${sigNodeId}`,
+        source: classNodeId,
+        target: sigNodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      continue;
+    }
+    const funcMatch = trimmed.match(/^func\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)(?:\s*->\s*([a-zA-Z0-9_]+))?\s*:/);
+    if (funcMatch) {
+      const fnName = funcMatch[1];
+      const fnParams = funcMatch[2] || "";
+      const fnReturn = funcMatch[3] || "";
+      const fnNodeId = formatNodeId(filePath, `${className}_${fnName}`);
+      const isLifecycle = /^_?(ready|enter_tree|exit_tree|process|physics_process|input|unhandled_input|draw|gui_input)$/i.test(fnName);
+      const role = isLifecycle ? "ENTRY" : "SERVICE";
+      currentMethodNode = {
+        id: fnNodeId,
+        name: fnName,
+        qualifiedName: formatQualifiedName(filePath, `${className}.${fnName}`),
+        entityType: "METHOD",
+        semanticRole: role,
+        filePath,
+        language: "godot",
+        signature: `func ${fnName}(${fnParams})${fnReturn ? " -> " + fnReturn : ""}:`,
+        scipUri: formatScipUri("godot", filePath, className, fnName, "method"),
+        loc: { startLine: lineNum, endLine: lineNum }
+      };
+      nodes.push(currentMethodNode);
+      edges.push({
+        id: `contains_${classNodeId}_${fnNodeId}`,
+        source: classNodeId,
+        target: fnNodeId,
+        relation: "CONTAINS",
+        confidence: "EXTRACTED"
+      });
+      continue;
+    }
+    if (currentMethodNode) {
+      const emitMatch = trimmed.match(/([a-zA-Z0-9_]+)\.emit\(/);
+      if (emitMatch) {
+        const sigName = emitMatch[1];
+        unresolvedCalls.push({
+          callerNodeId: currentMethodNode.id,
+          calleeExpression: sigName,
+          line: lineNum,
+          topicMeta: {
+            topicName: sigName,
+            isPublish: true
+          }
+        });
+      }
+      const emitSignalMatch = trimmed.match(/emit_signal\(\s*["']([a-zA-Z0-9_]+)["']/);
+      if (emitSignalMatch) {
+        const sigName = emitSignalMatch[1];
+        unresolvedCalls.push({
+          callerNodeId: currentMethodNode.id,
+          calleeExpression: sigName,
+          line: lineNum,
+          topicMeta: {
+            topicName: sigName,
+            isPublish: true
+          }
+        });
+      }
+      const httpMatch = trimmed.match(/\.request\(\s*["'](https?:\/\/[^"']+|\/[^"']+)["']/);
+      if (httpMatch) {
+        const route = normalizeRoutePattern(httpMatch[1]);
+        const epId = formatNodeId(filePath, `${currentMethodNode.name}_call_get_${route}`);
+        nodes.push({
+          id: epId,
+          name: `GET ${route}`,
+          qualifiedName: formatQualifiedName(filePath, `GET ${route}`),
+          entityType: "ENDPOINT",
+          semanticRole: "CONTRACT",
+          filePath,
+          language: "godot",
+          endpointMeta: {
+            httpMethod: "GET",
+            routePath: route,
+            isClientCall: true
+          },
+          loc: { startLine: lineNum, endLine: lineNum }
+        });
+        edges.push({
+          id: `client_call_${currentMethodNode.id}_${epId}`,
+          source: currentMethodNode.id,
+          target: epId,
+          relation: "CALLS_CONTRACT",
+          confidence: "EXTRACTED",
+          sourceLine: lineNum
+        });
+        unresolvedCalls.push({
+          callerNodeId: currentMethodNode.id,
+          calleeExpression: `request`,
+          line: lineNum,
+          apiCallMeta: { httpMethod: "GET", routePattern: route }
+        });
+      }
+      const callMatches = trimmed.matchAll(/\b([a-zA-Z0-9_]+)\s*\(/g);
+      for (const cm of callMatches) {
+        const callee = cm[1];
+        if (!["func", "if", "elif", "while", "for", "return", "preload", "load", "print"].includes(callee)) {
+          unresolvedCalls.push({
+            callerNodeId: currentMethodNode.id,
+            calleeExpression: callee,
+            line: lineNum
+          });
+        }
+      }
+    }
+  }
+  return {
+    filePath,
+    language: "godot",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+function extractGodotSceneFile(filePath, sourceCode) {
+  const nodes = [];
+  const edges = [];
+  const imports = [];
+  const unresolvedCalls = [];
+  const unresolvedInheritance = [];
+  const lines = sourceCode.split("\n");
+  const fileName = filePath.split(/[/\\]/).pop() || filePath;
+  const sceneName = fileName.replace(/\.tscn$/i, "");
+  const fileNodeId = formatNodeId(filePath, "file");
+  const fileNode = {
+    id: fileNodeId,
+    name: fileName,
+    qualifiedName: formatQualifiedName(filePath, "file"),
+    entityType: "FILE",
+    semanticRole: "UNKNOWN",
+    filePath,
+    language: "godot",
+    scipUri: formatScipUri("godot", filePath, "", fileName, "def"),
+    loc: { startLine: 1, endLine: lines.length }
+  };
+  nodes.push(fileNode);
+  const extResources = /* @__PURE__ */ new Map();
+  for (let idx = 0; idx < lines.length; idx++) {
+    const lineNum = idx + 1;
+    const line = lines[idx].trim();
+    if (line.startsWith("[ext_resource")) {
+      const typeMatch = line.match(/type\s*=\s*["']([^"']+)["']/);
+      const pathMatch = line.match(/path\s*=\s*["']([^"']+)["']/);
+      const idMatch = line.match(/id\s*=\s*["']([^"']+)["']/);
+      if (pathMatch && idMatch) {
+        const resType = typeMatch ? typeMatch[1] : "Resource";
+        const rawPath = pathMatch[1];
+        const resId = idMatch[1];
+        const cleanPath = rawPath.replace(/^res:\/\//, "");
+        extResources.set(resId, { type: resType, path: cleanPath });
+        const targetName = cleanPath.split("/").pop() || cleanPath;
+        imports.push({
+          modulePath: cleanPath,
+          importedNames: [{ name: targetName }],
+          line: lineNum
+        });
+      }
+    }
+  }
+  let rootSceneNode;
+  for (let idx = 0; idx < lines.length; idx++) {
+    const lineNum = idx + 1;
+    const line = lines[idx].trim();
+    if (line.startsWith("[node")) {
+      const nameMatch = line.match(/name\s*=\s*["']([^"']+)["']/);
+      const typeMatch = line.match(/type\s*=\s*["']([^"']+)["']/);
+      const parentMatch = line.match(/parent\s*=\s*["']([^"']+)["']/);
+      const nodeName = nameMatch ? nameMatch[1] : sceneName;
+      const nodeType = typeMatch ? typeMatch[1] : "Node";
+      if (!rootSceneNode && (!parentMatch || parentMatch[1] === ".")) {
+        const rootId = formatNodeId(filePath, nodeName);
+        rootSceneNode = {
+          id: rootId,
+          name: `${nodeName} (${nodeType})`,
+          qualifiedName: formatQualifiedName(filePath, nodeName),
+          entityType: "CLASS",
+          semanticRole: "SERVICE",
+          filePath,
+          language: "godot",
+          scipUri: formatScipUri("godot", filePath, "", nodeName, "class"),
+          metadata: {
+            godotNodeType: nodeType,
+            isSceneRoot: true
+          },
+          loc: { startLine: lineNum, endLine: lineNum }
+        };
+        nodes.push(rootSceneNode);
+        edges.push({
+          id: `contains_${fileNodeId}_${rootId}`,
+          source: fileNodeId,
+          target: rootId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+      }
+    }
+  }
+  if (!rootSceneNode) {
+    const rootId = formatNodeId(filePath, sceneName);
+    rootSceneNode = {
+      id: rootId,
+      name: sceneName,
+      qualifiedName: formatQualifiedName(filePath, sceneName),
+      entityType: "CLASS",
+      semanticRole: "SERVICE",
+      filePath,
+      language: "godot",
+      scipUri: formatScipUri("godot", filePath, "", sceneName, "class"),
+      loc: { startLine: 1, endLine: lines.length }
+    };
+    nodes.push(rootSceneNode);
+    edges.push({
+      id: `contains_${fileNodeId}_${rootId}`,
+      source: fileNodeId,
+      target: rootId,
+      relation: "CONTAINS",
+      confidence: "EXTRACTED"
+    });
+  }
+  for (let idx = 0; idx < lines.length; idx++) {
+    const lineNum = idx + 1;
+    const line = lines[idx].trim();
+    const scriptMatch = line.match(/script\s*=\s*ExtResource\(\s*["']([^"']+)["']\s*\)/);
+    if (scriptMatch) {
+      const resId = scriptMatch[1];
+      const res = extResources.get(resId);
+      if (res) {
+        edges.push({
+          id: `extends_${rootSceneNode.id}_${res.path}`,
+          source: rootSceneNode.id,
+          target: res.path,
+          relation: "EXTENDS",
+          confidence: "EXTRACTED",
+          sourceLine: lineNum
+        });
+      }
+    }
+    const instanceMatch = line.match(/instance\s*=\s*ExtResource\(\s*["']([^"']+)["']\s*\)/);
+    if (instanceMatch) {
+      const resId = instanceMatch[1];
+      const res = extResources.get(resId);
+      if (res) {
+        edges.push({
+          id: `contains_${rootSceneNode.id}_${res.path}`,
+          source: rootSceneNode.id,
+          target: res.path,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED",
+          sourceLine: lineNum
+        });
+      }
+    }
+  }
+  return {
+    filePath,
+    language: "godot",
+    nodes,
+    edges,
+    imports,
+    unresolvedCalls,
+    unresolvedInheritance
+  };
+}
+
 // packages/core/dist/parser/extractor-registry.js
 var ExtractorRegistry = class {
   static extractors = [
@@ -108649,7 +109574,10 @@ var ExtractorRegistry = class {
     new CSharpExtractor(),
     new VueExtractor(),
     new KotlinExtractor(),
-    new SwiftExtractor()
+    new SwiftExtractor(),
+    new LuaExtractor(),
+    new UnityAsmdefExtractor(),
+    new GodotExtractor()
   ];
   static extMap = /* @__PURE__ */ new Map();
   static {
@@ -108697,6 +109625,12 @@ var ExtractorRegistry = class {
       return "kotlin";
     if (ext === ".swift")
       return "swift";
+    if (ext === ".lua")
+      return "lua";
+    if (ext === ".asmdef" || ext === ".asmref")
+      return "none";
+    if (ext === ".gd" || ext === ".tscn")
+      return "none";
     const extractor = this.extMap.get(ext);
     return extractor ? extractor.wasmGrammarName : void 0;
   }
@@ -109201,7 +110135,7 @@ var SymbolTable = class {
     const normSource = sourceFilePath.replace(/\\/g, "/");
     const sourceDir = path3.posix.dirname(normSource);
     const sourceExt = path3.posix.extname(normSource).toLowerCase();
-    const exts = sourceExt === ".py" ? [".py"] : [".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rs", ".cpp", ".c", ".h", ".hpp", ".cs", ".py"];
+    const exts = sourceExt === ".py" ? [".py"] : [".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".rs", ".cpp", ".c", ".h", ".hpp", ".cs", ".py", ".vue", ".kt", ".kts", ".swift", ".lua", ".asmdef", ".asmref", ".gd", ".tscn"];
     if (modulePath.startsWith(".")) {
       const match = modulePath.match(/^(\.+)(.*)$/);
       if (match) {
@@ -109217,6 +110151,7 @@ var SymbolTable = class {
           for (const ext of exts) {
             candidates.push(path3.posix.join(targetDir, `${rel}${ext}`));
             candidates.push(path3.posix.join(targetDir, rel, `index${ext}`));
+            candidates.push(path3.posix.join(targetDir, rel, `init${ext}`));
             candidates.push(path3.posix.join(targetDir, rel, `__init__${ext}`));
             candidates.push(path3.posix.join(targetDir, rel, `mod${ext}`));
           }
@@ -109245,12 +110180,18 @@ var SymbolTable = class {
       let cleanMod = modulePath;
       if (cleanMod.startsWith("@/") || cleanMod.startsWith("~/")) {
         cleanMod = cleanMod.slice(2);
+      } else if (cleanMod.startsWith("res://")) {
+        cleanMod = cleanMod.replace(/^res:\/\//, "");
       }
       const relPath = cleanMod.replace(/\./g, "/");
       const candidates = [];
+      if (path3.posix.extname(cleanMod)) {
+        candidates.push(cleanMod);
+      }
       for (const ext of exts) {
         candidates.push(`${relPath}${ext}`);
         candidates.push(`${relPath}/index${ext}`);
+        candidates.push(`${relPath}/init${ext}`);
         candidates.push(`${relPath}/__init__${ext}`);
         candidates.push(`${relPath}/mod${ext}`);
       }
@@ -110931,6 +111872,7 @@ var WorkspaceProfiler = class {
       "makefile",
       "androidmanifest.xml",
       "tauri.conf.json",
+      "project.godot",
       ".git"
     ];
     try {
@@ -110941,7 +111883,7 @@ var WorkspaceProfiler = class {
           return true;
       }
       for (const f of lowerFiles) {
-        if (f.endsWith(".sln") || f.endsWith(".csproj") || f.endsWith(".vcxproj")) {
+        if (f.endsWith(".sln") || f.endsWith(".csproj") || f.endsWith(".vcxproj") || f.endsWith(".asmdef")) {
           return true;
         }
       }
@@ -110991,7 +111933,7 @@ var WorkspaceProfiler = class {
             }
           } else {
             const ext = path7.extname(item.name).toLowerCase();
-            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|rs|c|cpp|cc|cxx|h|hpp|cs)$/.test(ext)) {
+            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn)$/.test(ext)) {
               extStats[ext] = (extStats[ext] || 0) + 1;
               fileCount++;
               try {
@@ -111023,8 +111965,18 @@ var WorkspaceProfiler = class {
           primaryLanguage = "go";
         else if (ext === ".java")
           primaryLanguage = "java";
-        else if (ext === ".kt")
+        else if ([".kt", ".kts"].includes(ext))
           primaryLanguage = "kotlin";
+        else if (ext === ".swift")
+          primaryLanguage = "swift";
+        else if (ext === ".vue")
+          primaryLanguage = "vue";
+        else if (ext === ".lua")
+          primaryLanguage = "lua";
+        else if ([".asmdef", ".asmref"].includes(ext))
+          primaryLanguage = "unity";
+        else if ([".gd", ".tscn"].includes(ext))
+          primaryLanguage = "godot";
         else if (ext === ".rs")
           primaryLanguage = "rust";
         else if ([".cpp", ".cc", ".cxx", ".hpp"].includes(ext))
@@ -111038,7 +111990,7 @@ var WorkspaceProfiler = class {
     const frameworks = [];
     if (/(react|@types\/react)/i.test(depContent))
       frameworks.push("React");
-    if (/vue/i.test(depContent))
+    if (/vue/i.test(depContent) || primaryLanguage === "vue")
       frameworks.push("Vue");
     if (/(next|nuxt)/i.test(depContent))
       frameworks.push("Next.js");
@@ -111062,11 +112014,17 @@ var WorkspaceProfiler = class {
       frameworks.push("Electron");
     if (/(tauri)/i.test(depContent))
       frameworks.push("Tauri");
+    if (primaryLanguage === "godot" || fs6.existsSync(path7.join(projectDir, "project.godot")))
+      frameworks.push("Godot");
+    if (primaryLanguage === "unity" || fs6.existsSync(path7.join(projectDir, "ProjectSettings")))
+      frameworks.push("Unity");
     let platform = "UNKNOWN";
     const lowerRel = relPath.toLowerCase();
-    if (fs6.existsSync(path7.join(projectDir, "AndroidManifest.xml")) || fs6.existsSync(path7.join(projectDir, "src/main/AndroidManifest.xml")) || /com\.android\.(application|library)/i.test(depContent) || /(android)/i.test(lowerRel)) {
+    if (frameworks.includes("Godot") || frameworks.includes("Unity") || primaryLanguage === "godot" || primaryLanguage === "unity" || primaryLanguage === "lua" && /(game|engine|scripts|roblox|cocos)/i.test(lowerRel)) {
+      platform = "GAME_ENGINE";
+    } else if (fs6.existsSync(path7.join(projectDir, "AndroidManifest.xml")) || fs6.existsSync(path7.join(projectDir, "src/main/AndroidManifest.xml")) || /com\.android\.(application|library)/i.test(depContent) || /(android)/i.test(lowerRel)) {
       platform = "MOBILE_ANDROID";
-    } else if (fs6.existsSync(path7.join(projectDir, "Podfile")) || /(ios|apple)/i.test(lowerRel)) {
+    } else if (fs6.existsSync(path7.join(projectDir, "Podfile")) || primaryLanguage === "swift" || /(ios|apple)/i.test(lowerRel)) {
       platform = "MOBILE_IOS";
     } else if ((primaryLanguage === "cpp" || primaryLanguage === "c") && (frameworks.includes("Qt") || /(desktop|client|pc|gui|win32)/i.test(lowerRel))) {
       platform = "DESKTOP_CPP";
@@ -111074,7 +112032,7 @@ var WorkspaceProfiler = class {
       platform = "DESKTOP_PYTHON";
     } else if (frameworks.includes("Electron") || frameworks.includes("Tauri")) {
       platform = "DESKTOP_ELECTRON";
-    } else if ((primaryLanguage === "typescript" || primaryLanguage === "javascript") && (frameworks.includes("React") || frameworks.includes("Vue") || frameworks.includes("Next.js") || frameworks.includes("Vite") || /(web|frontend|client|portal)/i.test(lowerRel))) {
+    } else if ((primaryLanguage === "typescript" || primaryLanguage === "javascript" || primaryLanguage === "vue") && (frameworks.includes("React") || frameworks.includes("Vue") || frameworks.includes("Next.js") || frameworks.includes("Vite") || /(web|frontend|client|portal)/i.test(lowerRel))) {
       platform = "WEB_FRONTEND";
     } else if (frameworks.includes("FastAPI/Web") || frameworks.includes("Gin") || frameworks.includes("Spring Boot") || frameworks.includes("Axum") || /(server|backend|service|api|microservice)/i.test(lowerRel) || fs6.existsSync(path7.join(projectDir, "Dockerfile"))) {
       platform = "BACKEND_SERVICE";
@@ -111084,8 +112042,10 @@ var WorkspaceProfiler = class {
       platform = "DESKTOP_CPP";
     } else if (primaryLanguage === "python") {
       platform = "BACKEND_SERVICE";
-    } else if (primaryLanguage === "typescript" || primaryLanguage === "javascript") {
+    } else if (primaryLanguage === "typescript" || primaryLanguage === "javascript" || primaryLanguage === "vue") {
       platform = "WEB_FRONTEND";
+    } else if (primaryLanguage === "lua") {
+      platform = "GAME_ENGINE";
     } else if (["go", "java", "rust", "csharp"].includes(primaryLanguage)) {
       platform = "BACKEND_SERVICE";
     }
@@ -112822,8 +113782,11 @@ var CodeGraphCore = class {
       try {
         const sourceCode = fs8.readFileSync(fullPath, "utf-8");
         const grammarName = ExtractorRegistry.getWasmGrammarForFile(relPath) || extractor.wasmGrammarName;
-        const parser = await getParserForLanguage(grammarName);
-        const tree = parser.parse(sourceCode);
+        let tree = null;
+        if (grammarName && grammarName !== "none") {
+          const parser = await getParserForLanguage(grammarName);
+          tree = parser.parse(sourceCode);
+        }
         const extraction = extractor.extractFile(tree, relPath, sourceCode);
         const fileProjId = this.getFileProjectId(relPath);
         if (fileProjId) {
@@ -112879,8 +113842,11 @@ var CodeGraphCore = class {
         try {
           const sourceCode = fs8.readFileSync(fullPath, "utf-8");
           const grammarName = ExtractorRegistry.getWasmGrammarForFile(changedFile) || extractor.wasmGrammarName;
-          const parser = await getParserForLanguage(grammarName);
-          const tree = parser.parse(sourceCode);
+          let tree = null;
+          if (grammarName && grammarName !== "none") {
+            const parser = await getParserForLanguage(grammarName);
+            tree = parser.parse(sourceCode);
+          }
           const extraction = extractor.extractFile(tree, changedFile, sourceCode);
           const fileProjId = this.getFileProjectId(changedFile);
           if (fileProjId) {

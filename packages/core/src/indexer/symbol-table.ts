@@ -424,7 +424,7 @@ export class SymbolTable {
 
     const exts = sourceExt === '.py'
       ? ['.py']
-      : ['.ts', '.tsx', '.js', '.jsx', '.go', '.java', '.rs', '.cpp', '.c', '.h', '.hpp', '.cs', '.py'];
+      : ['.ts', '.tsx', '.js', '.jsx', '.go', '.java', '.rs', '.cpp', '.c', '.h', '.hpp', '.cs', '.py', '.vue', '.kt', '.kts', '.swift', '.lua', '.asmdef', '.asmref', '.gd', '.tscn'];
 
     // 1. 处理相对导入 (以 . 开头)
     if (modulePath.startsWith('.')) {
@@ -444,6 +444,7 @@ export class SymbolTable {
           for (const ext of exts) {
             candidates.push(path.posix.join(targetDir, `${rel}${ext}`));
             candidates.push(path.posix.join(targetDir, rel, `index${ext}`));
+            candidates.push(path.posix.join(targetDir, rel, `init${ext}`));
             candidates.push(path.posix.join(targetDir, rel, `__init__${ext}`));
             candidates.push(path.posix.join(targetDir, rel, `mod${ext}`));
           }
@@ -469,17 +470,27 @@ export class SymbolTable {
       }
     }
 
-    // 2. 处理绝对或顶层别名导入 (如 @/components, src.services.user, app.models)
+    // 2. 处理绝对或顶层别名导入 (如 @/components, src.services.user, res://scripts/player.gd)
     if (modulePath) {
       let cleanMod = modulePath;
       if (cleanMod.startsWith('@/') || cleanMod.startsWith('~/')) {
         cleanMod = cleanMod.slice(2);
+      } else if (cleanMod.startsWith('res://')) {
+        cleanMod = cleanMod.replace(/^res:\/\//, '');
       }
+
       const relPath = cleanMod.replace(/\./g, '/');
       const candidates: string[] = [];
+
+      // 若已经自带完整后缀 (如 .gd, .tscn, .lua, .asmdef)
+      if (path.posix.extname(cleanMod)) {
+        candidates.push(cleanMod);
+      }
+
       for (const ext of exts) {
         candidates.push(`${relPath}${ext}`);
         candidates.push(`${relPath}/index${ext}`);
+        candidates.push(`${relPath}/init${ext}`);
         candidates.push(`${relPath}/__init__${ext}`);
         candidates.push(`${relPath}/mod${ext}`);
       }

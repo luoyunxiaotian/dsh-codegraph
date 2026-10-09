@@ -573,6 +573,137 @@ class UserViewModel: UserViewModelProtocol {
   console.log(`  ✓ 成功提取 Swift 协议与类符号: ${swiftProto.name} (${swiftProto.entityType}), ${swiftClass.name} (${swiftClass.entityType})`);
 
   fs.rmSync(newLangsFixture, { recursive: true, force: true });
+
+  // 测试 14: 验证游戏引擎生态全链路 (Phase 2: Lua + Unity .asmdef + Godot .gd / .tscn)
+  console.log('\n[测试 14] 验证 Phase 2 游戏引擎与架构边界生态 (Lua, Unity .asmdef, Godot .gd / .tscn)...');
+  const gameFixture = path.resolve(__dirname, 'fixtures/game_ecosystem');
+  if (fs.existsSync(gameFixture)) {
+    fs.rmSync(gameFixture, { recursive: true, force: true });
+  }
+
+  fs.mkdirSync(path.join(gameFixture, 'lua'), { recursive: true });
+  fs.mkdirSync(path.join(gameFixture, 'unity'), { recursive: true });
+  fs.mkdirSync(path.join(gameFixture, 'godot/scripts'), { recursive: true });
+  fs.mkdirSync(path.join(gameFixture, 'godot/scenes'), { recursive: true });
+
+  // 14.1 Lua 游戏脚本
+  fs.writeFileSync(
+    path.join(gameFixture, 'lua/Player.lua'),
+    `local BaseActor = require("actors.base")
+local Player = setmetatable({}, { __index = BaseActor })
+
+function Player.new(name)
+    local self = setmetatable({}, Player)
+    self.name = name
+    return self
+end
+
+function Player:jump(height)
+    self:playAnimation("jump")
+end
+
+local function calculateStats()
+    return 100
+end
+`
+  );
+
+  // 14.2 Unity 程序集定义 (.asmdef)
+  fs.writeFileSync(
+    path.join(gameFixture, 'unity/Combat.asmdef'),
+    JSON.stringify({
+      name: "GameCore.Combat",
+      rootNamespace: "GameCore.Combat",
+      references: [
+        "GameCore.Common"
+      ],
+      includePlatforms: [],
+      excludePlatforms: [],
+      allowUnsafeCode: false
+    }, null, 2)
+  );
+
+  // 14.3 Godot GDScript 脚本 (.gd)
+  fs.writeFileSync(
+    path.join(gameFixture, 'godot/scripts/Player.gd'),
+    `class_name Player
+extends CharacterBody2D
+
+signal health_changed(new_health: int)
+signal died
+
+const BulletScene = preload("res://scenes/Bullet.tscn")
+
+func _ready() -> void:
+    initialize_player()
+
+func take_damage(amount: int) -> void:
+    health_changed.emit(amount)
+`
+  );
+
+  // 14.4 Godot 场景文件 (.tscn)
+  fs.writeFileSync(
+    path.join(gameFixture, 'godot/scenes/Player.tscn'),
+    `[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/Player.gd" id="1_abc"]
+
+[node name="Player" type="CharacterBody2D"]
+script = ExtResource("1_abc")
+`
+  );
+
+  const gameCore = new CodeGraphCore({
+    workspaceRoot: gameFixture,
+    scopePath: '.',
+  });
+
+  const gameResult = await gameCore.scan();
+  console.log(`  ✓ 游戏引擎生态全量编译成功: 识别文件=${gameResult.meta.fileCount}, 节点=${gameResult.meta.nodeCount}, 关系=${gameResult.meta.edgeCount}`);
+  if (gameResult.meta.fileCount !== 4) {
+    throw new Error(`预期解析 4 个游戏引擎文件，实际解析了 ${gameResult.meta.fileCount} 个`);
+  }
+
+  // 断言 1: Lua 符号与方法
+  const luaClass = Object.values(gameResult.allNodes).find((n) => n.name === 'Player' && n.language === 'lua' && n.entityType === 'CLASS');
+  const luaMethod = Object.values(gameResult.allNodes).find((n) => n.name === 'jump' && n.language === 'lua' && n.entityType === 'METHOD');
+  const luaLocalFn = Object.values(gameResult.allNodes).find((n) => n.name === 'calculateStats' && n.language === 'lua');
+  if (!luaClass || !luaMethod || !luaLocalFn) {
+    throw new Error('未能提取到 Lua Player / jump / calculateStats 符号');
+  }
+  console.log(`  ✓ 成功提取 Lua 表类与方法: ${luaClass.name} (${luaClass.entityType}), ${luaMethod.name} (${luaMethod.entityType}), ${luaLocalFn.name}`);
+
+  // 断言 2: Unity 程序集模块
+  const unityModule = Object.values(gameResult.allNodes).find((n) => n.name === 'GameCore.Combat' && n.language === 'unity' && n.entityType === 'MODULE');
+  if (!unityModule) {
+    throw new Error('未能提取到 Unity GameCore.Combat 程序集模块');
+  }
+  const unityEdge = gameResult.allEdges.find((e) => e.source === unityModule.id && e.target === 'GameCore.Common');
+  if (!unityEdge) {
+    throw new Error('未能提取到 Unity 程序集依赖边: GameCore.Combat -> GameCore.Common');
+  }
+  console.log(`  ✓ 成功提取 Unity 程序集模块与依赖: ${unityModule.name} -> ${unityEdge.target}`);
+
+  // 断言 3: Godot 脚本类、生命周期、信号与场景挂载
+  const gdClass = Object.values(gameResult.allNodes).find((n) => n.name === 'Player' && n.language === 'godot' && n.entityType === 'CLASS' && n.filePath.endsWith('.gd'));
+  const gdSignal = Object.values(gameResult.allNodes).find((n) => n.name === 'health_changed' && n.language === 'godot' && n.entityType === 'ENDPOINT');
+  const gdReady = Object.values(gameResult.allNodes).find((n) => n.name === '_ready' && n.language === 'godot' && n.semanticRole === 'ENTRY');
+  const tscnNode = Object.values(gameResult.allNodes).find((n) => n.language === 'godot' && n.filePath.endsWith('.tscn') && n.entityType === 'CLASS');
+
+  if (!gdClass || !gdSignal || !gdReady || !tscnNode) {
+    throw new Error('未能提取到 Godot Player 类 / health_changed 信号 / _ready 生命周期 / Player 场景节点');
+  }
+  console.log(`  ✓ 成功提取 Godot 脚本与场景符号: 类=${gdClass.name}, 信号=${gdSignal.name}, 生命周期=${gdReady.name} (${gdReady.semanticRole}), 场景=${tscnNode.name}`);
+
+  // 断言 4: 场景挂载脚本依赖边
+  const tscnScriptEdge = gameResult.allEdges.find((e) => e.source === tscnNode.id && e.target.includes('Player.gd'));
+  if (!tscnScriptEdge) {
+    throw new Error('未能提取到 Godot 场景与脚本的绑定关系: Player.tscn -> Player.gd');
+  }
+  console.log(`  ✓ 成功提取 Godot 场景与脚本挂载关系: ${tscnNode.name} -> ${tscnScriptEdge.target}`);
+
+  fs.rmSync(gameFixture, { recursive: true, force: true });
   fs.rmSync(mockRepoDir, { recursive: true, force: true });
   fs.rmSync(multiFixture, { recursive: true, force: true });
   fs.rmSync(fixtureDir, { recursive: true, force: true });

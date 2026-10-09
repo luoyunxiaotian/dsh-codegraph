@@ -204,6 +204,7 @@ export class WorkspaceProfiler {
       'makefile',
       'androidmanifest.xml',
       'tauri.conf.json',
+      'project.godot',
       '.git',
     ];
 
@@ -213,9 +214,9 @@ export class WorkspaceProfiler {
       for (const a of anchors) {
         if (lowerFiles.has(a)) return true;
       }
-      // 检查 .sln / .csproj / .vcxproj
+      // 检查 .sln / .csproj / .vcxproj / .asmdef
       for (const f of lowerFiles) {
-        if (f.endsWith('.sln') || f.endsWith('.csproj') || f.endsWith('.vcxproj')) {
+        if (f.endsWith('.sln') || f.endsWith('.csproj') || f.endsWith('.vcxproj') || f.endsWith('.asmdef')) {
           return true;
         }
       }
@@ -269,7 +270,7 @@ export class WorkspaceProfiler {
             }
           } else {
             const ext = path.extname(item.name).toLowerCase();
-            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|rs|c|cpp|cc|cxx|h|hpp|cs)$/.test(ext)) {
+            if (/^\.(py|ts|tsx|js|jsx|go|java|kt|kts|rs|c|cpp|cc|cxx|h|hpp|cs|vue|swift|lua|asmdef|asmref|gd|tscn)$/.test(ext)) {
               extStats[ext] = (extStats[ext] || 0) + 1;
               fileCount++;
               try {
@@ -297,7 +298,12 @@ export class WorkspaceProfiler {
         else if (ext === '.py') primaryLanguage = 'python';
         else if (ext === '.go') primaryLanguage = 'go';
         else if (ext === '.java') primaryLanguage = 'java';
-        else if (ext === '.kt') primaryLanguage = 'kotlin';
+        else if (['.kt', '.kts'].includes(ext)) primaryLanguage = 'kotlin';
+        else if (ext === '.swift') primaryLanguage = 'swift';
+        else if (ext === '.vue') primaryLanguage = 'vue';
+        else if (ext === '.lua') primaryLanguage = 'lua';
+        else if (['.asmdef', '.asmref'].includes(ext)) primaryLanguage = 'unity';
+        else if (['.gd', '.tscn'].includes(ext)) primaryLanguage = 'godot';
         else if (ext === '.rs') primaryLanguage = 'rust';
         else if (['.cpp', '.cc', '.cxx', '.hpp'].includes(ext)) primaryLanguage = 'cpp';
         else if (['.c', '.h'].includes(ext)) primaryLanguage = 'c';
@@ -308,7 +314,7 @@ export class WorkspaceProfiler {
     // 4. 识别框架与技术栈
     const frameworks: string[] = [];
     if (/(react|@types\/react)/i.test(depContent)) frameworks.push('React');
-    if (/vue/i.test(depContent)) frameworks.push('Vue');
+    if (/vue/i.test(depContent) || primaryLanguage === 'vue') frameworks.push('Vue');
     if (/(next|nuxt)/i.test(depContent)) frameworks.push('Next.js');
     if (/vite/i.test(depContent)) frameworks.push('Vite');
     if (/(fastapi|flask|django)/i.test(depContent)) frameworks.push('FastAPI/Web');
@@ -320,13 +326,25 @@ export class WorkspaceProfiler {
     if (/(cmake)/i.test(depContent)) frameworks.push('CMake');
     if (/(electron)/i.test(depContent)) frameworks.push('Electron');
     if (/(tauri)/i.test(depContent)) frameworks.push('Tauri');
+    if (primaryLanguage === 'godot' || fs.existsSync(path.join(projectDir, 'project.godot'))) frameworks.push('Godot');
+    if (primaryLanguage === 'unity' || fs.existsSync(path.join(projectDir, 'ProjectSettings'))) frameworks.push('Unity');
 
     // 5. 判定目标平台形态 (Platform Fingerprinting)
     let platform: ProjectPlatform = 'UNKNOWN';
     const lowerRel = relPath.toLowerCase();
 
-    // 5.1 Android
+    // 5.1 Game Engine (Godot / Unity / Cocos / Lua)
     if (
+      frameworks.includes('Godot') ||
+      frameworks.includes('Unity') ||
+      primaryLanguage === 'godot' ||
+      primaryLanguage === 'unity' ||
+      (primaryLanguage === 'lua' && /(game|engine|scripts|roblox|cocos)/i.test(lowerRel))
+    ) {
+      platform = 'GAME_ENGINE';
+    }
+    // 5.2 Android
+    else if (
       fs.existsSync(path.join(projectDir, 'AndroidManifest.xml')) ||
       fs.existsSync(path.join(projectDir, 'src/main/AndroidManifest.xml')) ||
       /com\.android\.(application|library)/i.test(depContent) ||
@@ -334,39 +352,40 @@ export class WorkspaceProfiler {
     ) {
       platform = 'MOBILE_ANDROID';
     }
-    // 5.2 iOS
+    // 5.3 iOS
     else if (
       fs.existsSync(path.join(projectDir, 'Podfile')) ||
+      primaryLanguage === 'swift' ||
       /(ios|apple)/i.test(lowerRel)
     ) {
       platform = 'MOBILE_IOS';
     }
-    // 5.3 PC Desktop C++
+    // 5.4 PC Desktop C++
     else if (
       (primaryLanguage === 'cpp' || primaryLanguage === 'c') &&
       (frameworks.includes('Qt') || /(desktop|client|pc|gui|win32)/i.test(lowerRel))
     ) {
       platform = 'DESKTOP_CPP';
     }
-    // 5.4 PC Desktop Python
+    // 5.5 PC Desktop Python
     else if (
       primaryLanguage === 'python' &&
       (frameworks.includes('PyQt') || /(desktop|client|pc|gui)/i.test(lowerRel))
     ) {
       platform = 'DESKTOP_PYTHON';
     }
-    // 5.5 PC Desktop Electron / Tauri
+    // 5.6 PC Desktop Electron / Tauri
     else if (frameworks.includes('Electron') || frameworks.includes('Tauri')) {
       platform = 'DESKTOP_ELECTRON';
     }
-    // 5.6 Web 前端
+    // 5.7 Web 前端
     else if (
-      (primaryLanguage === 'typescript' || primaryLanguage === 'javascript') &&
+      (primaryLanguage === 'typescript' || primaryLanguage === 'javascript' || primaryLanguage === 'vue') &&
       (frameworks.includes('React') || frameworks.includes('Vue') || frameworks.includes('Next.js') || frameworks.includes('Vite') || /(web|frontend|client|portal)/i.test(lowerRel))
     ) {
       platform = 'WEB_FRONTEND';
     }
-    // 5.7 后端服务
+    // 5.8 后端服务
     else if (
       frameworks.includes('FastAPI/Web') ||
       frameworks.includes('Gin') ||
@@ -377,17 +396,19 @@ export class WorkspaceProfiler {
     ) {
       platform = 'BACKEND_SERVICE';
     }
-    // 5.8 辅助工具
+    // 5.9 辅助工具
     else if (/(tools?|scripts?|util(s)?|benchmark|test)/i.test(lowerRel)) {
       platform = 'TOOL_SCRIPT';
     }
-    // 5.9 兜底分类
+    // 5.10 兜底分类
     else if (primaryLanguage === 'cpp') {
       platform = 'DESKTOP_CPP';
     } else if (primaryLanguage === 'python') {
       platform = 'BACKEND_SERVICE';
-    } else if (primaryLanguage === 'typescript' || primaryLanguage === 'javascript') {
+    } else if (primaryLanguage === 'typescript' || primaryLanguage === 'javascript' || primaryLanguage === 'vue') {
       platform = 'WEB_FRONTEND';
+    } else if (primaryLanguage === 'lua') {
+      platform = 'GAME_ENGINE';
     } else if (['go', 'java', 'rust', 'csharp'].includes(primaryLanguage)) {
       platform = 'BACKEND_SERVICE';
     }

@@ -108,6 +108,7 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
     'tree-sitter-vue.wasm',
     'tree-sitter-kotlin.wasm',
     'tree-sitter-swift.wasm',
+    'tree-sitter-lua.wasm',
   ]);
 
   // 寻找 tree-sitter-wasms 的 out 目录
