@@ -71,6 +71,8 @@ export function formatScipUri(
 export function normalizeRoutePattern(routePath: string): string {
   if (!routePath) return '/';
   let norm = routePath.trim();
+  // 移除完整 URL 中的协议与域名端口部分 (如 https://api.example.com/api/v1/users -> /api/v1/users)
+  norm = norm.replace(/^https?:\/\/[^/]+/i, '');
   if (!norm.startsWith('/')) norm = '/' + norm;
   
   // 移除尾部斜杠 (根路由除外)

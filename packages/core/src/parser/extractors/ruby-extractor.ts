@@ -340,10 +340,46 @@ export function extractRubyFile(
       return;
     }
 
-    // 6. 提取 HTTP 客户端请求 (Net::HTTP / Faraday / HTTParty) 与普通调用
+    // 6. 提取 HTTP 客户端请求 (Net::HTTP / Faraday / HTTParty) 与普通调用 / 路由
     if (nodeType === 'call') {
       const text = cursorNode.text;
       const caller = getCurrentCaller();
+
+      // 检测 Rails 路由定义 (get '/path', post '/path', etc.)
+      const railsRouteMatch = text.match(/^(get|post|put|delete|patch)\s+['"]([^'"]+)['"]/i);
+      if (railsRouteMatch) {
+        const verb = railsRouteMatch[1].toUpperCase();
+        const routePath = railsRouteMatch[2];
+        const normPath = normalizeRoutePattern(routePath);
+        const routeId = formatNodeId(filePath, `route_${verb}_${normPath}`);
+        const routeNode: CodeNode = {
+          id: routeId,
+          name: `${verb} ${normPath}`,
+          qualifiedName: `${verb} ${normPath}`,
+          entityType: 'ENDPOINT',
+          semanticRole: 'ENTRY',
+          filePath,
+          language: 'ruby',
+          scipUri: formatScipUri('ruby', filePath, 'Route', `${verb}_${normPath}`, 'def'),
+          loc: {
+            startLine: cursorNode.startPosition.row + 1,
+            endLine: cursorNode.endPosition.row + 1,
+          },
+          endpointMeta: {
+            httpMethod: verb,
+            routePath: normPath,
+            isClientCall: false,
+          },
+        };
+        nodes.push(routeNode);
+        edges.push({
+          id: `defines_${fileNodeId}_${routeId}`,
+          source: fileNodeId,
+          target: routeId,
+          relation: 'CONTAINS',
+          confidence: 'EXTRACTED',
+        });
+      }
 
       const httpMatch = text.match(/\b(Net::HTTP|Faraday|HTTParty|RestClient)\s*\.\s*(get|post|put|delete|patch)\s*\(/i);
       if (httpMatch && caller) {

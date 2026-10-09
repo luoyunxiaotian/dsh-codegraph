@@ -347,6 +347,11 @@ export function extractPhpFile(
             startLine: cursorNode.startPosition.row + 1,
             endLine: cursorNode.endPosition.row + 1,
           },
+          endpointMeta: {
+            httpMethod: verb,
+            routePath: normPath,
+            isClientCall: false,
+          },
         };
 
         nodes.push(routeNode);

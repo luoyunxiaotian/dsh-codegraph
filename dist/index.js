@@ -105584,6 +105584,7 @@ function normalizeRoutePattern(routePath) {
   if (!routePath)
     return "/";
   let norm = routePath.trim();
+  norm = norm.replace(/^https?:\/\/[^/]+/i, "");
   if (!norm.startsWith("/"))
     norm = "/" + norm;
   if (norm.length > 1 && norm.endsWith("/")) {
@@ -110723,6 +110724,11 @@ function extractPhpFile(tree, filePath, sourceCode) {
           loc: {
             startLine: cursorNode.startPosition.row + 1,
             endLine: cursorNode.endPosition.row + 1
+          },
+          endpointMeta: {
+            httpMethod: verb,
+            routePath: normPath,
+            isClientCall: false
           }
         };
         nodes.push(routeNode);
@@ -111065,6 +111071,40 @@ function extractRubyFile(tree, filePath, sourceCode) {
     if (nodeType === "call") {
       const text = cursorNode.text;
       const caller = getCurrentCaller();
+      const railsRouteMatch = text.match(/^(get|post|put|delete|patch)\s+['"]([^'"]+)['"]/i);
+      if (railsRouteMatch) {
+        const verb = railsRouteMatch[1].toUpperCase();
+        const routePath = railsRouteMatch[2];
+        const normPath = normalizeRoutePattern(routePath);
+        const routeId = formatNodeId(filePath, `route_${verb}_${normPath}`);
+        const routeNode = {
+          id: routeId,
+          name: `${verb} ${normPath}`,
+          qualifiedName: `${verb} ${normPath}`,
+          entityType: "ENDPOINT",
+          semanticRole: "ENTRY",
+          filePath,
+          language: "ruby",
+          scipUri: formatScipUri("ruby", filePath, "Route", `${verb}_${normPath}`, "def"),
+          loc: {
+            startLine: cursorNode.startPosition.row + 1,
+            endLine: cursorNode.endPosition.row + 1
+          },
+          endpointMeta: {
+            httpMethod: verb,
+            routePath: normPath,
+            isClientCall: false
+          }
+        };
+        nodes.push(routeNode);
+        edges.push({
+          id: `defines_${fileNodeId}_${routeId}`,
+          source: fileNodeId,
+          target: routeId,
+          relation: "CONTAINS",
+          confidence: "EXTRACTED"
+        });
+      }
       const httpMatch = text.match(/\b(Net::HTTP|Faraday|HTTParty|RestClient)\s*\.\s*(get|post|put|delete|patch)\s*\(/i);
       if (httpMatch && caller) {
         const method = httpMatch[2].toUpperCase();
