@@ -6,6 +6,7 @@ import { ProcessFlowCanvas } from './components/ProcessFlowCanvas.js';
 import { DrillDownCanvas } from './components/DrillDownCanvas.js';
 import { CodeDrawer } from './components/CodeDrawer.js';
 import { ProjectScopeDrawer } from './components/ProjectScopeDrawer.js';
+import { UpdateModal } from './components/UpdateModal.js';
 import { Toast } from './components/Toast.js';
 import { showToast } from './utils/chatBridge.js';
 import {
@@ -14,6 +15,7 @@ import {
   CodeNode,
   DetectedProjectProfile,
 } from '../../core/src/types/index.js';
+import { UpdateCheckResult } from '../../core/src/updater/types.js';
 
 export const App: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState<boolean>(false);
@@ -34,6 +36,27 @@ export const App: React.FC = () => {
   const [projects, setProjects] = useState<DetectedProjectProfile[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
   const [isScopeDrawerOpen, setIsScopeDrawerOpen] = useState<boolean>(false);
+
+  // 插件版本与自更新状态
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState<boolean>(false);
+
+  const checkUpdate = useCallback(async (force: boolean = false): Promise<UpdateCheckResult | null> => {
+    try {
+      const res = await fetch(`/api/update/check${force ? '?force=true' : ''}`);
+      const data = await res.json();
+      if (data.success) {
+        setUpdateInfo(data);
+        return data;
+      }
+    } catch {}
+    return null;
+  }, []);
+
+  // 启动时静默检查更新 (内置 15 分钟缓存，避免频繁请求)
+  useEffect(() => {
+    checkUpdate(false);
+  }, [checkUpdate]);
 
   // 初始化检查后端状态与 URL 参数 (优先关联当前会话专属路径)
   useEffect(() => {
@@ -307,6 +330,12 @@ export const App: React.FC = () => {
           hasExistingGraph={!!graphData}
           onCancel={() => setIsInitialized(true)}
         />
+        <UpdateModal
+          isOpen={isUpdateModalOpen}
+          onClose={() => setIsUpdateModalOpen(false)}
+          updateInfo={updateInfo}
+          onCheckUpdate={checkUpdate}
+        />
         <Toast />
       </div>
     );
@@ -338,6 +367,8 @@ export const App: React.FC = () => {
         activeProjectId={graphData.meta.activeProjectId || activeProjectId}
         onSwitchProject={handleSwitchProject}
         onOpenScopeDrawer={() => setIsScopeDrawerOpen(true)}
+        updateInfo={updateInfo}
+        onOpenUpdateModal={() => setIsUpdateModalOpen(true)}
       />
 
       {/* 主画布展示区 */}
@@ -394,6 +425,14 @@ export const App: React.FC = () => {
           isLoading={isLoading}
         />
       </main>
+
+      {/* 插件自更新管理模态框 */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        updateInfo={updateInfo}
+        onCheckUpdate={checkUpdate}
+      />
 
       {/* 全局微型气泡提示 */}
       <Toast />

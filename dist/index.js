@@ -103,7 +103,7 @@ var require_path = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.convertPosixPathToPattern = exports2.convertWindowsPathToPattern = exports2.convertPathToPattern = exports2.escapePosixPath = exports2.escapeWindowsPath = exports2.escape = exports2.removeLeadingDotSegment = exports2.makeAbsolute = exports2.unixify = void 0;
     var os = __require("os");
-    var path11 = __require("path");
+    var path12 = __require("path");
     var IS_WINDOWS_PLATFORM = os.platform() === "win32";
     var LEADING_DOT_SEGMENT_CHARACTERS_COUNT = 2;
     var POSIX_UNESCAPED_GLOB_SYMBOLS_RE = /(\\?)([()*?[\]{|}]|^!|[!+@](?=\()|\\(?![!()*+?@[\]{|}]))/g;
@@ -115,7 +115,7 @@ var require_path = __commonJS({
     }
     exports2.unixify = unixify;
     function makeAbsolute(cwd, filepath) {
-      return path11.resolve(cwd, filepath);
+      return path12.resolve(cwd, filepath);
     }
     exports2.makeAbsolute = makeAbsolute;
     function removeLeadingDotSegment(entry) {
@@ -1412,7 +1412,7 @@ var require_braces = __commonJS({
 var require_constants2 = __commonJS({
   "node_modules/.pnpm/picomatch@2.3.2/node_modules/picomatch/lib/constants.js"(exports2, module2) {
     "use strict";
-    var path11 = __require("path");
+    var path12 = __require("path");
     var WIN_SLASH = "\\\\/";
     var WIN_NO_SLASH = `[^${WIN_SLASH}]`;
     var DEFAULT_MAX_EXTGLOB_RECURSION = 0;
@@ -1586,7 +1586,7 @@ var require_constants2 = __commonJS({
       /* | */
       CHAR_ZERO_WIDTH_NOBREAK_SPACE: 65279,
       /* \uFEFF */
-      SEP: path11.sep,
+      SEP: path12.sep,
       /**
        * Create EXTGLOB_CHARS
        */
@@ -1613,7 +1613,7 @@ var require_constants2 = __commonJS({
 var require_utils2 = __commonJS({
   "node_modules/.pnpm/picomatch@2.3.2/node_modules/picomatch/lib/utils.js"(exports2) {
     "use strict";
-    var path11 = __require("path");
+    var path12 = __require("path");
     var win32 = process.platform === "win32";
     var {
       REGEX_BACKSLASH,
@@ -1642,7 +1642,7 @@ var require_utils2 = __commonJS({
       if (options && typeof options.windows === "boolean") {
         return options.windows;
       }
-      return win32 === true || path11.sep === "\\";
+      return win32 === true || path12.sep === "\\";
     };
     exports2.escapeLast = (input, char, lastIdx) => {
       const idx = input.lastIndexOf(char, lastIdx);
@@ -3006,7 +3006,7 @@ var require_parse2 = __commonJS({
 var require_picomatch = __commonJS({
   "node_modules/.pnpm/picomatch@2.3.2/node_modules/picomatch/lib/picomatch.js"(exports2, module2) {
     "use strict";
-    var path11 = __require("path");
+    var path12 = __require("path");
     var scan = require_scan();
     var parse = require_parse2();
     var utils = require_utils2();
@@ -3091,7 +3091,7 @@ var require_picomatch = __commonJS({
     };
     picomatch.matchBase = (input, glob, options, posix = utils.isWindows(options)) => {
       const regex = glob instanceof RegExp ? glob : picomatch.makeRe(glob, options);
-      return regex.test(path11.basename(input));
+      return regex.test(path12.basename(input));
     };
     picomatch.isMatch = (str, patterns, options) => picomatch(patterns, options)(str);
     picomatch.parse = (pattern, options) => {
@@ -3318,7 +3318,7 @@ var require_pattern = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.isAbsolute = exports2.partitionAbsoluteAndRelative = exports2.removeDuplicateSlashes = exports2.matchAny = exports2.convertPatternsToRe = exports2.makeRe = exports2.getPatternParts = exports2.expandBraceExpansion = exports2.expandPatternsWithBraceExpansion = exports2.isAffectDepthOfReadingPattern = exports2.endsWithSlashGlobStar = exports2.hasGlobStar = exports2.getBaseDirectory = exports2.isPatternRelatedToParentDirectory = exports2.getPatternsOutsideCurrentDirectory = exports2.getPatternsInsideCurrentDirectory = exports2.getPositivePatterns = exports2.getNegativePatterns = exports2.isPositivePattern = exports2.isNegativePattern = exports2.convertToNegativePattern = exports2.convertToPositivePattern = exports2.isDynamicPattern = exports2.isStaticPattern = void 0;
-    var path11 = __require("path");
+    var path12 = __require("path");
     var globParent = require_glob_parent();
     var micromatch = require_micromatch();
     var GLOBSTAR = "**";
@@ -3413,7 +3413,7 @@ var require_pattern = __commonJS({
     }
     exports2.endsWithSlashGlobStar = endsWithSlashGlobStar;
     function isAffectDepthOfReadingPattern(pattern) {
-      const basename = path11.basename(pattern);
+      const basename = path12.basename(pattern);
       return endsWithSlashGlobStar(pattern) || isStaticPattern(basename);
     }
     exports2.isAffectDepthOfReadingPattern = isAffectDepthOfReadingPattern;
@@ -3471,7 +3471,7 @@ var require_pattern = __commonJS({
     }
     exports2.partitionAbsoluteAndRelative = partitionAbsoluteAndRelative;
     function isAbsolute(pattern) {
-      return path11.isAbsolute(pattern);
+      return path12.isAbsolute(pattern);
     }
     exports2.isAbsolute = isAbsolute;
   }
@@ -3646,10 +3646,10 @@ var require_utils3 = __commonJS({
     exports2.array = array;
     var errno = require_errno();
     exports2.errno = errno;
-    var fs10 = require_fs();
-    exports2.fs = fs10;
-    var path11 = require_path();
-    exports2.path = path11;
+    var fs11 = require_fs();
+    exports2.fs = fs11;
+    var path12 = require_path();
+    exports2.path = path12;
     var pattern = require_pattern();
     exports2.pattern = pattern;
     var stream = require_stream();
@@ -3761,8 +3761,8 @@ var require_async = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.read = void 0;
-    function read(path11, settings, callback) {
-      settings.fs.lstat(path11, (lstatError, lstat) => {
+    function read(path12, settings, callback) {
+      settings.fs.lstat(path12, (lstatError, lstat) => {
         if (lstatError !== null) {
           callFailureCallback(callback, lstatError);
           return;
@@ -3771,7 +3771,7 @@ var require_async = __commonJS({
           callSuccessCallback(callback, lstat);
           return;
         }
-        settings.fs.stat(path11, (statError, stat) => {
+        settings.fs.stat(path12, (statError, stat) => {
           if (statError !== null) {
             if (settings.throwErrorOnBrokenSymbolicLink) {
               callFailureCallback(callback, statError);
@@ -3803,13 +3803,13 @@ var require_sync = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.read = void 0;
-    function read(path11, settings) {
-      const lstat = settings.fs.lstatSync(path11);
+    function read(path12, settings) {
+      const lstat = settings.fs.lstatSync(path12);
       if (!lstat.isSymbolicLink() || !settings.followSymbolicLink) {
         return lstat;
       }
       try {
-        const stat = settings.fs.statSync(path11);
+        const stat = settings.fs.statSync(path12);
         if (settings.markSymbolicLink) {
           stat.isSymbolicLink = () => true;
         }
@@ -3831,12 +3831,12 @@ var require_fs2 = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.createFileSystemAdapter = exports2.FILE_SYSTEM_ADAPTER = void 0;
-    var fs10 = __require("fs");
+    var fs11 = __require("fs");
     exports2.FILE_SYSTEM_ADAPTER = {
-      lstat: fs10.lstat,
-      stat: fs10.stat,
-      lstatSync: fs10.lstatSync,
-      statSync: fs10.statSync
+      lstat: fs11.lstat,
+      stat: fs11.stat,
+      lstatSync: fs11.lstatSync,
+      statSync: fs11.statSync
     };
     function createFileSystemAdapter(fsMethods) {
       if (fsMethods === void 0) {
@@ -3853,12 +3853,12 @@ var require_settings = __commonJS({
   "node_modules/.pnpm/@nodelib+fs.stat@2.0.5/node_modules/@nodelib/fs.stat/out/settings.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var fs10 = require_fs2();
+    var fs11 = require_fs2();
     var Settings = class {
       constructor(_options = {}) {
         this._options = _options;
         this.followSymbolicLink = this._getValue(this._options.followSymbolicLink, true);
-        this.fs = fs10.createFileSystemAdapter(this._options.fs);
+        this.fs = fs11.createFileSystemAdapter(this._options.fs);
         this.markSymbolicLink = this._getValue(this._options.markSymbolicLink, false);
         this.throwErrorOnBrokenSymbolicLink = this._getValue(this._options.throwErrorOnBrokenSymbolicLink, true);
       }
@@ -3880,17 +3880,17 @@ var require_out = __commonJS({
     var sync = require_sync();
     var settings_1 = require_settings();
     exports2.Settings = settings_1.default;
-    function stat(path11, optionsOrSettingsOrCallback, callback) {
+    function stat(path12, optionsOrSettingsOrCallback, callback) {
       if (typeof optionsOrSettingsOrCallback === "function") {
-        async.read(path11, getSettings(), optionsOrSettingsOrCallback);
+        async.read(path12, getSettings(), optionsOrSettingsOrCallback);
         return;
       }
-      async.read(path11, getSettings(optionsOrSettingsOrCallback), callback);
+      async.read(path12, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports2.stat = stat;
-    function statSync(path11, optionsOrSettings) {
+    function statSync(path12, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
-      return sync.read(path11, settings);
+      return sync.read(path12, settings);
     }
     exports2.statSync = statSync;
     function getSettings(settingsOrOptions = {}) {
@@ -4013,8 +4013,8 @@ var require_utils4 = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.fs = void 0;
-    var fs10 = require_fs3();
-    exports2.fs = fs10;
+    var fs11 = require_fs3();
+    exports2.fs = fs11;
   }
 });
 
@@ -4106,16 +4106,16 @@ var require_async2 = __commonJS({
           return;
         }
         const tasks = names.map((name3) => {
-          const path11 = common.joinPathSegments(directory, name3, settings.pathSegmentSeparator);
+          const path12 = common.joinPathSegments(directory, name3, settings.pathSegmentSeparator);
           return (done) => {
-            fsStat.stat(path11, settings.fsStatSettings, (error, stats) => {
+            fsStat.stat(path12, settings.fsStatSettings, (error, stats) => {
               if (error !== null) {
                 done(error);
                 return;
               }
               const entry = {
                 name: name3,
-                path: path11,
+                path: path12,
                 dirent: utils.fs.createDirentFromStats(name3, stats)
               };
               if (settings.stats) {
@@ -4209,14 +4209,14 @@ var require_fs4 = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.createFileSystemAdapter = exports2.FILE_SYSTEM_ADAPTER = void 0;
-    var fs10 = __require("fs");
+    var fs11 = __require("fs");
     exports2.FILE_SYSTEM_ADAPTER = {
-      lstat: fs10.lstat,
-      stat: fs10.stat,
-      lstatSync: fs10.lstatSync,
-      statSync: fs10.statSync,
-      readdir: fs10.readdir,
-      readdirSync: fs10.readdirSync
+      lstat: fs11.lstat,
+      stat: fs11.stat,
+      lstatSync: fs11.lstatSync,
+      statSync: fs11.statSync,
+      readdir: fs11.readdir,
+      readdirSync: fs11.readdirSync
     };
     function createFileSystemAdapter(fsMethods) {
       if (fsMethods === void 0) {
@@ -4233,15 +4233,15 @@ var require_settings2 = __commonJS({
   "node_modules/.pnpm/@nodelib+fs.scandir@2.1.5/node_modules/@nodelib/fs.scandir/out/settings.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path11 = __require("path");
+    var path12 = __require("path");
     var fsStat = require_out();
-    var fs10 = require_fs4();
+    var fs11 = require_fs4();
     var Settings = class {
       constructor(_options = {}) {
         this._options = _options;
         this.followSymbolicLinks = this._getValue(this._options.followSymbolicLinks, false);
-        this.fs = fs10.createFileSystemAdapter(this._options.fs);
-        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path11.sep);
+        this.fs = fs11.createFileSystemAdapter(this._options.fs);
+        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path12.sep);
         this.stats = this._getValue(this._options.stats, false);
         this.throwErrorOnBrokenSymbolicLink = this._getValue(this._options.throwErrorOnBrokenSymbolicLink, true);
         this.fsStatSettings = new fsStat.Settings({
@@ -4268,17 +4268,17 @@ var require_out2 = __commonJS({
     var sync = require_sync2();
     var settings_1 = require_settings2();
     exports2.Settings = settings_1.default;
-    function scandir(path11, optionsOrSettingsOrCallback, callback) {
+    function scandir(path12, optionsOrSettingsOrCallback, callback) {
       if (typeof optionsOrSettingsOrCallback === "function") {
-        async.read(path11, getSettings(), optionsOrSettingsOrCallback);
+        async.read(path12, getSettings(), optionsOrSettingsOrCallback);
         return;
       }
-      async.read(path11, getSettings(optionsOrSettingsOrCallback), callback);
+      async.read(path12, getSettings(optionsOrSettingsOrCallback), callback);
     }
     exports2.scandir = scandir;
-    function scandirSync(path11, optionsOrSettings) {
+    function scandirSync(path12, optionsOrSettings) {
       const settings = getSettings(optionsOrSettings);
-      return sync.read(path11, settings);
+      return sync.read(path12, settings);
     }
     exports2.scandirSync = scandirSync;
     function getSettings(settingsOrOptions = {}) {
@@ -4926,7 +4926,7 @@ var require_settings3 = __commonJS({
   "node_modules/.pnpm/@nodelib+fs.walk@1.2.8/node_modules/@nodelib/fs.walk/out/settings.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path11 = __require("path");
+    var path12 = __require("path");
     var fsScandir = require_out2();
     var Settings = class {
       constructor(_options = {}) {
@@ -4936,7 +4936,7 @@ var require_settings3 = __commonJS({
         this.deepFilter = this._getValue(this._options.deepFilter, null);
         this.entryFilter = this._getValue(this._options.entryFilter, null);
         this.errorFilter = this._getValue(this._options.errorFilter, null);
-        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path11.sep);
+        this.pathSegmentSeparator = this._getValue(this._options.pathSegmentSeparator, path12.sep);
         this.fsScandirSettings = new fsScandir.Settings({
           followSymbolicLinks: this._options.followSymbolicLinks,
           fs: this._options.fs,
@@ -4998,7 +4998,7 @@ var require_reader2 = __commonJS({
   "node_modules/.pnpm/fast-glob@3.3.3/node_modules/fast-glob/out/readers/reader.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path11 = __require("path");
+    var path12 = __require("path");
     var fsStat = require_out();
     var utils = require_utils3();
     var Reader = class {
@@ -5011,7 +5011,7 @@ var require_reader2 = __commonJS({
         });
       }
       _getFullEntryPath(filepath) {
-        return path11.resolve(this._settings.cwd, filepath);
+        return path12.resolve(this._settings.cwd, filepath);
       }
       _makeEntry(stats, pattern) {
         const entry = {
@@ -5427,7 +5427,7 @@ var require_provider = __commonJS({
   "node_modules/.pnpm/fast-glob@3.3.3/node_modules/fast-glob/out/providers/provider.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
-    var path11 = __require("path");
+    var path12 = __require("path");
     var deep_1 = require_deep();
     var entry_1 = require_entry();
     var error_1 = require_error();
@@ -5441,7 +5441,7 @@ var require_provider = __commonJS({
         this.entryTransformer = new entry_2.default(this._settings);
       }
       _getRootDirectory(task) {
-        return path11.resolve(this._settings.cwd, task.base);
+        return path12.resolve(this._settings.cwd, task.base);
       }
       _getReaderOptions(task) {
         const basePath = task.base === "." ? "" : task.base;
@@ -5622,16 +5622,16 @@ var require_settings4 = __commonJS({
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.DEFAULT_FILE_SYSTEM_ADAPTER = void 0;
-    var fs10 = __require("fs");
+    var fs11 = __require("fs");
     var os = __require("os");
     var CPU_COUNT = Math.max(os.cpus().length, 1);
     exports2.DEFAULT_FILE_SYSTEM_ADAPTER = {
-      lstat: fs10.lstat,
-      lstatSync: fs10.lstatSync,
-      stat: fs10.stat,
-      statSync: fs10.statSync,
-      readdir: fs10.readdir,
-      readdirSync: fs10.readdirSync
+      lstat: fs11.lstat,
+      lstatSync: fs11.lstatSync,
+      stat: fs11.stat,
+      statSync: fs11.statSync,
+      readdir: fs11.readdir,
+      readdirSync: fs11.readdirSync
     };
     var Settings = class {
       constructor(_options = {}) {
@@ -5809,11 +5809,11 @@ var require_tree_sitter = __commonJS({
               throw toThrow;
             };
             var scriptDirectory = "";
-            function locateFile(path11) {
+            function locateFile(path12) {
               if (Module["locateFile"]) {
-                return Module["locateFile"](path11, scriptDirectory);
+                return Module["locateFile"](path12, scriptDirectory);
               }
-              return scriptDirectory + path11;
+              return scriptDirectory + path12;
             }
             var readAsync, readBinary;
             if (ENVIRONMENT_IS_NODE) {
@@ -8334,8 +8334,8 @@ var require_tree_sitter = __commonJS({
                 } else {
                   const url = input;
                   if (typeof process !== "undefined" && process.versions && process.versions.node) {
-                    const fs10 = __require("fs");
-                    bytes = Promise.resolve(fs10.readFileSync(url));
+                    const fs11 = __require("fs");
+                    bytes = Promise.resolve(fs11.readFileSync(url));
                   } else {
                     bytes = fetch(url).then((response) => response.arrayBuffer().then((buffer) => {
                       if (response.ok) {
@@ -30346,7 +30346,7 @@ var require_elk_bundled = __commonJS({
               }
               return new csd(a);
             }
-            function fs10(a) {
+            function fs11(a) {
               while (!a.d || !a.d.Ob()) {
                 if (!!a.b && !nmb(a.b)) {
                   a.d = RD(smb(a.b), 51);
@@ -44737,7 +44737,7 @@ var require_elk_bundled = __commonJS({
             function gs(a) {
               var b;
               while (!RD(Qb(a.a), 51).Ob()) {
-                a.d = fs10(a);
+                a.d = fs11(a);
                 if (!a.d) {
                   return false;
                 }
@@ -105424,14 +105424,14 @@ var require_elk_bundled = __commonJS({
 });
 
 // packages/harness-adapter/src/index.ts
-import path10 from "path";
-import fs9 from "fs";
+import path11 from "path";
+import fs10 from "fs";
 import { fileURLToPath as fileURLToPath3 } from "url";
 
 // packages/core/dist/index.js
 var import_fast_glob2 = __toESM(require_out4(), 1);
-import fs8 from "fs";
-import path9 from "path";
+import fs9 from "fs";
+import path10 from "path";
 
 // packages/core/dist/parser/tree-sitter-loader.js
 var import_web_tree_sitter = __toESM(require_tree_sitter(), 1);
@@ -110709,8 +110709,8 @@ function extractPhpFile(tree, filePath, sourceCode) {
       const routeMatch = text.match(/Route::(get|post|put|delete|patch|match|any)\s*\(\s*['"]([^'"]+)['"]/i);
       if (routeMatch) {
         const verb = routeMatch[1].toUpperCase();
-        const path11 = routeMatch[2];
-        const normPath = normalizeRoutePattern(path11);
+        const path12 = routeMatch[2];
+        const normPath = normalizeRoutePattern(path12);
         const routeId = formatNodeId(filePath, `route_${verb}_${normPath}`);
         const routeNode = {
           id: routeId,
@@ -114417,18 +114417,18 @@ var ArchitectureHealthAuditor = class {
     }
     const visited = /* @__PURE__ */ new Set();
     const recStack = /* @__PURE__ */ new Set();
-    const path11 = [];
+    const path12 = [];
     const detectModuleCycles = (u) => {
       visited.add(u);
       recStack.add(u);
-      path11.push(u);
+      path12.push(u);
       const neighbors = moduleAdj.get(u) || /* @__PURE__ */ new Set();
       for (const v of neighbors) {
         if (!visited.has(v)) {
           detectModuleCycles(v);
         } else if (recStack.has(v)) {
-          const cycleStartIdx = path11.indexOf(v);
-          const cyclePath = path11.slice(cycleStartIdx).concat(v);
+          const cycleStartIdx = path12.indexOf(v);
+          const cyclePath = path12.slice(cycleStartIdx).concat(v);
           const cycleKey = cyclePath.join(" -> ");
           if (!cycles.some((c) => c.nodes.join(" -> ") === cycleKey)) {
             cycles.push({
@@ -114439,7 +114439,7 @@ var ArchitectureHealthAuditor = class {
           }
         }
       }
-      path11.pop();
+      path12.pop();
       recStack.delete(u);
     };
     for (const m of modules) {
@@ -115038,12 +115038,529 @@ var ElkLayoutEngine = class {
 
 // packages/core/dist/server.js
 import http from "http";
+import fs8 from "fs";
+import path9 from "path";
+import { URL as URL2, fileURLToPath as fileURLToPath2 } from "url";
+
+// packages/core/dist/updater/plugin-updater.js
 import fs7 from "fs";
 import path8 from "path";
-import { URL as URL2, fileURLToPath as fileURLToPath2 } from "url";
+import crypto2 from "crypto";
+
+// packages/core/dist/updater/mirror-speed-tester.js
+var DEFAULT_REPO = "luoyunxiaotian/dsh-codegraph";
+function formatSpeed(bps) {
+  if (bps <= 0)
+    return "0 B/s";
+  if (bps < 1024)
+    return `${bps} B/s`;
+  if (bps < 1024 * 1024)
+    return `${(bps / 1024).toFixed(1)} KB/s`;
+  return `${(bps / (1024 * 1024)).toFixed(2)} MB/s`;
+}
+function getDefaultMirrors(repo = DEFAULT_REPO, customHuaweiUrl) {
+  const mirrors = [
+    {
+      id: "ghproxy",
+      name: "GHProxy \u9AD8\u901F\u955C\u50CF",
+      type: "proxy",
+      resolveUrl: (rel) => `https://ghproxy.net/https://raw.githubusercontent.com/${repo}/main/${rel}`
+    },
+    {
+      id: "mirror_ghproxy",
+      name: "Mirror-GHProxy \u8282\u70B9",
+      type: "proxy",
+      resolveUrl: (rel) => `https://mirror.ghproxy.com/https://raw.githubusercontent.com/${repo}/main/${rel}`
+    },
+    {
+      id: "gitmirror",
+      name: "GitMirror \u540C\u6B65\u6E90",
+      type: "raw",
+      resolveUrl: (rel) => `https://raw.gitmirror.com/${repo}/main/${rel}`
+    },
+    {
+      id: "gh_proxy_net",
+      name: "GH-Proxy \u5907\u7528\u8282\u70B9",
+      type: "proxy",
+      resolveUrl: (rel) => `https://gh-proxy.com/https://raw.githubusercontent.com/${repo}/main/${rel}`
+    },
+    {
+      id: "jsdelivr_cdn",
+      name: "jsDelivr \u5168\u7403\u52A0\u901F CDN",
+      type: "cdn",
+      resolveUrl: (rel) => `https://cdn.jsdelivr.net/gh/${repo}@main/${rel}`
+    },
+    {
+      id: "huawei_fallback",
+      name: "\u534E\u4E3A\u4E91\u5F00\u6E90\u955C\u50CF (\u7EC8\u6781\u515C\u5E95)",
+      type: "huawei_fallback",
+      isFallback: true,
+      resolveUrl: (rel) => {
+        if (customHuaweiUrl) {
+          const base = customHuaweiUrl.replace(/\/+$/, "");
+          return `${base}/${rel}`;
+        }
+        return `https://mirrors.huaweicloud.com/github-mirror/${repo}/main/${rel}`;
+      }
+    },
+    {
+      id: "github_direct",
+      name: "GitHub \u5B98\u65B9\u6E90 (\u76F4\u8FDE)",
+      type: "raw",
+      resolveUrl: (rel) => `https://raw.githubusercontent.com/${repo}/main/${rel}`
+    }
+  ];
+  return mirrors;
+}
+var MirrorSpeedTester = class {
+  /**
+   * 对单个镜像执行持续流式测速
+   */
+  static async testSingleMirror(mirror, sampleRelativePath = "feed/manifest.json", windowMs = 2800, timeoutMs = 6e3) {
+    const targetUrl = mirror.resolveUrl(sampleRelativePath);
+    const controller = new AbortController();
+    const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
+    const startTime = Date.now();
+    let firstByteTime = 0;
+    let totalBytesReceived = 0;
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "CodeGraph-Updater/2.0.0",
+          "Cache-Control": "no-cache"
+        },
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+      firstByteTime = Date.now();
+      const latencyMs = firstByteTime - startTime;
+      if (!response.body) {
+        throw new Error("\u672A\u83B7\u53D6\u5230\u54CD\u5E94\u6570\u636E\u6D41 (Empty Body)");
+      }
+      const reader = response.body.getReader();
+      const raceStartTime = Date.now();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done)
+          break;
+        if (value) {
+          totalBytesReceived += value.length;
+        }
+        if (Date.now() - raceStartTime >= windowMs) {
+          break;
+        }
+      }
+      clearTimeout(timeoutTimer);
+      try {
+        await reader.cancel();
+      } catch {
+      }
+      const durationSec = Math.max((Date.now() - raceStartTime) / 1e3, 0.2);
+      const speedBps = Math.round(totalBytesReceived / durationSec);
+      return {
+        id: mirror.id,
+        name: mirror.name,
+        speedBps,
+        speedFormatted: formatSpeed(speedBps),
+        latencyMs,
+        success: true,
+        isFallback: mirror.isFallback
+      };
+    } catch (err2) {
+      clearTimeout(timeoutTimer);
+      return {
+        id: mirror.id,
+        name: mirror.name,
+        speedBps: 0,
+        speedFormatted: "\u8FDE\u63A5\u5931\u8D25",
+        latencyMs: 9999,
+        success: false,
+        error: err2.name === "AbortError" ? "\u8FDE\u63A5\u8D85\u65F6" : err2.message || "\u7F51\u7EDC\u5F02\u5E38",
+        isFallback: mirror.isFallback
+      };
+    }
+  }
+  /**
+   * 并发对所有镜像发起实测竞速，并输出速度排行榜
+   */
+  static async raceAllMirrors(mirrors, sampleRelativePath = "feed/manifest.json", windowMs = 2800) {
+    console.log(`[CodeGraph Updater] \u6B63\u5728\u5BF9 ${mirrors.length} \u4E2A\u955C\u50CF\u8282\u70B9\u542F\u52A8 3 \u79D2\u6301\u7EED\u541E\u5410\u5B9E\u6D4B\u7ADE\u901F...`);
+    const results = await Promise.all(mirrors.map((m) => this.testSingleMirror(m, sampleRelativePath, windowMs)));
+    results.sort((a, b) => {
+      if (a.success && !b.success)
+        return -1;
+      if (!a.success && b.success)
+        return 1;
+      return b.speedBps - a.speedBps;
+    });
+    console.log("[CodeGraph Updater] \u955C\u50CF\u5B9E\u6D4B\u7ADE\u901F\u699C\u5355:");
+    results.forEach((r, idx) => {
+      const tag = idx === 0 && r.success ? "\u{1F3C6} [\u6700\u4F18\u6E90]" : r.isFallback ? "\u{1F6E1}\uFE0F [\u515C\u5E95\u6E90]" : `[#${idx + 1}]`;
+      console.log(`  ${tag} ${r.name.padEnd(26)} -> \u6301\u7EED\u901F\u5EA6: ${r.speedFormatted.padEnd(10)} \u54CD\u5E94\u5EF6\u8FDF: ${r.latencyMs}ms ${r.error ? `(${r.error})` : ""}`);
+    });
+    return results;
+  }
+};
+
+// packages/core/dist/updater/plugin-updater.js
+function compareVersions(a, b) {
+  const cleanA = a.replace(/^v/i, "").trim();
+  const cleanB = b.replace(/^v/i, "").trim();
+  const partsA = cleanA.split("-")[0].split(".").map((n) => parseInt(n, 10) || 0);
+  const partsB = cleanB.split("-")[0].split(".").map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(partsA.length, partsB.length);
+  for (let i2 = 0; i2 < len; i2++) {
+    const numA = partsA[i2] || 0;
+    const numB = partsB[i2] || 0;
+    if (numA > numB)
+      return 1;
+    if (numA < numB)
+      return -1;
+  }
+  return 0;
+}
+function sha256File(filePath) {
+  const content = fs7.readFileSync(filePath);
+  return crypto2.createHash("sha256").update(content).digest("hex");
+}
+async function renameWithRetry(sourcePath, targetPath, maxAttempts = 6, initialBackoffMs = 100) {
+  let attempt = 0;
+  while (true) {
+    try {
+      if (fs7.existsSync(targetPath)) {
+        try {
+          fs7.unlinkSync(targetPath);
+        } catch {
+        }
+      }
+      fs7.renameSync(sourcePath, targetPath);
+      return;
+    } catch (err2) {
+      attempt++;
+      if (attempt >= maxAttempts) {
+        try {
+          fs7.copyFileSync(sourcePath, targetPath);
+          try {
+            fs7.unlinkSync(sourcePath);
+          } catch {
+          }
+          return;
+        } catch (copyErr) {
+          throw new Error(`\u8986\u76D6\u6587\u4EF6\u5931\u8D25 [${targetPath}]: ${err2.message || copyErr}`);
+        }
+      }
+      const backoff = initialBackoffMs * Math.pow(1.5, attempt);
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
+}
+var PluginUpdater = class {
+  pluginRoot;
+  repo;
+  customHuaweiUrl;
+  cachedCheckResult = null;
+  lastCheckTime = 0;
+  currentProgress = { phase: "idle", percent: 0 };
+  constructor(pluginRoot, repo = DEFAULT_REPO, customHuaweiUrl) {
+    this.pluginRoot = path8.resolve(pluginRoot);
+    this.repo = repo;
+    this.customHuaweiUrl = customHuaweiUrl;
+  }
+  getProgress() {
+    return this.currentProgress;
+  }
+  /**
+   * 获取本地插件当前版本号 (读取 package.json)
+   */
+  getLocalVersion() {
+    try {
+      const pkgPath = path8.join(this.pluginRoot, "package.json");
+      if (fs7.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs7.readFileSync(pkgPath, "utf-8"));
+        if (pkg.version)
+          return pkg.version;
+      }
+    } catch {
+    }
+    return "2.0.0";
+  }
+  /**
+   * 执行所有镜像 3 秒持续吞吐实测竞速
+   */
+  async raceMirrors() {
+    const mirrors = getDefaultMirrors(this.repo, this.customHuaweiUrl);
+    return await MirrorSpeedTester.raceAllMirrors(mirrors, "feed/manifest.json", 2800);
+  }
+  /**
+   * 检查 GitHub 是否有新版本 (内置多镜像容错下载 manifest.json)
+   */
+  async checkForUpdate(currentVersion, forceRefresh = false) {
+    const localVer = currentVersion || this.getLocalVersion();
+    const now = Date.now();
+    if (!forceRefresh && this.cachedCheckResult && now - this.lastCheckTime < 15 * 60 * 1e3) {
+      return this.cachedCheckResult;
+    }
+    this.currentProgress = { phase: "checking", percent: 10 };
+    const mirrors = getDefaultMirrors(this.repo, this.customHuaweiUrl);
+    let manifest = null;
+    let fetchError = "";
+    for (const mirror of mirrors) {
+      const url = mirror.resolveUrl("feed/manifest.json");
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5e3);
+        const res = await fetch(url, {
+          headers: { "User-Agent": "CodeGraph-Updater/2.0.0", "Cache-Control": "no-cache" },
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const text = await res.text();
+          manifest = JSON.parse(text);
+          if (manifest && manifest.version && Array.isArray(manifest.files)) {
+            break;
+          }
+        }
+      } catch (e) {
+        fetchError = e.message || "\u7F51\u7EDC\u62C9\u53D6\u5931\u8D25";
+      }
+    }
+    if (!manifest) {
+      this.currentProgress = { phase: "error", percent: 0, error: `\u83B7\u53D6\u7248\u672C\u6E05\u5355\u5931\u8D25: ${fetchError}` };
+      return {
+        hasUpdate: false,
+        currentVersion: localVer,
+        latestVersion: localVer,
+        notes: `\u68C0\u6D4B\u5931\u8D25: \u672A\u80FD\u4ECE\u4EFB\u4F55\u955C\u50CF\u6E90\u62C9\u53D6\u5230\u66F4\u65B0\u6E05\u5355 (${fetchError})`
+      };
+    }
+    const hasUpdate = compareVersions(manifest.version, localVer) > 0;
+    const result = {
+      hasUpdate,
+      currentVersion: localVer,
+      latestVersion: manifest.version,
+      publishedAt: manifest.publishedAt,
+      notes: manifest.notes || "\u5E38\u89C4\u529F\u80FD\u7EF4\u62A4\u4E0E\u6027\u80FD\u4F18\u5316",
+      manifest
+    };
+    this.cachedCheckResult = result;
+    this.lastCheckTime = now;
+    this.currentProgress = { phase: "idle", percent: 100 };
+    return result;
+  }
+  /**
+   * 执行完整的更新流程：增量比对 -> 3秒竞速择优 -> Staging下载校验 -> 备份 -> 原子替换
+   */
+  async applyUpdate(manifest, onProgress) {
+    const notify = (p) => {
+      this.currentProgress = { ...this.currentProgress, ...p };
+      if (onProgress)
+        onProgress(this.currentProgress);
+    };
+    const stageDir = path8.join(this.pluginRoot, ".codegraph-update-stage");
+    const backupDir = path8.join(this.pluginRoot, ".codegraph-update-backup");
+    try {
+      notify({ phase: "checking", percent: 5 });
+      const changedFiles = [];
+      for (const entry of manifest.files) {
+        const localPath = path8.join(this.pluginRoot, entry.path);
+        if (!fs7.existsSync(localPath)) {
+          changedFiles.push(entry);
+          continue;
+        }
+        try {
+          const stat = fs7.statSync(localPath);
+          if (stat.size !== entry.size) {
+            changedFiles.push(entry);
+            continue;
+          }
+          const hash = sha256File(localPath);
+          if (hash !== entry.sha256) {
+            changedFiles.push(entry);
+          }
+        } catch {
+          changedFiles.push(entry);
+        }
+      }
+      console.log(`[CodeGraph Updater] \u589E\u91CF\u6BD4\u5BF9\u5B8C\u6210: \u5171 ${manifest.files.length} \u4E2A\u6E05\u5355\u6587\u4EF6\uFF0C\u9700\u66F4\u65B0 ${changedFiles.length} \u4E2A\u6587\u4EF6`);
+      if (changedFiles.length === 0) {
+        notify({ phase: "completed", percent: 100 });
+        return { success: true, updatedFilesCount: 0, message: "\u5F53\u524D\u6240\u6709\u6587\u4EF6\u5747\u5DF2\u662F\u6700\u65B0\u72B6\u6001\uFF0C\u65E0\u9700\u8986\u76D6\u66F4\u65B0\u3002" };
+      }
+      notify({ phase: "racing", percent: 15 });
+      const mirrors = getDefaultMirrors(this.repo, this.customHuaweiUrl);
+      const raceResults = await MirrorSpeedTester.raceAllMirrors(mirrors, "feed/manifest.json", 2800);
+      const validMirrors = mirrors.filter((m) => {
+        const r = raceResults.find((res) => res.id === m.id);
+        return r && r.success;
+      });
+      const huaweiMirror = mirrors.find((m) => m.id === "huawei_fallback");
+      if (huaweiMirror && !validMirrors.some((m) => m.id === "huawei_fallback")) {
+        validMirrors.push(huaweiMirror);
+      }
+      if (validMirrors.length === 0) {
+        throw new Error("\u6240\u6709\u4E0B\u8F7D\u955C\u50CF\u5B9E\u6D4B\u5747\u4E0D\u53EF\u7528\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5\u6216\u81EA\u5B9A\u4E49\u534E\u4E3A\u955C\u50CF");
+      }
+      const bestMirror = validMirrors[0];
+      const bestRace = raceResults.find((r) => r.id === bestMirror.id);
+      console.log(`[CodeGraph Updater] \u672C\u6B21\u66F4\u65B0\u91C7\u7528\u4E3B\u529B\u6E90: ${bestMirror.name} (\u6301\u7EED\u901F\u5EA6: ${bestRace?.speedFormatted || "\u672A\u77E5"})`);
+      if (fs7.existsSync(stageDir))
+        fs7.rmSync(stageDir, { recursive: true, force: true });
+      fs7.mkdirSync(stageDir, { recursive: true });
+      let completedFiles = 0;
+      let totalDownloadedBytes = 0;
+      const totalBytes = changedFiles.reduce((acc, f) => acc + f.size, 0);
+      const downloadStartTime = Date.now();
+      for (const file of changedFiles) {
+        const stageTarget = path8.join(stageDir, file.path);
+        fs7.mkdirSync(path8.dirname(stageTarget), { recursive: true });
+        notify({
+          phase: "downloading",
+          percent: 20 + Math.round(completedFiles / changedFiles.length * 55),
+          totalFiles: changedFiles.length,
+          completedFiles,
+          totalBytes,
+          downloadedBytes: totalDownloadedBytes,
+          currentFile: file.path,
+          activeMirrorName: bestMirror.name
+        });
+        let downloadSuccess = false;
+        let lastDownloadErr = "";
+        for (let mIdx = 0; mIdx < validMirrors.length; mIdx++) {
+          const currentMirror = validMirrors[mIdx];
+          const downloadUrl = currentMirror.resolveUrl(file.path);
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 2e4);
+              const res = await fetch(downloadUrl, {
+                headers: { "User-Agent": "CodeGraph-Updater/2.0.0" },
+                signal: controller.signal
+              });
+              clearTimeout(timeout);
+              if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+              }
+              const buffer = Buffer.from(await res.arrayBuffer());
+              if (buffer.length !== file.size) {
+                throw new Error(`\u6587\u4EF6\u5927\u5C0F\u4E0D\u7B26 (\u5B9E\u9645: ${buffer.length}, \u671F\u671B: ${file.size})`);
+              }
+              const calcHash = crypto2.createHash("sha256").update(buffer).digest("hex");
+              if (calcHash !== file.sha256) {
+                throw new Error("\u6587\u4EF6 SHA-256 \u5B8C\u6574\u6027\u6821\u9A8C\u672A\u901A\u8FC7");
+              }
+              fs7.writeFileSync(stageTarget, buffer);
+              totalDownloadedBytes += buffer.length;
+              completedFiles++;
+              downloadSuccess = true;
+              const elapsedSec = Math.max((Date.now() - downloadStartTime) / 1e3, 0.5);
+              const currentSpeed = Math.round(totalDownloadedBytes / elapsedSec);
+              notify({
+                downloadedBytes: totalDownloadedBytes,
+                completedFiles,
+                speedBps: currentSpeed,
+                speedFormatted: formatSpeed(currentSpeed)
+              });
+              break;
+            } catch (err2) {
+              lastDownloadErr = err2.message || "\u4F20\u8F93\u5931\u8D25";
+              await new Promise((r) => setTimeout(r, 400 * attempt));
+            }
+          }
+          if (downloadSuccess)
+            break;
+          console.warn(`[CodeGraph Updater] \u955C\u50CF [${currentMirror.name}] \u4E0B\u8F7D ${file.path} \u5931\u8D25\uFF0C\u5C1D\u8BD5\u987A\u4F4D\u5207\u6362\u5230\u4E0B\u4E00\u4E2A\u955C\u50CF...`);
+        }
+        if (!downloadSuccess) {
+          throw new Error(`\u4E0B\u8F7D\u6587\u4EF6 [${file.path}] \u5931\u8D25: ${lastDownloadErr}`);
+        }
+      }
+      notify({ phase: "verifying", percent: 80 });
+      for (const file of changedFiles) {
+        const stageTarget = path8.join(stageDir, file.path);
+        if (!fs7.existsSync(stageTarget))
+          throw new Error(`\u6682\u5B58\u6587\u4EF6\u7F3A\u5931: ${file.path}`);
+        const hash = sha256File(stageTarget);
+        if (hash !== file.sha256)
+          throw new Error(`\u6682\u5B58\u6587\u4EF6\u54C8\u5E0C\u504F\u5DEE: ${file.path}`);
+      }
+      notify({ phase: "installing", percent: 85 });
+      if (fs7.existsSync(backupDir))
+        fs7.rmSync(backupDir, { recursive: true, force: true });
+      fs7.mkdirSync(backupDir, { recursive: true });
+      for (const file of changedFiles) {
+        const localPath = path8.join(this.pluginRoot, file.path);
+        if (fs7.existsSync(localPath)) {
+          const backupTarget = path8.join(backupDir, file.path);
+          fs7.mkdirSync(path8.dirname(backupTarget), { recursive: true });
+          fs7.copyFileSync(localPath, backupTarget);
+        }
+      }
+      notify({ phase: "installing", percent: 90 });
+      try {
+        for (const file of changedFiles) {
+          const stageSource = path8.join(stageDir, file.path);
+          const finalTarget = path8.join(this.pluginRoot, file.path);
+          const tempTarget = `${finalTarget}.cg-new`;
+          fs7.mkdirSync(path8.dirname(finalTarget), { recursive: true });
+          fs7.copyFileSync(stageSource, tempTarget);
+          await renameWithRetry(tempTarget, finalTarget);
+        }
+        const localPkgPath = path8.join(this.pluginRoot, "package.json");
+        if (fs7.existsSync(localPkgPath)) {
+          try {
+            const pkg = JSON.parse(fs7.readFileSync(localPkgPath, "utf-8"));
+            pkg.version = manifest.version;
+            fs7.writeFileSync(localPkgPath, JSON.stringify(pkg, null, 2), "utf-8");
+          } catch {
+          }
+        }
+      } catch (swapErr) {
+        console.error("[CodeGraph Updater] \u66FF\u6362\u4E2D\u9014\u53D1\u751F\u5F02\u5E38\uFF0C\u6B63\u5728\u6267\u884C\u81EA\u6108\u56DE\u6EDA...", swapErr);
+        for (const file of changedFiles) {
+          const backupSource = path8.join(backupDir, file.path);
+          const finalTarget = path8.join(this.pluginRoot, file.path);
+          if (fs7.existsSync(backupSource)) {
+            try {
+              fs7.copyFileSync(backupSource, finalTarget);
+            } catch {
+            }
+          }
+        }
+        throw new Error(`\u66FF\u6362\u6587\u4EF6\u5F02\u5E38\u5E76\u5DF2\u6210\u529F\u81EA\u6108\u56DE\u6EDA: ${swapErr.message}`);
+      }
+      try {
+        fs7.rmSync(stageDir, { recursive: true, force: true });
+        fs7.rmSync(backupDir, { recursive: true, force: true });
+      } catch {
+      }
+      notify({ phase: "completed", percent: 100 });
+      this.cachedCheckResult = null;
+      return {
+        success: true,
+        updatedFilesCount: changedFiles.length,
+        message: `\u2713 \u6210\u529F\u589E\u91CF\u5347\u7EA7\u81F3 v${manifest.version} (\u5DF2\u5B89\u5168\u66FF\u6362 ${changedFiles.length} \u4E2A\u6838\u5FC3\u6587\u4EF6)`
+      };
+    } catch (err2) {
+      notify({ phase: "error", percent: 0, error: err2.message || "\u66F4\u65B0\u5931\u8D25" });
+      try {
+        if (fs7.existsSync(stageDir))
+          fs7.rmSync(stageDir, { recursive: true, force: true });
+      } catch {
+      }
+      throw err2;
+    }
+  }
+};
+
+// packages/core/dist/server.js
 var CodeGraphServer = class {
   server;
   core;
+  updater;
+  pluginRoot;
   port;
   workspaceRoot;
   staticDir;
@@ -115138,14 +115655,14 @@ var CodeGraphServer = class {
   }
   constructor(options) {
     this.port = options.port || 3333;
-    this.workspaceRoot = path8.resolve(options.workspaceRoot);
+    this.workspaceRoot = path9.resolve(options.workspaceRoot);
     this.staticDir = options.staticDir;
     if (!this.staticDir) {
       try {
         const __filename2 = fileURLToPath2(import.meta.url);
-        const __dirname3 = path8.dirname(__filename2);
-        const candidate = path8.resolve(__dirname3, "../../webview/dist");
-        if (fs7.existsSync(candidate)) {
+        const __dirname3 = path9.dirname(__filename2);
+        const candidate = path9.resolve(__dirname3, "../../webview/dist");
+        if (fs8.existsSync(candidate)) {
           this.staticDir = candidate;
         }
       } catch {
@@ -115155,6 +115672,26 @@ var CodeGraphServer = class {
       workspaceRoot: this.workspaceRoot,
       scopePath: options.scopePath || "."
     });
+    let resolvedPluginRoot = options.pluginRoot;
+    if (!resolvedPluginRoot) {
+      try {
+        const __filename2 = fileURLToPath2(import.meta.url);
+        let curr = path9.dirname(__filename2);
+        for (let i2 = 0; i2 < 6; i2++) {
+          if (fs8.existsSync(path9.join(curr, "feed", "manifest.json")) || fs8.existsSync(path9.join(curr, "dist", "client.js")) || fs8.existsSync(path9.join(curr, "package.json")) && (fs8.existsSync(path9.join(curr, "packages")) || fs8.existsSync(path9.join(curr, "dist")))) {
+            resolvedPluginRoot = curr;
+            break;
+          }
+          const p = path9.dirname(curr);
+          if (p === curr)
+            break;
+          curr = p;
+        }
+      } catch {
+      }
+    }
+    this.pluginRoot = path9.resolve(resolvedPluginRoot || process.cwd());
+    this.updater = new PluginUpdater(this.pluginRoot, options.repo, options.huaweiUrl);
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
   }
   async start(autoPort = true) {
@@ -115188,7 +115725,7 @@ var CodeGraphServer = class {
     });
   }
   setWorkspace(workspaceRoot, scopePath) {
-    const resolved = path8.resolve(workspaceRoot);
+    const resolved = path9.resolve(workspaceRoot);
     if (this.workspaceRoot !== resolved) {
       this.workspaceRoot = resolved;
       this.drilldownCache.clear();
@@ -115224,13 +115761,13 @@ var CodeGraphServer = class {
       }
       return;
     }
-    if (this.staticDir && fs7.existsSync(this.staticDir)) {
-      let filePath = path8.join(this.staticDir, pathname === "/" ? "index.html" : pathname);
-      if (!fs7.existsSync(filePath)) {
-        filePath = path8.join(this.staticDir, "index.html");
+    if (this.staticDir && fs8.existsSync(this.staticDir)) {
+      let filePath = path9.join(this.staticDir, pathname === "/" ? "index.html" : pathname);
+      if (!fs8.existsSync(filePath)) {
+        filePath = path9.join(this.staticDir, "index.html");
       }
-      if (fs7.existsSync(filePath)) {
-        const ext = path8.extname(filePath);
+      if (fs8.existsSync(filePath)) {
+        const ext = path9.extname(filePath);
         const mimeTypes = {
           ".html": "text/html",
           ".js": "application/javascript",
@@ -115241,7 +115778,7 @@ var CodeGraphServer = class {
           ".wasm": "application/wasm"
         };
         res.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
-        fs7.createReadStream(filePath).pipe(res);
+        fs8.createReadStream(filePath).pipe(res);
         return;
       }
     }
@@ -115276,16 +115813,65 @@ var CodeGraphServer = class {
     });
   }
   async handleApi(pathname, req, res, reqUrl) {
+    if (pathname === "/api/update/check") {
+      let forceRefresh = reqUrl.searchParams.get("force") === "true";
+      let version = reqUrl.searchParams.get("version") || void 0;
+      if (req.method === "POST") {
+        const body2 = await this.readJsonBody(req);
+        if (body2?.forceRefresh !== void 0)
+          forceRefresh = !!body2.forceRefresh;
+        if (body2?.version)
+          version = body2.version;
+      }
+      const result = await this.updater.checkForUpdate(version, forceRefresh);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, ...result }));
+      return;
+    }
+    if (pathname === "/api/update/race") {
+      const results = await this.updater.raceMirrors();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, mirrors: results }));
+      return;
+    }
+    if (pathname === "/api/update/progress") {
+      const progress = this.updater.getProgress();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, progress }));
+      return;
+    }
+    if (pathname === "/api/update/apply" && req.method === "POST") {
+      const body2 = await this.readJsonBody(req);
+      let manifest = body2?.manifest;
+      if (!manifest) {
+        const checkRes = await this.updater.checkForUpdate(void 0, true);
+        if (!checkRes.manifest) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "\u672A\u80FD\u83B7\u53D6\u6709\u6548\u7684\u66F4\u65B0\u6E05\u5355" }));
+          return;
+        }
+        manifest = checkRes.manifest;
+      }
+      try {
+        const result = await this.updater.applyUpdate(manifest);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ...result }));
+      } catch (err2) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: err2.message || "\u66F4\u65B0\u5E94\u7528\u5931\u8D25" }));
+      }
+      return;
+    }
     if (pathname === "/api/discover") {
       let targetRoot = this.workspaceRoot;
       if (req.method === "POST") {
         const body2 = await this.readJsonBody(req);
         if (body2?.workspaceRoot)
-          targetRoot = path8.resolve(body2.workspaceRoot);
+          targetRoot = path9.resolve(body2.workspaceRoot);
       } else {
         const q = reqUrl.searchParams.get("workspace");
         if (q)
-          targetRoot = path8.resolve(q);
+          targetRoot = path9.resolve(q);
       }
       const result = WorkspaceProfiler.discover(targetRoot);
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -115451,7 +116037,7 @@ var CodeGraphServer = class {
     }
     if (pathname === "/api/status" && req.method === "GET") {
       const wsParam = reqUrl.searchParams.get("workspace");
-      if (wsParam && fs7.existsSync(wsParam)) {
+      if (wsParam && fs8.existsSync(wsParam)) {
         this.setWorkspace(wsParam);
       }
       let last = this.core.getLastResult();
@@ -115507,7 +116093,7 @@ var CodeGraphServer = class {
       const body2 = await this.readJsonBody(req);
       if (body2 && typeof body2.workspaceRoot === "string" && body2.workspaceRoot.trim()) {
         const targetRoot = body2.workspaceRoot.trim();
-        if (fs7.existsSync(targetRoot)) {
+        if (fs8.existsSync(targetRoot)) {
           this.setWorkspace(targetRoot, body2.scopePath);
           const cached = this.core.loadFromCache();
           let layout = cached?.layout;
@@ -115627,33 +116213,33 @@ var CodeGraphServer = class {
       }
       const wsParam = reqUrl2.searchParams.get("workspace");
       let effectiveWorkspace = this.workspaceRoot;
-      if (wsParam && fs7.existsSync(wsParam)) {
-        effectiveWorkspace = path8.resolve(wsParam);
+      if (wsParam && fs8.existsSync(wsParam)) {
+        effectiveWorkspace = path9.resolve(wsParam);
         if (this.workspaceRoot !== effectiveWorkspace) {
           this.setWorkspace(effectiveWorkspace);
         }
       }
       const candidates = [];
-      if (path8.isAbsolute(filePath) || /^[a-zA-Z]:[/\\]/.test(filePath)) {
+      if (path9.isAbsolute(filePath) || /^[a-zA-Z]:[/\\]/.test(filePath)) {
         candidates.push(filePath);
       }
-      candidates.push(path8.resolve(effectiveWorkspace, filePath));
-      candidates.push(path8.resolve(effectiveWorkspace, filePath.replace(/\//g, path8.sep)));
+      candidates.push(path9.resolve(effectiveWorkspace, filePath));
+      candidates.push(path9.resolve(effectiveWorkspace, filePath.replace(/\//g, path9.sep)));
       if (this.core.getScopePath() && this.core.getScopePath() !== ".") {
-        candidates.push(path8.resolve(effectiveWorkspace, this.core.getScopePath(), filePath));
+        candidates.push(path9.resolve(effectiveWorkspace, this.core.getScopePath(), filePath));
       }
       const projects = this.core.getProjects();
       for (const proj of projects) {
         if (proj.relPath) {
-          candidates.push(path8.resolve(effectiveWorkspace, proj.relPath, filePath));
+          candidates.push(path9.resolve(effectiveWorkspace, proj.relPath, filePath));
         }
       }
       if (this.workspaceRoot !== effectiveWorkspace) {
-        candidates.push(path8.resolve(this.workspaceRoot, filePath));
+        candidates.push(path9.resolve(this.workspaceRoot, filePath));
       }
       let targetFile = null;
       for (const cand of candidates) {
-        if (fs7.existsSync(cand) && fs7.statSync(cand).isFile()) {
+        if (fs8.existsSync(cand) && fs8.statSync(cand).isFile()) {
           targetFile = cand;
           break;
         }
@@ -115668,7 +116254,7 @@ var CodeGraphServer = class {
         return;
       }
       try {
-        let content = fs7.readFileSync(targetFile, "utf-8");
+        let content = fs8.readFileSync(targetFile, "utf-8");
         if (content.charCodeAt(0) === 65279) {
           content = content.slice(1);
         }
@@ -115698,7 +116284,7 @@ var CodeGraphCore = class {
   selectedProjectIds = [];
   activeProjectId;
   constructor(options) {
-    this.workspaceRoot = path9.resolve(options.workspaceRoot);
+    this.workspaceRoot = path10.resolve(options.workspaceRoot);
     this.scopePath = options.scopePath || ".";
     this.symbolTable = new SymbolTable();
     this.watcher = new DualTrackWatcher(this.workspaceRoot, this.scopePath);
@@ -115708,7 +116294,7 @@ var CodeGraphCore = class {
    * 动态切换/更新工作区根目录与扫描作用域
    */
   setWorkspaceRoot(newRoot, newScope = ".") {
-    const resolvedRoot = path9.resolve(newRoot);
+    const resolvedRoot = path10.resolve(newRoot);
     if (this.workspaceRoot !== resolvedRoot || this.scopePath !== newScope) {
       this.workspaceRoot = resolvedRoot;
       this.scopePath = newScope || ".";
@@ -115754,7 +116340,7 @@ var CodeGraphCore = class {
     if (!this.lastGraphResult)
       return void 0;
     const allFiles = Array.from(new Set(this.symbolTable.getAllNodes().map((n) => n.filePath).filter((f) => !f.startsWith("contracts/"))));
-    const projectName = path9.basename(this.workspaceRoot);
+    const projectName = path10.basename(this.workspaceRoot);
     const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
     const result = DualModelCompiler.compile(projectName, this.scopePath, allFiles, this.symbolTable.getAllNodes(), this.symbolTable.getAllEdges(), this.lastGraphResult.meta.archetype || "UNIVERSAL", {
       projects: activeProjects.length > 0 ? activeProjects : this.projects,
@@ -115797,7 +116383,7 @@ var CodeGraphCore = class {
     if (options?.activeProjectId !== void 0) {
       this.activeProjectId = options.activeProjectId && options.activeProjectId !== "all" ? options.activeProjectId : void 0;
     }
-    const searchRoot = path9.resolve(this.workspaceRoot, this.scopePath);
+    const searchRoot = path10.resolve(this.workspaceRoot, this.scopePath);
     const globPatterns = ExtractorRegistry.getGlobPatterns();
     const sourceFiles = await (0, import_fast_glob2.default)(globPatterns, {
       cwd: searchRoot,
@@ -115822,7 +116408,7 @@ var CodeGraphCore = class {
         "**/.vscode/**"
       ]
     });
-    let normalizedFiles = sourceFiles.map((f) => path9.relative(this.workspaceRoot, path9.join(searchRoot, f)).replace(/\\/g, "/"));
+    let normalizedFiles = sourceFiles.map((f) => path10.relative(this.workspaceRoot, path10.join(searchRoot, f)).replace(/\\/g, "/"));
     if (this.projects.length > 1 && this.selectedProjectIds.length > 0) {
       normalizedFiles = normalizedFiles.filter((f) => {
         const pid = this.getFileProjectId(f);
@@ -115836,12 +116422,12 @@ var CodeGraphCore = class {
       if (++scannedFilesCount % 5 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
       }
-      const fullPath = path9.join(this.workspaceRoot, relPath);
+      const fullPath = path10.join(this.workspaceRoot, relPath);
       const extractor = ExtractorRegistry.getExtractorForFile(relPath);
       if (!extractor)
         continue;
       try {
-        const sourceCode = fs8.readFileSync(fullPath, "utf-8");
+        const sourceCode = fs9.readFileSync(fullPath, "utf-8");
         const grammarName = ExtractorRegistry.getWasmGrammarForFile(relPath) || extractor.wasmGrammarName;
         let tree = null;
         if (grammarName && grammarName !== "none") {
@@ -115863,7 +116449,7 @@ var CodeGraphCore = class {
     await new Promise((resolve) => setImmediate(resolve));
     this.symbolTable.resolveCrossFileReferences();
     await new Promise((resolve) => setImmediate(resolve));
-    const projectName = path9.basename(this.workspaceRoot);
+    const projectName = path10.basename(this.workspaceRoot);
     const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
     const result = DualModelCompiler.compile(projectName, this.scopePath, normalizedFiles, this.symbolTable.getAllNodes(), this.symbolTable.getAllEdges(), archetypeMatch.archetype, {
       projects: activeProjects.length > 0 ? activeProjects : this.projects,
@@ -115897,11 +116483,11 @@ var CodeGraphCore = class {
       if (++incProcessedCount % 5 === 0) {
         await new Promise((resolve) => setImmediate(resolve));
       }
-      const fullPath = path9.join(this.workspaceRoot, changedFile);
+      const fullPath = path10.join(this.workspaceRoot, changedFile);
       const extractor = ExtractorRegistry.getExtractorForFile(changedFile);
-      if (fs8.existsSync(fullPath) && extractor) {
+      if (fs9.existsSync(fullPath) && extractor) {
         try {
-          const sourceCode = fs8.readFileSync(fullPath, "utf-8");
+          const sourceCode = fs9.readFileSync(fullPath, "utf-8");
           const grammarName = ExtractorRegistry.getWasmGrammarForFile(changedFile) || extractor.wasmGrammarName;
           let tree = null;
           if (grammarName && grammarName !== "none") {
@@ -115925,7 +116511,7 @@ var CodeGraphCore = class {
     this.symbolTable.resolveCrossFileReferences();
     await new Promise((resolve) => setImmediate(resolve));
     const allFiles = Array.from(new Set(this.symbolTable.getAllNodes().map((n) => n.filePath).filter((f) => !f.startsWith("contracts/"))));
-    const projectName = path9.basename(this.workspaceRoot);
+    const projectName = path10.basename(this.workspaceRoot);
     const activeProjects = this.projects.filter((p) => this.selectedProjectIds.includes(p.id));
     const result = DualModelCompiler.compile(projectName, this.scopePath, allFiles, this.symbolTable.getAllNodes(), this.symbolTable.getAllEdges(), this.lastGraphResult?.meta.archetype || "UNIVERSAL", {
       projects: activeProjects.length > 0 ? activeProjects : this.projects,
@@ -116032,7 +116618,7 @@ function apply(ctx, config = {}) {
   let coreInstance = null;
   let fsWatcher = null;
   let debounceTimer = null;
-  const normalizePath = (p) => path10.resolve(p).toLowerCase().replace(/\\/g, "/");
+  const normalizePath = (p) => path11.resolve(p).toLowerCase().replace(/\\/g, "/");
   const getWorkspaceRoot = () => {
     try {
       if (ctx.workspaceRegistry && typeof ctx.workspaceRegistry.list === "function") {
@@ -116089,15 +116675,15 @@ function apply(ctx, config = {}) {
     let staticDir;
     try {
       const __filename2 = fileURLToPath3(import.meta.url);
-      const __dirname3 = path10.dirname(__filename2);
+      const __dirname3 = path11.dirname(__filename2);
       const candidates = [
-        path10.resolve(__dirname3, "webview"),
-        path10.resolve(__dirname3, "../webview"),
-        path10.resolve(__dirname3, "../../webview/dist"),
-        path10.resolve(__dirname3, "../packages/webview/dist")
+        path11.resolve(__dirname3, "webview"),
+        path11.resolve(__dirname3, "../webview"),
+        path11.resolve(__dirname3, "../../webview/dist"),
+        path11.resolve(__dirname3, "../packages/webview/dist")
       ];
       for (const dir of candidates) {
-        if (fs9.existsSync(dir) && fs9.existsSync(path10.join(dir, "index.html"))) {
+        if (fs10.existsSync(dir) && fs10.existsSync(path11.join(dir, "index.html"))) {
           staticDir = dir;
           break;
         }
@@ -116146,8 +116732,8 @@ function apply(ctx, config = {}) {
         }
       }, 300);
     };
-    if (fs9.existsSync(currentRoot)) {
-      fsWatcher = fs9.watch(currentRoot, { recursive: true }, (_, filename) => {
+    if (fs10.existsSync(currentRoot)) {
+      fsWatcher = fs10.watch(currentRoot, { recursive: true }, (_, filename) => {
         onFileChanged(filename || void 0);
       });
       console.log(`[CodeGraph] \u5DF2\u5F00\u542F\u540E\u53F0 300ms \u9632\u6296\u589E\u91CF\u81EA\u6108\u76D1\u542C: ${currentRoot}`);

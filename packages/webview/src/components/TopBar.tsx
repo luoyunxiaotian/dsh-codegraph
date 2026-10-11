@@ -13,8 +13,10 @@ import {
   Moon,
   ExternalLink,
   FolderTree,
+  Download,
 } from 'lucide-react';
 import { ArchetypeType, DetectedProjectProfile, ProjectPlatform } from '../../../core/src/types/index.js';
+import { UpdateCheckResult } from '../../../core/src/updater/types.js';
 import { useTheme } from '../context/ThemeContext.js';
 
 interface TopBarProps {
@@ -37,6 +39,8 @@ interface TopBarProps {
   activeProjectId?: string;
   onSwitchProject?: (projectId?: string) => void;
   onOpenScopeDrawer?: () => void;
+  updateInfo?: UpdateCheckResult | null;
+  onOpenUpdateModal?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -59,6 +63,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   activeProjectId,
   onSwitchProject,
   onOpenScopeDrawer,
+  updateInfo,
+  onOpenUpdateModal,
 }) => {
   const { theme, toggleTheme } = useTheme();
 
@@ -287,6 +293,29 @@ export const TopBar: React.FC<TopBarProps> = ({
           <RefreshCw className={`w-4 h-4 text-dsh-tertiary ${isUpdating ? 'animate-spin' : ''}`} />
           <span>重扫</span>
         </button>
+
+        {/* Update Button / Breathing Badge */}
+        {updateInfo?.hasUpdate ? (
+          <button
+            onClick={onOpenUpdateModal}
+            className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[12px] font-semibold transition-all shadow-[0_0_12px_rgba(16,185,129,0.25)] animate-pulse"
+            title={`发现新版本 v${updateInfo.latestVersion}，点击查看并升级`}
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>v{updateInfo.latestVersion} 可更新</span>
+          </button>
+        ) : (
+          <button
+            onClick={onOpenUpdateModal}
+            className="p-2 rounded-lg text-dsh-secondary hover:text-dsh-primary hover:bg-dsh-layer2 transition-colors border border-transparent hover:border-dsh-border2"
+            title="插件版本与自更新管理"
+          >
+            <Download className="w-4 h-4 text-dsh-tertiary hover:text-dsh-blue" />
+          </button>
+        )}
 
         <button
           onClick={onReset}

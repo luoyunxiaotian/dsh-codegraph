@@ -52,8 +52,8 @@
   },
   "homepage": "https://github.com/luoyunxiaotian/dsh-codegraph#readme",
   "scripts": {
-    "build": "pnpm -r run build && node scripts/bundle-plugin.mjs",
-    "bundle": "node scripts/bundle-plugin.mjs",
+    "build": "pnpm -r run build && node scripts/bundle-plugin.mjs && node scripts/build-manifest.mjs",
+    "bundle": "node scripts/bundle-plugin.mjs && node scripts/build-manifest.mjs",
     "test": "pnpm -r run test",
     "clean": "pnpm -r run clean"
   },

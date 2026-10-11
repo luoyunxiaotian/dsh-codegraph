@@ -80,6 +80,9 @@ if (typeof window !== "undefined" && window.__ModuleLoader__ && typeof window.__
   const webviewSrcDir = path.join(rootDir, 'packages/webview/dist');
   const webviewDestDir = path.join(distDir, 'webview');
   if (fs.existsSync(webviewSrcDir)) {
+    if (fs.existsSync(webviewDestDir)) {
+      fs.rmSync(webviewDestDir, { recursive: true, force: true });
+    }
     fs.cpSync(webviewSrcDir, webviewDestDir, { recursive: true });
   } else {
     console.warn('  ⚠️ 提示: packages/webview/dist 未生成，建议先运行 pnpm -r run build');

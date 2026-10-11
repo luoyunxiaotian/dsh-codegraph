@@ -5,17 +5,23 @@ import { URL, fileURLToPath } from 'url';
 import { CodeGraphCore, WorkspaceProfiler } from './index.js';
 import { ElkLayoutEngine } from './layout/elk-layout.js';
 import { CodeNode } from './types/index.js';
+import { PluginUpdater } from './updater/plugin-updater.js';
 
 export interface ServerOptions {
   port?: number;
   workspaceRoot: string;
   scopePath?: string;
   staticDir?: string;
+  pluginRoot?: string;
+  repo?: string;
+  huaweiUrl?: string;
 }
 
 export class CodeGraphServer {
   private server: http.Server;
   public core: CodeGraphCore;
+  public updater: PluginUpdater;
+  public pluginRoot: string;
   private port: number;
   private workspaceRoot: string;
   private staticDir?: string;
@@ -152,6 +158,30 @@ export class CodeGraphServer {
       workspaceRoot: this.workspaceRoot,
       scopePath: options.scopePath || '.',
     });
+
+    let resolvedPluginRoot = options.pluginRoot;
+    if (!resolvedPluginRoot) {
+      try {
+        const __filename = fileURLToPath(import.meta.url);
+        let curr = path.dirname(__filename);
+        for (let i = 0; i < 6; i++) {
+          if (
+            fs.existsSync(path.join(curr, 'feed', 'manifest.json')) ||
+            fs.existsSync(path.join(curr, 'dist', 'client.js')) ||
+            (fs.existsSync(path.join(curr, 'package.json')) &&
+              (fs.existsSync(path.join(curr, 'packages')) || fs.existsSync(path.join(curr, 'dist'))))
+          ) {
+            resolvedPluginRoot = curr;
+            break;
+          }
+          const p = path.dirname(curr);
+          if (p === curr) break;
+          curr = p;
+        }
+      } catch {}
+    }
+    this.pluginRoot = path.resolve(resolvedPluginRoot || process.cwd());
+    this.updater = new PluginUpdater(this.pluginRoot, options.repo, options.huaweiUrl);
 
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
   }
@@ -297,6 +327,60 @@ export class CodeGraphServer {
     res: http.ServerResponse,
     reqUrl: URL
   ) {
+    // =======================================================================
+    // 插件自更新 API 系列 (检测、竞速、进度、应用)
+    // =======================================================================
+    if (pathname === '/api/update/check') {
+      let forceRefresh = reqUrl.searchParams.get('force') === 'true';
+      let version = reqUrl.searchParams.get('version') || undefined;
+      if (req.method === 'POST') {
+        const body = await this.readJsonBody(req);
+        if (body?.forceRefresh !== undefined) forceRefresh = !!body.forceRefresh;
+        if (body?.version) version = body.version;
+      }
+      const result = await this.updater.checkForUpdate(version, forceRefresh);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, ...result }));
+      return;
+    }
+
+    if (pathname === '/api/update/race') {
+      const results = await this.updater.raceMirrors();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, mirrors: results }));
+      return;
+    }
+
+    if (pathname === '/api/update/progress') {
+      const progress = this.updater.getProgress();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, progress }));
+      return;
+    }
+
+    if (pathname === '/api/update/apply' && req.method === 'POST') {
+      const body = await this.readJsonBody(req);
+      let manifest = body?.manifest;
+      if (!manifest) {
+        const checkRes = await this.updater.checkForUpdate(undefined, true);
+        if (!checkRes.manifest) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: '未能获取有效的更新清单' }));
+          return;
+        }
+        manifest = checkRes.manifest;
+      }
+      try {
+        const result = await this.updater.applyUpdate(manifest);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ...result }));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message || '更新应用失败' }));
+      }
+      return;
+    }
+
     if (pathname === '/api/discover') {
       let targetRoot = this.workspaceRoot;
       if (req.method === 'POST') {
