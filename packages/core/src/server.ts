@@ -4,6 +4,7 @@ import path from 'path';
 import { URL, fileURLToPath } from 'url';
 import { CodeGraphCore, WorkspaceProfiler } from './index.js';
 import { ElkLayoutEngine } from './layout/elk-layout.js';
+import { CodeNode } from './types/index.js';
 
 export interface ServerOptions {
   port?: number;
@@ -20,6 +21,116 @@ export class CodeGraphServer {
   private staticDir?: string;
   private isScanning: boolean = false;
   private drilldownCache: Map<string, any> = new Map();
+  private drilldownQueue: string[] = [];
+  private isQueueProcessing: boolean = false;
+
+  public startBackgroundDrilldown(graph: any): void {
+    if (!graph || !graph.architectureView?.modules) return;
+    const modules = graph.architectureView.modules;
+    for (const m of modules) {
+      if (!this.drilldownCache.has(m.id) && !this.drilldownQueue.includes(m.id)) {
+        this.drilldownQueue.push(m.id);
+      }
+    }
+    if (!this.isQueueProcessing && this.drilldownQueue.length > 0) {
+      this.processNextDrilldown();
+    }
+  }
+
+  public async computeModuleDrilldown(
+    moduleId: string,
+    graph: any
+  ): Promise<{ layout: any; portEdges: any[]; nodes: any[]; edges: any[] } | null> {
+    const targetModule = graph.architectureView?.modules?.find((m: any) => m.id === moduleId);
+    if (!targetModule) return null;
+
+    const moduleFiles = new Set(targetModule.files || []);
+    const internalNodes = (Object.values(graph.allNodes || {}).filter(
+      (n: any) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+    ) as unknown) as CodeNode[];
+    const internalNodeIds = new Set(internalNodes.map((n) => n.id));
+
+    const internalCalls: Array<{ source: string; target: string }> = [];
+    (graph.allEdges || []).forEach((e: any) => {
+      if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
+        internalCalls.push({ source: e.source, target: e.target });
+      }
+    });
+
+    const portEdges: Array<{ source: string; target: string; isPortEdge: boolean }> = [];
+    (targetModule.inPorts || []).forEach((port: string) => {
+      const inPortId = `inport_${port}`;
+      const matched = internalNodes.filter((n: any) => n.name === port || n.id === port);
+      if (matched.length > 0) {
+        matched.forEach((m: any) => {
+          portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
+        });
+      } else {
+        const incoming = (graph.allEdges || []).filter(
+          (e: any) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source)
+        );
+        if (incoming.length > 0) {
+          portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
+        }
+      }
+    });
+
+    (targetModule.outPorts || []).forEach((port: string) => {
+      const outPortId = `outport_${port}`;
+      const outgoing = (graph.allEdges || []).filter(
+        (e: any) =>
+          internalNodeIds.has(e.source) &&
+          (!internalNodeIds.has(e.target) || e.target.includes(port)) &&
+          (graph.allNodes[e.target]?.name === port || e.target.endsWith(port))
+      );
+      if (outgoing.length > 0) {
+        outgoing.forEach((og: any) => {
+          portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
+        });
+      }
+    });
+
+    const layout = await ElkLayoutEngine.layoutModuleDetail(
+      internalNodes,
+      internalCalls,
+      {
+        inPorts: targetModule.inPorts,
+        outPorts: targetModule.outPorts,
+        portEdges,
+      }
+    );
+
+    this.drilldownCache.set(moduleId, { layout, portEdges, version: 'v6' });
+    try {
+      const currentLayout = this.core.getLastLayout() || {};
+      const drilldowns = currentLayout.drilldowns || {};
+      drilldowns[moduleId] = { layout, portEdges, version: 'v6' };
+      this.core.setLastLayout({ ...currentLayout, drilldowns });
+      this.core.saveToCache({ ...currentLayout, drilldowns });
+    } catch {}
+
+    return { layout, portEdges, nodes: internalNodes, edges: internalCalls };
+  }
+
+  private async processNextDrilldown(): Promise<void> {
+    if (this.drilldownQueue.length === 0) {
+      this.isQueueProcessing = false;
+      return;
+    }
+    this.isQueueProcessing = true;
+    const nextModId = this.drilldownQueue.shift();
+    if (nextModId && !this.drilldownCache.has(nextModId)) {
+      const graph = this.core.getLastResult();
+      if (graph) {
+        try {
+          await this.computeModuleDrilldown(nextModId, graph);
+        } catch (e) {
+          console.warn(`[CodeGraph] 后台异步排版模块 ${nextModId} 警告:`, e);
+        }
+      }
+    }
+    setTimeout(() => this.processNextDrilldown(), 60);
+  }
 
   constructor(options: ServerOptions) {
     this.port = options.port || 3333;
@@ -219,7 +330,13 @@ export class CodeGraphServer {
       res.end(
         JSON.stringify({
           success: true,
-          graph: newResult,
+          graph: {
+            meta: newResult.meta,
+            architectureView: newResult.architectureView,
+            processFlows: newResult.processFlows,
+            allNodes: {},
+            allEdges: [],
+          },
           layout: { architecture: archLayout },
         })
       );
@@ -251,45 +368,12 @@ export class CodeGraphServer {
     if (pathname === '/api/layout-drilldown' && req.method === 'POST') {
       const body = await this.readJsonBody(req);
       const moduleId = body?.moduleId;
+      const forceRefresh = !!body?.forceRefresh;
+
       if (!moduleId) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: '缺少 moduleId 参数' }));
         return;
-      }
-
-      // 快速缓存命中检测 (0ms 返回，避免重复耗时排版；自动过滤旧版万像素畸变布局与窄间距v5布局)
-      if (!body?.forceRefresh) {
-        if (this.drilldownCache.has(moduleId)) {
-          const cached = this.drilldownCache.get(moduleId);
-          if (cached?.version === 'v6' && cached?.layout?.width && cached.layout.width < 12000) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                success: true,
-                layout: cached.layout,
-                portEdges: cached.portEdges,
-                fromCache: true,
-              })
-            );
-            return;
-          }
-        }
-
-        // 检测核心引擎与磁盘持久化缓存
-        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache && diskCache?.version === 'v6' && diskCache?.layout?.width && diskCache.layout.width < 12000) {
-          this.drilldownCache.set(moduleId, diskCache);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              success: true,
-              layout: diskCache.layout,
-              portEdges: diskCache.portEdges,
-              fromCache: true,
-            })
-          );
-          return;
-        }
       }
 
       let last = this.core.getLastResult();
@@ -315,7 +399,6 @@ export class CodeGraphServer {
         (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
       );
       const internalNodeIds = new Set(internalNodes.map((n) => n.id));
-
       const internalCalls: Array<{ source: string; target: string }> = [];
       last.allEdges.forEach((e) => {
         if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
@@ -323,75 +406,97 @@ export class CodeGraphServer {
         }
       });
 
-      // 解析端口与内部符号的连线
-      const portEdges: Array<{ source: string; target: string; isPortEdge: boolean }> = [];
-
-      // 1. In-Ports -> 内部入口符号
-      targetModule.inPorts.forEach((port) => {
-        const inPortId = `inport_${port}`;
-        const matched = internalNodes.filter((n) => n.name === port || n.id === port);
-        if (matched.length > 0) {
-          matched.forEach((m) => {
-            portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
-          });
-        } else {
-          // 若无同名符号，尝试匹配外部调用打入的内部目标
-          const incoming = last!.allEdges.filter(
-            (e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source)
-          );
-          if (incoming.length > 0) {
-            portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
+      // 1. 快速内存缓存命中检测 (0ms 返回，附带节点与边，确保秒级渲染)
+      if (!forceRefresh) {
+        if (this.drilldownCache.has(moduleId)) {
+          const cached = this.drilldownCache.get(moduleId);
+          if (cached?.version === 'v6' && cached?.layout?.width && cached.layout.width < 12000) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                success: true,
+                layout: cached.layout,
+                portEdges: cached.portEdges,
+                nodes: internalNodes,
+                edges: internalCalls,
+                fromCache: true,
+              })
+            );
+            return;
           }
         }
-      });
 
-      // 2. 内部符号 -> Out-Ports 外部调用依赖
-      targetModule.outPorts.forEach((port) => {
-        const outPortId = `outport_${port}`;
-        // 查找哪个内部节点调用了该外部目标
-        const outgoing = last!.allEdges.filter(
-          (e) =>
-            internalNodeIds.has(e.source) &&
-            (!internalNodeIds.has(e.target) || e.target.includes(port)) &&
-            (last!.allNodes[e.target]?.name === port || e.target.endsWith(port))
-        );
-        if (outgoing.length > 0) {
-          outgoing.forEach((og) => {
-            portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
-          });
+        // 检测核心引擎与磁盘持久化缓存
+        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        if (diskCache && diskCache?.version === 'v6' && diskCache?.layout?.width && diskCache.layout.width < 12000) {
+          this.drilldownCache.set(moduleId, diskCache);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              layout: diskCache.layout,
+              portEdges: diskCache.portEdges,
+              nodes: internalNodes,
+              edges: internalCalls,
+              fromCache: true,
+            })
+          );
+          return;
         }
-      });
+      }
 
-      const layout = await ElkLayoutEngine.layoutModuleDetail(
-        internalNodes,
-        internalCalls,
-        {
-          inPorts: targetModule.inPorts,
-          outPorts: targetModule.outPorts,
-          portEdges,
-        }
-      );
+      // 2. 交互抢占式插队：若在后台队列中排队，立即移出队列并置顶优先计算
+      const qIdx = this.drilldownQueue.indexOf(moduleId);
+      if (qIdx !== -1) {
+        this.drilldownQueue.splice(qIdx, 1);
+      }
 
-      // 写入内存缓存与磁盘持久化缓存
-      this.drilldownCache.set(moduleId, { layout, portEdges, version: 'v6' });
-      try {
-        const currentLayout = this.core.getLastLayout() || {};
-        const drilldowns = currentLayout.drilldowns || {};
-        drilldowns[moduleId] = { layout, portEdges, version: 'v6' };
-        this.core.setLastLayout({ ...currentLayout, drilldowns });
-        this.core.saveToCache({ ...currentLayout, drilldowns });
-      } catch (err) {
-        console.warn('[CodeGraph] 保存下钻排版至持久化缓存失败:', err);
+      const result = await this.computeModuleDrilldown(moduleId, last);
+      if (!result) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '计算下钻排版失败' }));
+        return;
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           success: true,
-          layout,
-          portEdges,
+          layout: result.layout,
+          portEdges: result.portEdges,
+          nodes: result.nodes,
+          edges: result.edges,
         })
       );
+      return;
+    }
+
+    if (pathname === '/api/symbols' && req.method === 'GET') {
+      let last = this.core.getLastResult();
+      if (!last) {
+        const cached = this.core.loadFromCache();
+        if (cached) last = cached.graph;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      if (last) {
+        const slimNodes: Record<string, any> = {};
+        for (const [id, node] of Object.entries(last.allNodes || {})) {
+          const { metadata, ...rest } = node as any;
+          let slimMeta = metadata;
+          if (metadata && metadata.story) {
+            const { story, ...otherMeta } = metadata;
+            slimMeta = {
+              ...otherMeta,
+              summaryText: story.summaryText,
+              roleTitle: story.roleTitle,
+            };
+          }
+          slimNodes[id] = { ...rest, metadata: slimMeta };
+        }
+        res.end(JSON.stringify({ success: true, allNodes: slimNodes, allEdges: last.allEdges || [] }));
+      } else {
+        res.end(JSON.stringify({ success: false, allNodes: {}, allEdges: [] }));
+      }
       return;
     }
 
@@ -405,7 +510,7 @@ export class CodeGraphServer {
       let fromCache = false;
       let savedAt: string | undefined;
 
-      // 如果内存中尚无图谱结果，自动探测本地持久化缓存 .codegraph/graph-cache.json
+      // 如果内存中尚无图谱结果，自动探测本地持久化缓存
       if (!last) {
         const cached = this.core.loadFromCache();
         if (cached) {
@@ -431,6 +536,10 @@ export class CodeGraphServer {
         }
       }
 
+      if (last) {
+        this.startBackgroundDrilldown(last);
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
@@ -440,7 +549,14 @@ export class CodeGraphServer {
           workspaceRoot: this.workspaceRoot,
           scopePath: this.core.getScopePath(),
           meta: last?.meta,
-          graph: last,
+          // 宏观首屏仅返回架构 modules, buses 与 processFlows，排除成千上万个微观节点，极速秒开
+          graph: {
+            meta: last?.meta,
+            architectureView: last?.architectureView,
+            processFlows: last?.processFlows,
+            allNodes: {},
+            allEdges: [],
+          },
           layout,
           projects: this.core.getProjects(),
           selectedProjectIds: this.core.getSelectedProjectIds(),
@@ -519,15 +635,22 @@ export class CodeGraphServer {
           graphResult.architectureView.buses
         );
 
-        // 自动持久化保存至 .codegraph/graph-cache.json
+        // 自动持久化保存解耦缓存
         this.core.saveToCache({ architecture: archLayout });
         this.drilldownCache.clear();
+        this.startBackgroundDrilldown(graphResult);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
             success: true,
-            graph: graphResult,
+            graph: {
+              meta: graphResult.meta,
+              architectureView: graphResult.architectureView,
+              processFlows: graphResult.processFlows,
+              allNodes: {},
+              allEdges: [],
+            },
             layout: {
               architecture: archLayout,
             },
@@ -549,12 +672,19 @@ export class CodeGraphServer {
       // 自动持久化保存更新后的图谱和布局
       this.core.saveToCache({ architecture: archLayout });
       this.drilldownCache.clear();
+      this.startBackgroundDrilldown(updated);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
           success: true,
-          graph: updated,
+          graph: {
+            meta: updated.meta,
+            architectureView: updated.architectureView,
+            processFlows: updated.processFlows,
+            allNodes: {},
+            allEdges: [],
+          },
           layout: {
             architecture: archLayout,
           },

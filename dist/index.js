@@ -113299,36 +113299,201 @@ import fs5 from "fs";
 import path6 from "path";
 var CACHE_DIR_NAME = ".codegraph";
 var CACHE_FILE_NAME = "graph-cache.json";
+var MANIFEST_FILE_NAME = "manifest.json";
+var SYMBOLS_FILE_NAME = "symbols.json";
+var COMPILER_CACHE_FILE_NAME = "compiler-cache.json";
+var ARCHITECTURE_DOC_NAME = "architecture.md";
 function getCacheDir(workspaceRoot) {
   return path6.join(path6.resolve(workspaceRoot), CACHE_DIR_NAME);
 }
 function getCacheFilePath(workspaceRoot) {
   return path6.join(getCacheDir(workspaceRoot), CACHE_FILE_NAME);
 }
+function getManifestFilePath(workspaceRoot) {
+  return path6.join(getCacheDir(workspaceRoot), MANIFEST_FILE_NAME);
+}
+function getSymbolsFilePath(workspaceRoot) {
+  return path6.join(getCacheDir(workspaceRoot), SYMBOLS_FILE_NAME);
+}
+function getCompilerCacheFilePath(workspaceRoot) {
+  return path6.join(getCacheDir(workspaceRoot), COMPILER_CACHE_FILE_NAME);
+}
+function getArchitectureDocPath(workspaceRoot) {
+  return path6.join(getCacheDir(workspaceRoot), ARCHITECTURE_DOC_NAME);
+}
 function hasCache(workspaceRoot) {
   try {
-    const filePath = getCacheFilePath(workspaceRoot);
-    return fs5.existsSync(filePath);
+    const manifestPath = getManifestFilePath(workspaceRoot);
+    if (fs5.existsSync(manifestPath))
+      return true;
+    const legacyPath = getCacheFilePath(workspaceRoot);
+    return fs5.existsSync(legacyPath);
   } catch {
     return false;
   }
 }
+function loadSymbolsOnly(workspaceRoot) {
+  try {
+    const symbolsPath = getSymbolsFilePath(workspaceRoot);
+    if (fs5.existsSync(symbolsPath)) {
+      const content = fs5.readFileSync(symbolsPath, "utf-8");
+      return JSON.parse(content);
+    }
+    const legacyPath = getCacheFilePath(workspaceRoot);
+    if (fs5.existsSync(legacyPath)) {
+      const content = fs5.readFileSync(legacyPath, "utf-8");
+      const data = JSON.parse(content);
+      if (data && data.graph) {
+        return {
+          allNodes: data.graph.allNodes || {},
+          allEdges: data.graph.allEdges || []
+        };
+      }
+    }
+    return null;
+  } catch (err2) {
+    console.warn(`[CodeGraph] \u8BFB\u53D6\u5FAE\u89C2 symbols \u5931\u8D25: ${workspaceRoot}`, err2);
+    return null;
+  }
+}
 function loadCache(workspaceRoot) {
   try {
-    const filePath = getCacheFilePath(workspaceRoot);
-    if (!fs5.existsSync(filePath)) {
-      return null;
+    const manifestPath = getManifestFilePath(workspaceRoot);
+    if (fs5.existsSync(manifestPath)) {
+      const manifest = JSON.parse(fs5.readFileSync(manifestPath, "utf-8"));
+      const symbols = loadSymbolsOnly(workspaceRoot) || { allNodes: {}, allEdges: [] };
+      let compilerCache = { baselineHashes: {}, extractions: {} };
+      const compilerPath = getCompilerCacheFilePath(workspaceRoot);
+      if (fs5.existsSync(compilerPath)) {
+        try {
+          compilerCache = JSON.parse(fs5.readFileSync(compilerPath, "utf-8"));
+        } catch {
+        }
+      }
+      const fullGraph = {
+        meta: manifest.meta,
+        architectureView: manifest.architectureView,
+        processFlows: manifest.processFlows,
+        allNodes: symbols.allNodes,
+        allEdges: symbols.allEdges
+      };
+      return {
+        version: manifest.version || 2,
+        savedAt: manifest.savedAt,
+        workspaceRoot: manifest.workspaceRoot,
+        scopePath: manifest.scopePath,
+        graph: fullGraph,
+        layout: manifest.layout,
+        baselineHashes: compilerCache.baselineHashes,
+        extractions: compilerCache.extractions
+      };
     }
-    const content = fs5.readFileSync(filePath, "utf-8");
-    const data = JSON.parse(content);
-    if (data && data.graph && data.graph.architectureView) {
-      return data;
+    const legacyPath = getCacheFilePath(workspaceRoot);
+    if (fs5.existsSync(legacyPath)) {
+      const content = fs5.readFileSync(legacyPath, "utf-8");
+      const data = JSON.parse(content);
+      if (data && data.graph && data.graph.architectureView) {
+        return data;
+      }
     }
     return null;
   } catch (err2) {
     console.warn(`[CodeGraph] \u8BFB\u53D6\u6301\u4E45\u5316\u7F13\u5B58\u5931\u8D25: ${workspaceRoot}`, err2);
     return null;
   }
+}
+function generateArchitectureMarkdown(projectName, workspaceRoot, manifest) {
+  const modules = manifest.architectureView?.modules || [];
+  const buses = manifest.architectureView?.buses || [];
+  const flows = manifest.processFlows || [];
+  let md = `# \u{1F3DB}\uFE0F ${projectName} \u7CFB\u7EDF\u67B6\u6784\u5168\u666F\u767D\u76AE\u4E66
+
+`;
+  md += `> **\u5DE5\u7A0B\u540D\u79F0**: ${projectName}  
+`;
+  md += `> **\u6839\u76EE\u5F55**: \`${workspaceRoot}\`  
+`;
+  md += `> **\u751F\u6210\u65F6\u95F4**: ${manifest.savedAt || (/* @__PURE__ */ new Date()).toISOString()}  
+`;
+  md += `> **\u67B6\u6784\u7248\u672C**: v2.0.0 (High Performance Decoupled)  
+
+`;
+  md += `---
+
+`;
+  md += `## 1. \u5B8F\u89C2\u5206\u5C42\u67B6\u6784\u62D3\u6251 (Mermaid)
+
+`;
+  md += `\`\`\`mermaid
+flowchart TD
+`;
+  for (const mod of modules) {
+    const safeId = mod.id.replace(/[^a-zA-Z0-9_]/g, "_");
+    const fileCount = mod.files?.length || 0;
+    md += `  ${safeId}["\u{1F4E6} ${mod.name} (${fileCount} files)"]
+`;
+  }
+  for (const bus of buses) {
+    const srcId = bus.sourceModule.replace(/[^a-zA-Z0-9_]/g, "_");
+    const tgtId = bus.targetModule.replace(/[^a-zA-Z0-9_]/g, "_");
+    const count = bus.callCount || 1;
+    md += `  ${srcId} -->|"${count} calls"| ${tgtId}
+`;
+  }
+  md += `\`\`\`
+
+`;
+  md += `## 2. \u6838\u5FC3\u67B6\u6784\u6A21\u5757\u6E05\u5355
+
+`;
+  md += `| \u6A21\u5757\u540D\u79F0 | \u804C\u8D23\u5B9A\u4F4D / \u89D2\u8272 | \u6E90\u7801\u6587\u4EF6\u6570 | \u6240\u5C5E\u5DE5\u7A0B/\u5E73\u53F0 | \u5BF9\u5916\u7AEF\u53E3 (InPorts) | \u4F9D\u8D56\u7AEF\u53E3 (OutPorts) |
+`;
+  md += `| :--- | :--- | :---: | :---: | :---: | :---: |
+`;
+  for (const mod of modules) {
+    const role = mod.story?.roleTitle || mod.archetype || "\u4E1A\u52A1\u6A21\u5757";
+    const inCount = mod.inPorts?.length || 0;
+    const outCount = mod.outPorts?.length || 0;
+    const plat = mod.projectPlatform || "\u901A\u7528";
+    md += `| **${mod.name}** | ${role} | ${mod.files?.length || 0} | ${plat} | ${inCount} \u4E2A | ${outCount} \u4E2A |
+`;
+  }
+  md += `
+`;
+  md += `## 3. \u8DE8\u6A21\u5757\u901A\u4FE1\u603B\u7EBF (Module Buses)
+
+`;
+  if (buses.length > 0) {
+    md += `| \u6765\u6E90\u6A21\u5757 | \u76EE\u6807\u6A21\u5757 | \u901A\u4FE1\u8C03\u7528\u6570 | \u534F\u8BAE\u7C7B\u578B / \u5951\u7EA6\u8BF4\u660E |
+`;
+    md += `| :--- | :--- | :---: | :--- |
+`;
+    for (const b of buses) {
+      md += `| \`${b.sourceModule}\` | \`${b.targetModule}\` | ${b.callCount || 1} \u6B21 | \u8DE8\u6A21\u5757\u4EE3\u7801\u8C03\u7528 / \u5951\u7EA6\u4EA4\u4E92 |
+`;
+    }
+  } else {
+    md += `*\u672A\u68C0\u6D4B\u5230\u8DE8\u6A21\u5757\u8DE8\u5C42\u8C03\u7528\uFF0C\u5404\u6A21\u5757\u9AD8\u5EA6\u5185\u805A\u3002*
+`;
+  }
+  md += `
+`;
+  if (flows.length > 0) {
+    md += `## 4. \u5173\u952E\u7AEF\u5230\u7AEF\u65F6\u5E8F\u6D41\u7A0B (Process Flows)
+
+`;
+    for (const flow of flows) {
+      md += `### \u{1F504} ${flow.name || flow.id}
+`;
+      if (flow.steps && flow.steps.length > 0) {
+        md += `- **\u6B65\u9AA4\u6D41\u8F6C**: ${flow.steps.map((s) => `\`${s.caller || s.source}\` \u2794 \`${s.callee || s.target}\``).join(" \u2794 ")}
+`;
+      }
+      md += `
+`;
+    }
+  }
+  return md;
 }
 function saveCache(workspaceRoot, data) {
   try {
@@ -113338,30 +113503,63 @@ function saveCache(workspaceRoot, data) {
       fs5.mkdirSync(cacheDir, { recursive: true });
     }
     ensureGitignore(resolvedRoot);
-    const targetPath = getCacheFilePath(resolvedRoot);
-    const tmpPath = `${targetPath}.tmp`;
-    const jsonStr = JSON.stringify(data);
-    try {
-      fs5.writeFileSync(tmpPath, jsonStr, "utf-8");
-      if (fs5.existsSync(targetPath)) {
-        try {
-          fs5.unlinkSync(targetPath);
-        } catch {
-        }
+    const manifest = {
+      version: 2,
+      savedAt: data.savedAt || (/* @__PURE__ */ new Date()).toISOString(),
+      workspaceRoot: data.workspaceRoot || resolvedRoot,
+      scopePath: data.scopePath || ".",
+      meta: data.graph.meta,
+      architectureView: data.graph.architectureView,
+      processFlows: data.graph.processFlows,
+      layout: data.layout
+    };
+    const manifestPath = getManifestFilePath(resolvedRoot);
+    fs5.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+    const slimNodes = {};
+    for (const [id, node] of Object.entries(data.graph.allNodes || {})) {
+      const { metadata: metadata2, ...rest } = node;
+      let slimMeta = metadata2;
+      if (metadata2 && metadata2.story) {
+        const { story, ...otherMeta } = metadata2;
+        slimMeta = {
+          ...otherMeta,
+          summaryText: story.summaryText,
+          roleTitle: story.roleTitle
+        };
       }
-      fs5.renameSync(tmpPath, targetPath);
-    } catch {
-      fs5.writeFileSync(targetPath, jsonStr, "utf-8");
-      if (fs5.existsSync(tmpPath)) {
-        try {
-          fs5.unlinkSync(tmpPath);
-        } catch {
-        }
+      slimNodes[id] = { ...rest, metadata: slimMeta };
+    }
+    const nodeEntries = Object.entries(slimNodes).map(([id, n]) => `    ${JSON.stringify(id)}: ${JSON.stringify(n)}`);
+    const edgeEntries = (data.graph.allEdges || []).map((e) => `    ${JSON.stringify(e)}`);
+    const symbolsContent = `{
+  "allNodes": {
+${nodeEntries.join(",\n")}
+  },
+  "allEdges": [
+${edgeEntries.join(",\n")}
+  ]
+}`;
+    const symbolsPath = getSymbolsFilePath(resolvedRoot);
+    fs5.writeFileSync(symbolsPath, symbolsContent, "utf-8");
+    const compilerCache = {
+      baselineHashes: data.baselineHashes || {},
+      extractions: data.extractions || {}
+    };
+    const compilerPath = getCompilerCacheFilePath(resolvedRoot);
+    fs5.writeFileSync(compilerPath, JSON.stringify(compilerCache), "utf-8");
+    const docPath = getArchitectureDocPath(resolvedRoot);
+    const mdContent = generateArchitectureMarkdown(data.graph.meta?.projectName || path6.basename(resolvedRoot), resolvedRoot, manifest);
+    fs5.writeFileSync(docPath, mdContent, "utf-8");
+    const legacyPath = getCacheFilePath(resolvedRoot);
+    if (fs5.existsSync(legacyPath)) {
+      try {
+        fs5.unlinkSync(legacyPath);
+      } catch {
       }
     }
-    console.log(`[CodeGraph] \u56FE\u8C31\u7F13\u5B58\u5DF2\u4FDD\u5B58\u81F3: ${targetPath}`);
+    console.log(`[CodeGraph] \u56FE\u8C31\u7F13\u5B58\u5DF2\u89E3\u8026\u4FDD\u5B58\u81F3: ${cacheDir} (manifest, symbols, compiler-cache, architecture.md)`);
   } catch (err2) {
-    console.warn(`[CodeGraph] \u4FDD\u5B58\u56FE\u8C31\u7F13\u5B58\u5931\u8D25: ${workspaceRoot}`, err2);
+    console.warn(`[CodeGraph] \u4FDD\u5B58\u89E3\u8026\u56FE\u8C31\u7F13\u5B58\u5931\u8D25: ${workspaceRoot}`, err2);
   }
 }
 function ensureGitignore(workspaceRoot) {
@@ -114851,6 +115049,93 @@ var CodeGraphServer = class {
   staticDir;
   isScanning = false;
   drilldownCache = /* @__PURE__ */ new Map();
+  drilldownQueue = [];
+  isQueueProcessing = false;
+  startBackgroundDrilldown(graph) {
+    if (!graph || !graph.architectureView?.modules)
+      return;
+    const modules = graph.architectureView.modules;
+    for (const m of modules) {
+      if (!this.drilldownCache.has(m.id) && !this.drilldownQueue.includes(m.id)) {
+        this.drilldownQueue.push(m.id);
+      }
+    }
+    if (!this.isQueueProcessing && this.drilldownQueue.length > 0) {
+      this.processNextDrilldown();
+    }
+  }
+  async computeModuleDrilldown(moduleId, graph) {
+    const targetModule = graph.architectureView?.modules?.find((m) => m.id === moduleId);
+    if (!targetModule)
+      return null;
+    const moduleFiles = new Set(targetModule.files || []);
+    const internalNodes = Object.values(graph.allNodes || {}).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
+    const internalNodeIds = new Set(internalNodes.map((n) => n.id));
+    const internalCalls = [];
+    (graph.allEdges || []).forEach((e) => {
+      if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
+        internalCalls.push({ source: e.source, target: e.target });
+      }
+    });
+    const portEdges = [];
+    (targetModule.inPorts || []).forEach((port) => {
+      const inPortId = `inport_${port}`;
+      const matched = internalNodes.filter((n) => n.name === port || n.id === port);
+      if (matched.length > 0) {
+        matched.forEach((m) => {
+          portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
+        });
+      } else {
+        const incoming = (graph.allEdges || []).filter((e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source));
+        if (incoming.length > 0) {
+          portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
+        }
+      }
+    });
+    (targetModule.outPorts || []).forEach((port) => {
+      const outPortId = `outport_${port}`;
+      const outgoing = (graph.allEdges || []).filter((e) => internalNodeIds.has(e.source) && (!internalNodeIds.has(e.target) || e.target.includes(port)) && (graph.allNodes[e.target]?.name === port || e.target.endsWith(port)));
+      if (outgoing.length > 0) {
+        outgoing.forEach((og) => {
+          portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
+        });
+      }
+    });
+    const layout = await ElkLayoutEngine.layoutModuleDetail(internalNodes, internalCalls, {
+      inPorts: targetModule.inPorts,
+      outPorts: targetModule.outPorts,
+      portEdges
+    });
+    this.drilldownCache.set(moduleId, { layout, portEdges, version: "v6" });
+    try {
+      const currentLayout = this.core.getLastLayout() || {};
+      const drilldowns = currentLayout.drilldowns || {};
+      drilldowns[moduleId] = { layout, portEdges, version: "v6" };
+      this.core.setLastLayout({ ...currentLayout, drilldowns });
+      this.core.saveToCache({ ...currentLayout, drilldowns });
+    } catch {
+    }
+    return { layout, portEdges, nodes: internalNodes, edges: internalCalls };
+  }
+  async processNextDrilldown() {
+    if (this.drilldownQueue.length === 0) {
+      this.isQueueProcessing = false;
+      return;
+    }
+    this.isQueueProcessing = true;
+    const nextModId = this.drilldownQueue.shift();
+    if (nextModId && !this.drilldownCache.has(nextModId)) {
+      const graph = this.core.getLastResult();
+      if (graph) {
+        try {
+          await this.computeModuleDrilldown(nextModId, graph);
+        } catch (e) {
+          console.warn(`[CodeGraph] \u540E\u53F0\u5F02\u6B65\u6392\u7248\u6A21\u5757 ${nextModId} \u8B66\u544A:`, e);
+        }
+      }
+    }
+    setTimeout(() => this.processNextDrilldown(), 60);
+  }
   constructor(options) {
     this.port = options.port || 3333;
     this.workspaceRoot = path8.resolve(options.workspaceRoot);
@@ -115019,7 +115304,13 @@ var CodeGraphServer = class {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         success: true,
-        graph: newResult,
+        graph: {
+          meta: newResult.meta,
+          architectureView: newResult.architectureView,
+          processFlows: newResult.processFlows,
+          allNodes: {},
+          allEdges: []
+        },
         layout: { architecture: archLayout }
       }));
       return;
@@ -115046,37 +115337,11 @@ var CodeGraphServer = class {
     if (pathname === "/api/layout-drilldown" && req.method === "POST") {
       const body2 = await this.readJsonBody(req);
       const moduleId = body2?.moduleId;
+      const forceRefresh = !!body2?.forceRefresh;
       if (!moduleId) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "\u7F3A\u5C11 moduleId \u53C2\u6570" }));
         return;
-      }
-      if (!body2?.forceRefresh) {
-        if (this.drilldownCache.has(moduleId)) {
-          const cached = this.drilldownCache.get(moduleId);
-          if (cached?.version === "v6" && cached?.layout?.width && cached.layout.width < 12e3) {
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({
-              success: true,
-              layout: cached.layout,
-              portEdges: cached.portEdges,
-              fromCache: true
-            }));
-            return;
-          }
-        }
-        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
-        if (diskCache && diskCache?.version === "v6" && diskCache?.layout?.width && diskCache.layout.width < 12e3) {
-          this.drilldownCache.set(moduleId, diskCache);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            success: true,
-            layout: diskCache.layout,
-            portEdges: diskCache.portEdges,
-            fromCache: true
-          }));
-          return;
-        }
       }
       let last = this.core.getLastResult();
       if (!last) {
@@ -115104,51 +115369,84 @@ var CodeGraphServer = class {
           internalCalls.push({ source: e.source, target: e.target });
         }
       });
-      const portEdges = [];
-      targetModule.inPorts.forEach((port) => {
-        const inPortId = `inport_${port}`;
-        const matched = internalNodes.filter((n) => n.name === port || n.id === port);
-        if (matched.length > 0) {
-          matched.forEach((m) => {
-            portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
-          });
-        } else {
-          const incoming = last.allEdges.filter((e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source));
-          if (incoming.length > 0) {
-            portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
+      if (!forceRefresh) {
+        if (this.drilldownCache.has(moduleId)) {
+          const cached = this.drilldownCache.get(moduleId);
+          if (cached?.version === "v6" && cached?.layout?.width && cached.layout.width < 12e3) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({
+              success: true,
+              layout: cached.layout,
+              portEdges: cached.portEdges,
+              nodes: internalNodes,
+              edges: internalCalls,
+              fromCache: true
+            }));
+            return;
           }
         }
-      });
-      targetModule.outPorts.forEach((port) => {
-        const outPortId = `outport_${port}`;
-        const outgoing = last.allEdges.filter((e) => internalNodeIds.has(e.source) && (!internalNodeIds.has(e.target) || e.target.includes(port)) && (last.allNodes[e.target]?.name === port || e.target.endsWith(port)));
-        if (outgoing.length > 0) {
-          outgoing.forEach((og) => {
-            portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
-          });
+        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        if (diskCache && diskCache?.version === "v6" && diskCache?.layout?.width && diskCache.layout.width < 12e3) {
+          this.drilldownCache.set(moduleId, diskCache);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            success: true,
+            layout: diskCache.layout,
+            portEdges: diskCache.portEdges,
+            nodes: internalNodes,
+            edges: internalCalls,
+            fromCache: true
+          }));
+          return;
         }
-      });
-      const layout = await ElkLayoutEngine.layoutModuleDetail(internalNodes, internalCalls, {
-        inPorts: targetModule.inPorts,
-        outPorts: targetModule.outPorts,
-        portEdges
-      });
-      this.drilldownCache.set(moduleId, { layout, portEdges, version: "v6" });
-      try {
-        const currentLayout = this.core.getLastLayout() || {};
-        const drilldowns = currentLayout.drilldowns || {};
-        drilldowns[moduleId] = { layout, portEdges, version: "v6" };
-        this.core.setLastLayout({ ...currentLayout, drilldowns });
-        this.core.saveToCache({ ...currentLayout, drilldowns });
-      } catch (err2) {
-        console.warn("[CodeGraph] \u4FDD\u5B58\u4E0B\u94BB\u6392\u7248\u81F3\u6301\u4E45\u5316\u7F13\u5B58\u5931\u8D25:", err2);
+      }
+      const qIdx = this.drilldownQueue.indexOf(moduleId);
+      if (qIdx !== -1) {
+        this.drilldownQueue.splice(qIdx, 1);
+      }
+      const result = await this.computeModuleDrilldown(moduleId, last);
+      if (!result) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "\u8BA1\u7B97\u4E0B\u94BB\u6392\u7248\u5931\u8D25" }));
+        return;
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         success: true,
-        layout,
-        portEdges
+        layout: result.layout,
+        portEdges: result.portEdges,
+        nodes: result.nodes,
+        edges: result.edges
       }));
+      return;
+    }
+    if (pathname === "/api/symbols" && req.method === "GET") {
+      let last = this.core.getLastResult();
+      if (!last) {
+        const cached = this.core.loadFromCache();
+        if (cached)
+          last = cached.graph;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (last) {
+        const slimNodes = {};
+        for (const [id, node] of Object.entries(last.allNodes || {})) {
+          const { metadata: metadata2, ...rest } = node;
+          let slimMeta = metadata2;
+          if (metadata2 && metadata2.story) {
+            const { story, ...otherMeta } = metadata2;
+            slimMeta = {
+              ...otherMeta,
+              summaryText: story.summaryText,
+              roleTitle: story.roleTitle
+            };
+          }
+          slimNodes[id] = { ...rest, metadata: slimMeta };
+        }
+        res.end(JSON.stringify({ success: true, allNodes: slimNodes, allEdges: last.allEdges || [] }));
+      } else {
+        res.end(JSON.stringify({ success: false, allNodes: {}, allEdges: [] }));
+      }
       return;
     }
     if (pathname === "/api/status" && req.method === "GET") {
@@ -115179,6 +115477,9 @@ var CodeGraphServer = class {
           console.warn("[CodeGraph] \u81EA\u52A8\u8BA1\u7B97\u7F13\u5B58\u5E03\u5C40\u5931\u8D25:", err2);
         }
       }
+      if (last) {
+        this.startBackgroundDrilldown(last);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         initialized: !!last,
@@ -115187,7 +115488,14 @@ var CodeGraphServer = class {
         workspaceRoot: this.workspaceRoot,
         scopePath: this.core.getScopePath(),
         meta: last?.meta,
-        graph: last,
+        // 宏观首屏仅返回架构 modules, buses 与 processFlows，排除成千上万个微观节点，极速秒开
+        graph: {
+          meta: last?.meta,
+          architectureView: last?.architectureView,
+          processFlows: last?.processFlows,
+          allNodes: {},
+          allEdges: []
+        },
         layout,
         projects: this.core.getProjects(),
         selectedProjectIds: this.core.getSelectedProjectIds(),
@@ -115253,10 +115561,17 @@ var CodeGraphServer = class {
         const archLayout = await ElkLayoutEngine.layoutArchitecture(graphResult.architectureView.modules, graphResult.architectureView.buses);
         this.core.saveToCache({ architecture: archLayout });
         this.drilldownCache.clear();
+        this.startBackgroundDrilldown(graphResult);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
           success: true,
-          graph: graphResult,
+          graph: {
+            meta: graphResult.meta,
+            architectureView: graphResult.architectureView,
+            processFlows: graphResult.processFlows,
+            allNodes: {},
+            allEdges: []
+          },
           layout: {
             architecture: archLayout
           }
@@ -115271,10 +115586,17 @@ var CodeGraphServer = class {
       const archLayout = await ElkLayoutEngine.layoutArchitecture(updated.architectureView.modules, updated.architectureView.buses);
       this.core.saveToCache({ architecture: archLayout });
       this.drilldownCache.clear();
+      this.startBackgroundDrilldown(updated);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         success: true,
-        graph: updated,
+        graph: {
+          meta: updated.meta,
+          architectureView: updated.architectureView,
+          processFlows: updated.processFlows,
+          allNodes: {},
+          allEdges: []
+        },
         layout: {
           architecture: archLayout
         }

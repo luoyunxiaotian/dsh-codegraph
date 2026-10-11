@@ -116,6 +116,45 @@ export const App: React.FC = () => {
     init();
   }, []);
 
+  // 智能空闲静默预热：首屏宏观架构就绪后，利用空闲时间异步拉取微观 symbols.json
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    let isCancelled = false;
+    const preheatSymbols = async () => {
+      try {
+        const res = await fetch('/api/symbols');
+        const data = await res.json();
+        if (!isCancelled && data.success && data.allNodes) {
+          setGraphData((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              allNodes: { ...prev.allNodes, ...data.allNodes },
+              allEdges: data.allEdges?.length ? data.allEdges : prev.allEdges,
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('后台静默预热微观符号异常:', err);
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const handle = (window as any).requestIdleCallback(() => preheatSymbols(), { timeout: 3000 });
+      return () => {
+        isCancelled = true;
+        (window as any).cancelIdleCallback(handle);
+      };
+    } else {
+      const timer = setTimeout(preheatSymbols, 300);
+      return () => {
+        isCancelled = true;
+        clearTimeout(timer);
+      };
+    }
+  }, [isInitialized]);
+
   // 执行全量扫描
   const handleFullScan = async (
     customScope?: string,

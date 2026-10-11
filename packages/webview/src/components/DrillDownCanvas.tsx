@@ -520,14 +520,15 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     items: ContextMenuItem[];
   } | null>(null);
 
+  const [onDemandNodes, setOnDemandNodes] = useState<any[]>([]);
   const moduleFiles = useMemo(() => new Set(module.files), [module.files]);
-  const internalNodes = useMemo(
-    () =>
-      Object.values(allNodes).filter(
-        (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
-      ),
-    [allNodes, moduleFiles]
-  );
+  const internalNodes = useMemo(() => {
+    const fromAll = Object.values(allNodes).filter(
+      (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+    );
+    if (fromAll.length > 0) return fromAll;
+    return onDemandNodes;
+  }, [allNodes, moduleFiles, onDemandNodes]);
   const internalNodeIds = useMemo(() => new Set(internalNodes.map((n) => n.id)), [internalNodes]);
 
   // 计算端口关联边 (In-Ports 打入入口，内部符号打出 Out-Ports)
@@ -615,6 +616,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
             posMap[n.id] = { x: n.x, y: n.y };
           });
           setNodePositions(posMap);
+          if (data.nodes && data.nodes.length > 0 && internalNodes.length === 0) {
+            setOnDemandNodes(data.nodes);
+          }
           const portEdges = data.portEdges || [];
           setServerPortEdges(portEdges);
           const layoutData: PersistedDrillLayout = { positions: posMap, portEdges };
@@ -1067,6 +1071,26 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
   return (
     <div className={`relative w-full h-[calc(100vh-56px)] bg-dsh-base ${isLodCompact ? 'rf-lod-compact' : ''}`}>
+      {/* 优雅正在生成/理线中的浮层动画 (用户双击未就绪下钻模块时的抢占等待动效) */}
+      {isUntangling && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-dsh-base/80 backdrop-blur-sm transition-all duration-300 pointer-events-none">
+          <div className="flex flex-col items-center gap-3.5 p-6 rounded-2xl bg-dsh-layer1 border border-dsh-border2 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative flex items-center justify-center w-12 h-12">
+              <div className="absolute w-12 h-12 rounded-full border-2 border-dsh-blue/30 animate-ping" />
+              <div className="w-10 h-10 rounded-full border-2 border-dsh-blue border-t-transparent animate-spin" />
+            </div>
+            <div className="text-center">
+              <div className="text-[14px] font-semibold text-dsh-primary">
+                ✨ 正在优先构建【{module.name}】内部流线与分层排版
+              </div>
+              <div className="text-[12px] text-dsh-tertiary mt-1">
+                Sugiyama 正交分层排版引擎正在优化端口连线与跨层布局...
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 顶部面包屑快速返回条 */}
       <div className="absolute top-3.5 left-3.5 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dsh-layer1/95 border border-dsh-border2 shadow-md text-[13px]">
         <button
