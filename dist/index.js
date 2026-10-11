@@ -115442,11 +115442,11 @@ var PluginUpdater = class {
     const mirrors = getDefaultMirrors(this.repo, this.customHuaweiUrl);
     let manifest = null;
     let fetchError = "";
-    for (const mirror of mirrors) {
+    const fetchPromises = mirrors.map(async (mirror) => {
       const url = mirror.resolveUrl("feed/manifest.json");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4e3);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5e3);
         const res = await fetch(url, {
           headers: { "User-Agent": "CodeGraph-Updater/2.0.0", "Cache-Control": "no-cache" },
           signal: controller.signal
@@ -115454,14 +115454,21 @@ var PluginUpdater = class {
         clearTimeout(timeout);
         if (res.ok) {
           const text = await res.text();
-          manifest = JSON.parse(text);
-          if (manifest && manifest.version && Array.isArray(manifest.files)) {
-            break;
+          const parsed = JSON.parse(text);
+          if (parsed && parsed.version && Array.isArray(parsed.files)) {
+            return parsed;
           }
         }
-      } catch (e) {
-        fetchError = e.message || "\u7F51\u7EDC\u62C9\u53D6\u5931\u8D25";
+        throw new Error(`HTTP ${res.status}`);
+      } catch (err2) {
+        clearTimeout(timeout);
+        throw err2;
       }
+    });
+    try {
+      manifest = await Promise.any(fetchPromises);
+    } catch (allErr) {
+      fetchError = "\u6240\u6709\u955C\u50CF\u6E90\u5747\u672A\u80FD\u62C9\u53D6\u5230\u7248\u672C\u6E05\u5355";
     }
     if (!manifest) {
       this.currentProgress = { phase: "error", percent: 0, error: `\u83B7\u53D6\u7248\u672C\u6E05\u5355\u5931\u8D25: ${fetchError}` };

@@ -147,28 +147,35 @@ export class PluginUpdater {
     let manifest: ReleaseManifest | null = null;
     let fetchError = '';
 
-    // 尝试拉取 feed/manifest.json
-    for (const mirror of mirrors) {
+    // 并发竞速拉取：向所有镜像源同时发起请求，毫秒级采用首个成功响应 (Promise.any)
+    const fetchPromises = mirrors.map(async (mirror) => {
       const url = mirror.resolveUrl('feed/manifest.json');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(url, {
           headers: { 'User-Agent': 'CodeGraph-Updater/2.0.0', 'Cache-Control': 'no-cache' },
           signal: controller.signal,
         });
         clearTimeout(timeout);
-
         if (res.ok) {
           const text = await res.text();
-          manifest = JSON.parse(text) as ReleaseManifest;
-          if (manifest && manifest.version && Array.isArray(manifest.files)) {
-            break;
+          const parsed = JSON.parse(text) as ReleaseManifest;
+          if (parsed && parsed.version && Array.isArray(parsed.files)) {
+            return parsed;
           }
         }
-      } catch (e: any) {
-        fetchError = e.message || '网络拉取失败';
+        throw new Error(`HTTP ${res.status}`);
+      } catch (err: any) {
+        clearTimeout(timeout);
+        throw err;
       }
+    });
+
+    try {
+      manifest = await Promise.any(fetchPromises);
+    } catch (allErr: any) {
+      fetchError = '所有镜像源均未能拉取到版本清单';
     }
 
     if (!manifest) {

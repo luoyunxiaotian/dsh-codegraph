@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 工业级超大工程架构下钻排版优化与Clangd式按文件分片缓存。彻底消除50MB巨石无换行缓存，下钻排版独立分片至 .codegraph/drilldowns/；Sugiyama正交分层排版重心预计算 (8868 节点下钻耗时由数秒降至 114ms)；首屏视口锚定与虚拟化，极简按需点亮连线 (On-Demand Edges) 与 MiniMap 门禁，平移拖拽保持 60 FPS。`,
+    notes: `v${version}: 顶部控制栏响应式排版重构与自更新并发竞速引擎。彻底解决顶部按钮横向溢出问题，新增「•••」更多功能收纳菜单与精细圆角悬停交互；语言标签聚合为多语言胶囊浮层；自更新检测升级为全镜像 Promise.any 毫秒级并发竞速；优化模块下钻浮动工具栏窄屏响应式自适应。`,
     minSupported: '1.0.0',
     files,
   };

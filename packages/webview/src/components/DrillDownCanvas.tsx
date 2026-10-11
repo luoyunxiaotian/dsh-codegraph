@@ -1172,20 +1172,21 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       </div>
 
       {/* 顶部右侧理线控制工具栏 (固定布局，避免因提示变化跳动) */}
-      <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2 p-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[13px]">
+      <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[13px]">
         {/* 大图模式下的连线模式切换 (默认极简按需点亮) */}
         {isLargeGraph && (
           <button
             onClick={() => setForceShowAllEdges((prev) => !prev)}
             title={forceShowAllEdges ? '切换为极简按需点亮连线 (推荐，60 FPS 流畅)' : '强制绘制全部连线 (节点极多时可能掉帧)'}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[12px] font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md border text-[12px] font-medium transition-colors ${
               forceShowAllEdges
                 ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
                 : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{forceShowAllEdges ? '全部连线 (已强制)' : '按需点亮连线 (高性能)'}</span>
+            <span className="hidden md:inline">{forceShowAllEdges ? '全部连线 (已强制)' : '按需点亮连线 (高性能)'}</span>
+            <span className="md:hidden">{forceShowAllEdges ? '全连线' : '按需'}</span>
           </button>
         )}
 
@@ -1194,9 +1195,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           onClick={() => performUntangleLayout(true, true)}
           disabled={isUntangling}
           title="使用 ELK Sugiyama 分层正交算法重新排版并规避连线交叉"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md bg-dsh-blue text-white hover:bg-dsh-blue-hover active:scale-95 transition-all font-medium disabled:opacity-50 text-[12px] sm:text-[13px]"
         >
-          <Wand2 className={`w-4 h-4 ${isUntangling ? 'animate-spin' : ''}`} />
+          <Wand2 className={`w-3.5 sm:w-4 h-3.5 sm:h-4 ${isUntangling ? 'animate-spin' : ''}`} />
           <span>{isUntangling ? '理线中...' : '一键理线'}</span>
         </button>
 
@@ -1204,27 +1205,27 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         <button
           onClick={() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 })}
           title="将所有卡片全景居中适屏显示"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+          className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors text-[12px]"
         >
-          <Maximize2 className="w-4 h-4 text-emerald-400" />
-          <span>全景适屏</span>
+          <Maximize2 className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-400" />
+          <span className="hidden sm:inline">全景适屏</span>
         </button>
 
         {/* 平滑正交 / 优雅曲线 切换 */}
         <button
           onClick={() => setRoutingMode((prev) => (prev === 'smoothstep' ? 'bezier' : 'smoothstep'))}
           title={routingMode === 'smoothstep' ? '切换为贝塞尔优雅曲线' : '切换为平滑正交折线 (规避斜切交叉)'}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors"
+          className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border border-dsh-border1 transition-colors text-[12px]"
         >
           {routingMode === 'smoothstep' ? (
             <>
-              <GitFork className="w-4 h-4 text-dsh-blue" />
-              <span>正交折线</span>
+              <GitFork className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-dsh-blue" />
+              <span className="hidden md:inline">正交折线</span>
             </>
           ) : (
             <>
-              <Route className="w-4 h-4 text-purple-400" />
-              <span>贝塞尔曲线</span>
+              <Route className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-purple-400" />
+              <span className="hidden md:inline">贝塞尔曲线</span>
             </>
           )}
         </button>
@@ -1233,14 +1234,14 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         <button
           onClick={() => setFilterCallsOnly((prev) => !prev)}
           title={filterCallsOnly ? '显示全部连线 (包含导入和结构依赖)' : '降噪：仅显示核心函数调用 (隐藏导入边)'}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border transition-colors ${
+          className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-md border transition-colors text-[12px] ${
             filterCallsOnly
               ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
               : 'hover:bg-dsh-layer2 text-dsh-secondary hover:text-dsh-primary border-dsh-border1'
           }`}
         >
-          <Filter className="w-4 h-4" />
-          <span>{filterCallsOnly ? '仅核心调用' : '全部连线'}</span>
+          <Filter className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+          <span className="hidden lg:inline">{filterCallsOnly ? '仅核心调用' : '全部连线'}</span>
         </button>
 
         {/* 锁定聚焦解除提示 */}

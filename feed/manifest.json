@@ -1,7 +1,7 @@
 {
-  "version": "2.1.1",
-  "publishedAt": "2026-10-11T08:58:56.585Z",
-  "notes": "v2.1.1: 工业级超大工程架构下钻排版优化与Clangd式按文件分片缓存。彻底消除50MB巨石无换行缓存，下钻排版独立分片至 .codegraph/drilldowns/；Sugiyama正交分层排版重心预计算 (8868 节点下钻耗时由数秒降至 114ms)；首屏视口锚定与虚拟化，极简按需点亮连线 (On-Demand Edges) 与 MiniMap 门禁，平移拖拽保持 60 FPS。",
+  "version": "2.1.2",
+  "publishedAt": "2026-10-11T09:58:09.729Z",
+  "notes": "v2.1.2: 顶部控制栏响应式排版重构与自更新并发竞速引擎。彻底解决顶部按钮横向溢出问题，新增「•••」更多功能收纳菜单与精细圆角悬停交互；语言标签聚合为多语言胶囊浮层；自更新检测升级为全镜像 Promise.any 毫秒级并发竞速；优化模块下钻浮动工具栏窄屏响应式自适应。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "dist/index.js",
-      "size": 4337739,
-      "sha256": "6cad3895f8c47709fca1043e5fdd15efe67009d6fe73c8bdd3f3cabe5bc6ea3a"
+      "size": 4337995,
+      "sha256": "16fdbd37942bee332a12aae53d1d21e4a478e4b9434fad08eb3fd974ddc8277a"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -115,19 +115,19 @@
       "sha256": "70aa2b222e10a91306a85f5b9c8e028e3dc09943854aa63640c643fc7e051c2f"
     },
     {
-      "path": "dist/webview/assets/index-PR3jRDyN.js",
-      "size": 485985,
-      "sha256": "186e077f06609673366ace9b7815d7c3a25732be6014d08d83db057e400642e9"
+      "path": "dist/webview/assets/index-B2hWHT2P.css",
+      "size": 55106,
+      "sha256": "72ca30aa3c208cae96f0b0565589aa6362294a22992367e30c6090c035650efa"
     },
     {
-      "path": "dist/webview/assets/index-ueCANf6q.css",
-      "size": 53695,
-      "sha256": "81be1ebb5b0d50ee1f6181e76b85bd443ee3dc788a301de963dbc286c5b77b47"
+      "path": "dist/webview/assets/index-BF3pu-qF.js",
+      "size": 490788,
+      "sha256": "68b26967df3c929b2cf2428b671026afb39b411d11c17fc43281bf1bfe35f72f"
     },
     {
       "path": "dist/webview/index.html",
       "size": 749,
-      "sha256": "e1a438cc23a52b6a0d99251dfb3643413051cf681fafc1959145d6a006d6ed13"
+      "sha256": "b1f6f67434323ec087c890966ee5de140fcaa57be0be3b81a4fb2ae4152f68a3"
     },
     {
       "path": "LICENSE",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "6d3200be9e34ed043df59e39066659aa0ddf316919804051d72863052896c803"
+      "sha256": "9533d346a976ee032b894978e88bac519f14c01811e8286c1a5860b95c76010d"
     },
     {
       "path": "README.md",

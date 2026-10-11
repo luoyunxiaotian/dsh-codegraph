@@ -112,8 +112,8 @@ async function runUpdaterTests() {
     ],
   };
 
-  const checkResult = await updater.checkForUpdate('2.1.0');
-  // 当本地版本即为 2.1.0 时，hasUpdate 为 false
+  const checkResult = await updater.checkForUpdate(currentPkgVersion);
+  // 当本地版本即为当前最新版本时，hasUpdate 为 false
   assert.strictEqual(checkResult.hasUpdate, false);
 
   console.log('  ✓ 增量清单哈希校验与版本状态流转验证通过！');

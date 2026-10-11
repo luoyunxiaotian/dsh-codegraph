@@ -71,7 +71,10 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
     setIsChecking(true);
     setErrorMessage(null);
     try {
-      await onCheckUpdate(true);
+      const res = await onCheckUpdate(true);
+      if (!res || !res.latestVersion) {
+        setErrorMessage('未能从服务器获取最新版本信息，请检查后台服务连接状态');
+      }
     } catch (e: any) {
       setErrorMessage(e.message || '检测更新失败');
     } finally {
