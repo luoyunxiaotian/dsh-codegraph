@@ -1,7 +1,7 @@
 {
-  "version": "2.0.0",
-  "publishedAt": "2026-10-11T07:27:33.550Z",
-  "notes": "v2.0.0: 存量全栈生态 (Dart, PHP, Ruby) 支持，大工程高性能三层缓存与 3 秒持续吞吐实测竞速热更新系统",
+  "version": "2.1.0",
+  "publishedAt": "2026-10-11T07:45:39.327Z",
+  "notes": "v2.1.0: 内置插件在线更新与增量自愈机制，国内多镜像 3 秒持续吞吐实测竞速选源，华为云开源镜像终极兜底，TopBar 呼吸灯徽标与更新管理面板",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "5061fc94663ea2b09ddf4031c8d5cb5fb535648dd13d2e1c471721fc299847dc"
+      "sha256": "edb5300788c04ef07c3db43a5c210421ebaf31bda10024fbbef690ea7553f73a"
     },
     {
       "path": "README.md",
