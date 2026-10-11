@@ -530,6 +530,23 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     return onDemandNodes;
   }, [allNodes, moduleFiles, onDemandNodes]);
   const internalNodeIds = useMemo(() => new Set(internalNodes.map((n) => n.id)), [internalNodes]);
+  const isLargeGraph = useMemo(() => internalNodes.length > 150, [internalNodes.length]);
+  const [forceShowAllEdges, setForceShowAllEdges] = useState(false);
+  const [showMiniMap, setShowMiniMap] = useState(false);
+
+  // 自适应视口控制：大图模式下严禁全局 fitView 撑爆视口，舒适锚定于 In-Port 区域以 zoom=0.85 呈现，激活虚拟化
+  const applyAdaptiveViewport = useCallback(
+    (instance?: any) => {
+      const inst = instance || rfInstanceRef.current || rfInstance;
+      if (!inst) return;
+      if (internalNodes.length > 150) {
+        inst.setCenter(260, 250, { zoom: 0.85, duration: 250 });
+      } else {
+        inst.fitView({ padding: 0.1, duration: 250 });
+      }
+    },
+    [internalNodes.length, rfInstance]
+  );
 
   // 计算端口关联边 (In-Ports 打入入口，内部符号打出 Out-Ports)
   const resolvedPortEdges = useMemo(() => {
@@ -579,7 +596,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         if (isLayoutValid(cached, internalNodes.length)) {
           setNodePositions(cached.positions);
           if (cached.portEdges) setServerPortEdges(cached.portEdges);
-          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
+          setTimeout(() => applyAdaptiveViewport(), 150);
           return;
         }
       }
@@ -591,7 +608,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           setNodePositions(persisted!.positions);
           if (persisted!.portEdges) setServerPortEdges(persisted!.portEdges);
           moduleLayoutMemoryCache.set(module.id, persisted!);
-          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
+          setTimeout(() => applyAdaptiveViewport(), 150);
           return;
         }
       }
@@ -626,7 +643,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           savePersistedLayout(workspaceRoot, module.id, layoutData);
 
           if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
-          setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 300 }), 150);
+          setTimeout(() => applyAdaptiveViewport(), 150);
           return;
         }
       } catch (err) {
@@ -641,9 +658,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       moduleLayoutMemoryCache.set(module.id, clientData);
       savePersistedLayout(workspaceRoot, module.id, clientData);
       if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
-      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 300 }), 150);
+      setTimeout(() => applyAdaptiveViewport(), 150);
     },
-    [module, workspaceRoot, internalNodes, allEdges, rfInstance]
+    [module, workspaceRoot, internalNodes, allEdges, applyAdaptiveViewport]
   );
 
   // 模块切换或首次载入时，优先应用缓存或触发自动理线
@@ -652,7 +669,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     if (mem && isLayoutValid(mem, internalNodes.length)) {
       setNodePositions(mem.positions);
       if (mem.portEdges) setServerPortEdges(mem.portEdges);
-      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
+      setTimeout(() => applyAdaptiveViewport(), 150);
       return;
     }
 
@@ -661,12 +678,12 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       setNodePositions(stored.positions);
       if (stored.portEdges) setServerPortEdges(stored.portEdges);
       moduleLayoutMemoryCache.set(module.id, stored);
-      setTimeout(() => (rfInstanceRef.current || rfInstance)?.fitView({ padding: 0.1, duration: 250 }), 150);
+      setTimeout(() => applyAdaptiveViewport(), 150);
       return;
     }
 
     performUntangleLayout(false, false);
-  }, [module.id, workspaceRoot, internalNodes.length, performUntangleLayout]);
+  }, [module.id, workspaceRoot, internalNodes.length, performUntangleLayout, applyAdaptiveViewport]);
 
   // 基础原始边集合 (不受 hover 抖动影响)
   const rawEdges = useMemo(() => {
@@ -721,7 +738,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       const pos = nodePositions[id] || { x: 50, y: 100 + idx * 75 };
       const isFocused = selectedNodeId === id;
       const isConnected = Boolean(selectedNodeId && connectedNodeIds.has(id));
-      const isDimmed = Boolean(selectedNodeId && !connectedNodeIds.has(id));
+      const isDimmed = isLargeGraph ? false : Boolean(selectedNodeId && !connectedNodeIds.has(id));
 
       reactNodes.push({
         id,
@@ -739,7 +756,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       const pos = nodePositions[n.id] || { x: 300 + (idx % 4) * 280, y: 80 + Math.floor(idx / 4) * 110 };
       const isFocused = selectedNodeId === n.id;
       const isConnected = Boolean(selectedNodeId && connectedNodeIds.has(n.id));
-      const isDimmed = Boolean(selectedNodeId && !connectedNodeIds.has(n.id));
+      const isDimmed = isLargeGraph ? false : Boolean(selectedNodeId && !connectedNodeIds.has(n.id));
 
       reactNodes.push({
         id: n.id,
@@ -758,7 +775,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       const pos = nodePositions[id] || { x: 900, y: 100 + idx * 75 };
       const isFocused = selectedNodeId === id;
       const isConnected = Boolean(selectedNodeId && connectedNodeIds.has(id));
-      const isDimmed = Boolean(selectedNodeId && !connectedNodeIds.has(id));
+      const isDimmed = isLargeGraph ? false : Boolean(selectedNodeId && !connectedNodeIds.has(id));
 
       reactNodes.push({
         id,
@@ -772,9 +789,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     });
 
     setNodes(reactNodes);
-  }, [module, internalNodes, nodePositions, selectedNodeId, rawEdges, onSelectNode, setNodes]);
+  }, [module, internalNodes, nodePositions, selectedNodeId, rawEdges, onSelectNode, isLargeGraph, setNodes]);
 
-  // 当首次加载完节点或切换模块时，确保全景自动适屏居中 (彻底杜绝停留在 (0,0) 局部导致卡片在屏幕外被误判为消失)
+  // 当首次加载完节点或切换模块时，确保全景自适应适屏 (大图锚定 In-Port 区域，小图全局居中)
   const hasAutoFittedRef = useRef(false);
   const prevModuleIdRef = useRef(module.id);
 
@@ -789,14 +806,11 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     if (nodes.length > 0 && (rfInstance || rfInstanceRef.current) && !hasAutoFittedRef.current) {
       hasAutoFittedRef.current = true;
       const timer = setTimeout(() => {
-        const inst = rfInstanceRef.current || rfInstance;
-        if (inst) {
-          inst.fitView({ padding: 0.1, duration: 250 });
-        }
+        applyAdaptiveViewport();
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [nodes.length, rfInstance]);
+  }, [nodes.length, rfInstance, applyAdaptiveViewport]);
 
   // 动态引脚分配算法 (Multi-Pin Dynamic Assignment)
   // 根据来源/目标节点的相对垂直(Y)坐标智能指派引脚，杜绝端子点单点粘连与连线缠绕
@@ -876,8 +890,50 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     return { edgeSourceHandle: sMap, edgeTargetHandle: tMap };
   }, [rawEdges, nodePositions]);
 
-  // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画，未选中时全量静态化且沉底
+  // 2. 同步边：大图模式下启用极简按需点亮连线 (On-Demand Edges)，未选中渲染 0 边，选中仅渲染关联 1-Hop 连线
   useEffect(() => {
+    // 大图模式下的极简按需连线
+    if (isLargeGraph && !forceShowAllEdges) {
+      if (!selectedNodeId) {
+        // 未选中卡片：渲染 0 条 SVG 边，DOM 开销为 0，平移拖拽 60 FPS！
+        setEdges([]);
+        return;
+      }
+
+      // 选中卡片：仅过滤并点亮关联的 1-Hop 进出边 (通常 3~15 条)
+      const incidentEdges = rawEdges.filter(
+        (e) => e.source === selectedNodeId || e.target === selectedNodeId
+      );
+
+      const reactEdges = incidentEdges.map((e) => {
+        const isOutgoing = e.source === selectedNodeId;
+        const isIncoming = e.target === selectedNodeId;
+        const strokeColor = isOutgoing ? '#3b82f6' : isIncoming ? '#10b981' : '#818cf8';
+
+        return {
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          sourceHandle: edgeSourceHandle[e.id] || (e.source.startsWith('inport_') ? 'source-1' : 'source-2'),
+          targetHandle: edgeTargetHandle[e.id] || (e.target.startsWith('outport_') ? 'target-1' : 'target-2'),
+          type: routingMode === 'smoothstep' ? 'smoothstep' : 'default',
+          pathOptions: routingMode === 'smoothstep' ? { borderRadius: 12, offset: 20 } : undefined,
+          animated: true,
+          zIndex: 15,
+          style: {
+            stroke: strokeColor,
+            strokeWidth: 2.6,
+            opacity: 1,
+            vectorEffect: 'non-scaling-stroke',
+          },
+        };
+      });
+
+      setEdges(reactEdges);
+      return;
+    }
+
+    // 常规模式或用户强制显示全部连线
     const connectedEdgeIds = new Set<string>();
     if (selectedNodeId) {
       rawEdges.forEach((e) => {
@@ -928,7 +984,17 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     });
 
     setEdges(reactEdges);
-  }, [rawEdges, selectedNodeId, routingMode, isDark, edgeSourceHandle, edgeTargetHandle, setEdges]);
+  }, [
+    rawEdges,
+    selectedNodeId,
+    routingMode,
+    isDark,
+    edgeSourceHandle,
+    edgeTargetHandle,
+    isLargeGraph,
+    forceShowAllEdges,
+    setEdges,
+  ]);
 
   // 节点右键处理
   const handleNodeContextMenu = useCallback(
@@ -1107,6 +1173,22 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
 
       {/* 顶部右侧理线控制工具栏 (固定布局，避免因提示变化跳动) */}
       <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2 p-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[13px]">
+        {/* 大图模式下的连线模式切换 (默认极简按需点亮) */}
+        {isLargeGraph && (
+          <button
+            onClick={() => setForceShowAllEdges((prev) => !prev)}
+            title={forceShowAllEdges ? '切换为极简按需点亮连线 (推荐，60 FPS 流畅)' : '强制绘制全部连线 (节点极多时可能掉帧)'}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[12px] font-medium transition-colors ${
+              forceShowAllEdges
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{forceShowAllEdges ? '全部连线 (已强制)' : '按需点亮连线 (高性能)'}</span>
+          </button>
+        )}
+
         {/* 一键理线按钮 */}
         <button
           onClick={() => performUntangleLayout(true, true)}
@@ -1191,7 +1273,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           isLodCompactRef.current = initialCompact;
           setIsLodCompact(initialCompact);
           setTimeout(() => {
-            instance.fitView({ padding: 0.1, duration: 250 });
+            applyAdaptiveViewport(instance);
           }, 150);
         }}
         onMove={handleMove}
@@ -1212,7 +1294,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         }}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneContextMenu={handlePaneContextMenu}
-        fitView
+        fitView={!isLargeGraph}
         fitViewOptions={{ padding: 0.15 }}
         nodeDragThreshold={2}
         elevateNodesOnSelect={true}
@@ -1221,27 +1303,47 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       >
         <Background color={isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'} gap={24} size={1} />
         <Controls />
-        <MiniMap
-          pannable={true}
-          zoomable={true}
-          onClick={(_, position) => {
-            const inst = rfInstanceRef.current || rfInstance;
-            if (inst) {
-              inst.setCenter(position.x, position.y, { zoom: inst.getZoom(), duration: 250 });
-            }
-          }}
-          nodeColor={(n) => {
-            if (n.type === 'inPort') return '#10b981';
-            if (n.type === 'outPort') return '#3b82f6';
-            const node = (n.data as any)?.node;
-            if (node?.entityType === 'CLASS') return '#f59e0b';
-            if (node?.entityType === 'CONTRACT_ENDPOINT' || node?.entityType === 'CONTRACT_TOPIC') return '#818cf8';
-            return '#3b82f6';
-          }}
-          maskColor={isDark ? 'rgba(21, 21, 23, 0.85)' : 'rgba(240, 242, 245, 0.85)'}
-          className="bg-dsh-platform border border-dsh-border2 rounded-md shadow-lg cursor-grab active:cursor-grabbing"
-        />
+        {(!isLargeGraph || showMiniMap) && (
+          <MiniMap
+            pannable={true}
+            zoomable={true}
+            onClick={(_, position) => {
+              const inst = rfInstanceRef.current || rfInstance;
+              if (inst) {
+                inst.setCenter(position.x, position.y, { zoom: inst.getZoom(), duration: 250 });
+              }
+            }}
+            nodeColor={(n) => {
+              if (n.type === 'inPort') return '#10b981';
+              if (n.type === 'outPort') return '#3b82f6';
+              const node = (n.data as any)?.node;
+              if (node?.entityType === 'CLASS') return '#f59e0b';
+              if (node?.entityType === 'CONTRACT_ENDPOINT' || node?.entityType === 'CONTRACT_TOPIC') return '#818cf8';
+              return '#3b82f6';
+            }}
+            maskColor={isDark ? 'rgba(21, 21, 23, 0.85)' : 'rgba(240, 242, 245, 0.85)'}
+            className="bg-dsh-platform border border-dsh-border2 rounded-md shadow-lg cursor-grab active:cursor-grabbing"
+          />
+        )}
       </ReactFlow>
+
+      {/* 大图模式下的底部智能操作指引与缩略图开关 */}
+      {isLargeGraph && !selectedNodeId && !forceShowAllEdges && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-3.5 py-1.5 rounded-full bg-dsh-layer1/90 backdrop-blur border border-dsh-border2 shadow-lg text-[12px] text-dsh-secondary flex items-center gap-2 pointer-events-none">
+          <Sparkles className="w-3.5 h-3.5 text-dsh-blue" />
+          <span>海量图谱高性能模式：点击任意卡片瞬间点亮关联链路</span>
+        </div>
+      )}
+
+      {isLargeGraph && (
+        <button
+          onClick={() => setShowMiniMap((prev) => !prev)}
+          title={showMiniMap ? '关闭缩略图以提升帧率' : '开启缩略图'}
+          className="absolute bottom-4 right-4 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-dsh-layer1/95 backdrop-blur border border-dsh-border2 shadow-md text-[12px] text-dsh-secondary hover:text-dsh-primary transition-colors"
+        >
+          <span>{showMiniMap ? '隐藏缩略图' : '🗺️ 显示缩略图'}</span>
+        </button>
+      )}
 
       {/* 右键菜单 */}
       {contextMenu && (

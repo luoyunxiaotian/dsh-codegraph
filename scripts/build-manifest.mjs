@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 内置插件在线更新与增量自愈机制，国内多镜像 3 秒持续吞吐实测竞速选源，华为云开源镜像终极兜底，TopBar 呼吸灯徽标与更新管理面板`,
+    notes: `v${version}: 工业级超大工程架构下钻排版优化与Clangd式按文件分片缓存。彻底消除50MB巨石无换行缓存，下钻排版独立分片至 .codegraph/drilldowns/；Sugiyama正交分层排版重心预计算 (8868 节点下钻耗时由数秒降至 114ms)；首屏视口锚定与虚拟化，极简按需点亮连线 (On-Demand Edges) 与 MiniMap 门禁，平移拖拽保持 60 FPS。`,
     minSupported: '1.0.0',
     files,
   };

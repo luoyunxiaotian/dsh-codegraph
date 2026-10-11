@@ -1,7 +1,7 @@
 {
-  "version": "2.1.0",
-  "publishedAt": "2026-10-11T07:45:39.327Z",
-  "notes": "v2.1.0: 内置插件在线更新与增量自愈机制，国内多镜像 3 秒持续吞吐实测竞速选源，华为云开源镜像终极兜底，TopBar 呼吸灯徽标与更新管理面板",
+  "version": "2.1.1",
+  "publishedAt": "2026-10-11T08:58:56.585Z",
+  "notes": "v2.1.1: 工业级超大工程架构下钻排版优化与Clangd式按文件分片缓存。彻底消除50MB巨石无换行缓存，下钻排版独立分片至 .codegraph/drilldowns/；Sugiyama正交分层排版重心预计算 (8868 节点下钻耗时由数秒降至 114ms)；首屏视口锚定与虚拟化，极简按需点亮连线 (On-Demand Edges) 与 MiniMap 门禁，平移拖拽保持 60 FPS。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "dist/index.js",
-      "size": 4331928,
-      "sha256": "f60e82dd451c6a88e63a490887e4fda3dea7a9953481aba8a0d587cd42878a74"
+      "size": 4337739,
+      "sha256": "6cad3895f8c47709fca1043e5fdd15efe67009d6fe73c8bdd3f3cabe5bc6ea3a"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -115,19 +115,19 @@
       "sha256": "70aa2b222e10a91306a85f5b9c8e028e3dc09943854aa63640c643fc7e051c2f"
     },
     {
-      "path": "dist/webview/assets/index-2UMybJyl.css",
-      "size": 53203,
-      "sha256": "dad75bfdf8c52272f3be6c6d46a4e8fbef3a6e0471e6b6c8ae44a07c2a07ba3e"
+      "path": "dist/webview/assets/index-PR3jRDyN.js",
+      "size": 485985,
+      "sha256": "186e077f06609673366ace9b7815d7c3a25732be6014d08d83db057e400642e9"
     },
     {
-      "path": "dist/webview/assets/index-Bg5SIBWk.js",
-      "size": 484219,
-      "sha256": "7ea5702173fa3606d50271646b9978bfb0cc9a74ff55355418a272bdb58e32e9"
+      "path": "dist/webview/assets/index-ueCANf6q.css",
+      "size": 53695,
+      "sha256": "81be1ebb5b0d50ee1f6181e76b85bd443ee3dc788a301de963dbc286c5b77b47"
     },
     {
       "path": "dist/webview/index.html",
       "size": 749,
-      "sha256": "e065d8fb6423acd08c2cbeac42a64f194f290d32ff1e30629b11b27f3492c06c"
+      "sha256": "e1a438cc23a52b6a0d99251dfb3643413051cf681fafc1959145d6a006d6ed13"
     },
     {
       "path": "LICENSE",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "edb5300788c04ef07c3db43a5c210421ebaf31bda10024fbbef690ea7553f73a"
+      "sha256": "6d3200be9e34ed043df59e39066659aa0ddf316919804051d72863052896c803"
     },
     {
       "path": "README.md",

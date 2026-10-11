@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { FullGraphResult } from '../types/index.js';
 import { LayoutResult } from '../layout/elk-layout.js';
 
@@ -47,6 +48,10 @@ export const MANIFEST_FILE_NAME = 'manifest.json';
 export const SYMBOLS_FILE_NAME = 'symbols.json';
 export const COMPILER_CACHE_FILE_NAME = 'compiler-cache.json';
 export const ARCHITECTURE_DOC_NAME = 'architecture.md';
+export const DRILLDOWNS_DIR_NAME = 'drilldowns';
+export const CACHE_SUBDIR_NAME = 'cache';
+export const FILES_SUBDIR_NAME = 'files';
+export const HASHES_FILE_NAME = 'hashes.json';
 
 /**
  * 获取工作区对应的 .codegraph 缓存目录
@@ -76,6 +81,27 @@ export function getCompilerCacheFilePath(workspaceRoot: string): string {
 
 export function getArchitectureDocPath(workspaceRoot: string): string {
   return path.join(getCacheDir(workspaceRoot), ARCHITECTURE_DOC_NAME);
+}
+
+export function getDrilldownsDir(workspaceRoot: string): string {
+  return path.join(getCacheDir(workspaceRoot), DRILLDOWNS_DIR_NAME);
+}
+
+export function getDrilldownFilePath(workspaceRoot: string, moduleId: string): string {
+  const safeId = moduleId.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+  return path.join(getDrilldownsDir(workspaceRoot), `${safeId}.json`);
+}
+
+export function getCacheSubdir(workspaceRoot: string): string {
+  return path.join(getCacheDir(workspaceRoot), CACHE_SUBDIR_NAME);
+}
+
+export function getHashesFilePath(workspaceRoot: string): string {
+  return path.join(getCacheSubdir(workspaceRoot), HASHES_FILE_NAME);
+}
+
+export function getCacheFilesDir(workspaceRoot: string): string {
+  return path.join(getCacheSubdir(workspaceRoot), FILES_SUBDIR_NAME);
 }
 
 /**
@@ -159,7 +185,52 @@ export function loadSymbolsOnly(workspaceRoot: string): SymbolsCacheData | null 
 }
 
 /**
- * 读取当前工作区的持久化图谱缓存 (优先解耦多文件，回退旧版单文件)
+ * 保存模块下钻独立分片布局 (.codegraph/drilldowns/<moduleId>.json)
+ */
+export function saveDrilldownLayout(
+  workspaceRoot: string,
+  moduleId: string,
+  data: { layout: LayoutResult; portEdges: any[]; version?: string }
+): void {
+  try {
+    const dir = getDrilldownsDir(workspaceRoot);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const filePath = getDrilldownFilePath(workspaceRoot, moduleId);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn(`[CodeGraph] 保存模块下钻分片失败: ${moduleId}`, err);
+  }
+}
+
+/**
+ * 读取模块下钻独立分片布局 (优先分片文件，回退 manifest.json)
+ */
+export function loadDrilldownLayout(
+  workspaceRoot: string,
+  moduleId: string
+): { layout: LayoutResult; portEdges: any[]; version?: string } | null {
+  try {
+    const filePath = getDrilldownFilePath(workspaceRoot, moduleId);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(content);
+    }
+    // 回退旧版 manifest.json 中的 drilldowns
+    const manifest = loadManifestOnly(workspaceRoot);
+    if (manifest?.layout?.drilldowns?.[moduleId]) {
+      return manifest.layout.drilldowns[moduleId];
+    }
+    return null;
+  } catch (err) {
+    console.warn(`[CodeGraph] 读取模块下钻分片失败: ${moduleId}`, err);
+    return null;
+  }
+}
+
+/**
+ * 读取当前工作区的持久化图谱缓存 (优先解耦多文件与分片切片，回退旧版单文件)
  */
 export function loadCache(workspaceRoot: string): PersistentCacheData | null {
   try {
@@ -169,11 +240,34 @@ export function loadCache(workspaceRoot: string): PersistentCacheData | null {
       const symbols = loadSymbolsOnly(workspaceRoot) || { allNodes: {}, allEdges: [] };
       
       let compilerCache: CompilerCacheData = { baselineHashes: {}, extractions: {} };
-      const compilerPath = getCompilerCacheFilePath(workspaceRoot);
-      if (fs.existsSync(compilerPath)) {
+      const hashesPath = getHashesFilePath(workspaceRoot);
+      const cacheFilesDir = getCacheFilesDir(workspaceRoot);
+
+      if (fs.existsSync(hashesPath)) {
         try {
-          compilerCache = JSON.parse(fs.readFileSync(compilerPath, 'utf-8'));
+          const hashesData = JSON.parse(fs.readFileSync(hashesPath, 'utf-8'));
+          const baselineHashes = hashesData.baselineHashes || {};
+          const fileToHashMap: Record<string, string> = hashesData.fileToHashMap || {};
+          const extractions: Record<string, any> = {};
+
+          for (const [filePath, hash] of Object.entries(fileToHashMap)) {
+            const shardPath = path.join(cacheFilesDir, `${hash}.json`);
+            if (fs.existsSync(shardPath)) {
+              try {
+                extractions[filePath] = JSON.parse(fs.readFileSync(shardPath, 'utf-8'));
+              } catch {}
+            }
+          }
+          compilerCache = { baselineHashes, extractions };
         } catch {}
+      } else {
+        // 回退旧版单体 compiler-cache.json
+        const compilerPath = getCompilerCacheFilePath(workspaceRoot);
+        if (fs.existsSync(compilerPath)) {
+          try {
+            compilerCache = JSON.parse(fs.readFileSync(compilerPath, 'utf-8'));
+          } catch {}
+        }
       }
 
       const fullGraph: FullGraphResult = {
@@ -306,7 +400,18 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
     // 登记私有排除规则
     ensureGitignore(resolvedRoot);
 
-    // 1. 拆分 Manifest
+    // 1. 拆分 Manifest：剥离庞大 drilldowns，仅保留宏观架构布局，文件尺寸保持数十 KB 秒开
+    const manifestLayout = data.layout?.architecture
+      ? { architecture: data.layout.architecture }
+      : undefined;
+
+    // 若数据中带有下钻排版，逐个独立落盘至 .codegraph/drilldowns/<moduleId>.json
+    if (data.layout?.drilldowns) {
+      for (const [modId, drillData] of Object.entries(data.layout.drilldowns)) {
+        saveDrilldownLayout(resolvedRoot, modId, drillData);
+      }
+    }
+
     const manifest: ManifestCacheData = {
       version: 2,
       savedAt: data.savedAt || new Date().toISOString(),
@@ -315,7 +420,7 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
       meta: data.graph.meta,
       architectureView: data.graph.architectureView,
       processFlows: data.graph.processFlows,
-      layout: data.layout,
+      layout: manifestLayout,
     };
     const manifestPath = getManifestFilePath(resolvedRoot);
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
@@ -344,13 +449,43 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
     const symbolsPath = getSymbolsFilePath(resolvedRoot);
     fs.writeFileSync(symbolsPath, symbolsContent, 'utf-8');
 
-    // 3. 拆分 Compiler Cache (AST 增量抽取与文件哈希，编译器独占)
-    const compilerCache: CompilerCacheData = {
-      baselineHashes: data.baselineHashes || {},
-      extractions: data.extractions || {},
+    // 3. 拆分 Compiler Cache：按文件分片独立落盘 (Clangd 模式，每文件数 KB，彻底告别 50MB 巨石无换行)
+    const cacheFilesDir = getCacheFilesDir(resolvedRoot);
+    if (!fs.existsSync(cacheFilesDir)) {
+      fs.mkdirSync(cacheFilesDir, { recursive: true });
+    }
+
+    const baselineHashes = data.baselineHashes || {};
+    const fileToHashMap: Record<string, string> = {};
+
+    if (data.extractions) {
+      for (const [filePath, ext] of Object.entries(data.extractions)) {
+        let hash = baselineHashes[filePath];
+        if (!hash) {
+          hash = crypto.createHash('sha256').update(filePath).digest('hex').slice(0, 32);
+        }
+        fileToHashMap[filePath] = hash;
+        const shardPath = path.join(cacheFilesDir, `${hash}.json`);
+        fs.writeFileSync(shardPath, JSON.stringify(ext, null, 2), 'utf-8');
+      }
+    }
+
+    const hashesData = {
+      version: 2,
+      savedAt: data.savedAt || new Date().toISOString(),
+      baselineHashes,
+      fileToHashMap,
     };
-    const compilerPath = getCompilerCacheFilePath(resolvedRoot);
-    fs.writeFileSync(compilerPath, JSON.stringify(compilerCache), 'utf-8');
+    const hashesPath = getHashesFilePath(resolvedRoot);
+    fs.writeFileSync(hashesPath, JSON.stringify(hashesData, null, 2), 'utf-8');
+
+    // 清理旧版单体 compiler-cache.json (无损平滑迁移)
+    const oldCompilerPath = getCompilerCacheFilePath(resolvedRoot);
+    if (fs.existsSync(oldCompilerPath)) {
+      try {
+        fs.unlinkSync(oldCompilerPath);
+      } catch {}
+    }
 
     // 4. 自动生成架构 Markdown 白皮书
     const docPath = getArchitectureDocPath(resolvedRoot);
@@ -369,7 +504,7 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
       } catch {}
     }
 
-    console.log(`[CodeGraph] 图谱缓存已解耦保存至: ${cacheDir} (manifest, symbols, compiler-cache, architecture.md)`);
+    console.log(`[CodeGraph] 图谱缓存已解耦分片保存至: ${cacheDir} (manifest, symbols, cache/files, drilldowns, architecture.md)`);
   } catch (err) {
     console.warn(`[CodeGraph] 保存解耦图谱缓存失败: ${workspaceRoot}`, err);
   }

@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
-import { CodeGraphCore, WorkspaceProfiler } from './index.js';
+import { CodeGraphCore, WorkspaceProfiler, saveDrilldownLayout, loadDrilldownLayout } from './index.js';
 import { ElkLayoutEngine } from './layout/elk-layout.js';
 import { CodeNode } from './types/index.js';
 import { PluginUpdater } from './updater/plugin-updater.js';
@@ -56,41 +56,57 @@ export class CodeGraphServer {
     ) as unknown) as CodeNode[];
     const internalNodeIds = new Set(internalNodes.map((n) => n.id));
 
+    // 单次扫描快速分类全部连线：内部调用、打入入口、打出外部，时间复杂度 O(E)
     const internalCalls: Array<{ source: string; target: string }> = [];
-    (graph.allEdges || []).forEach((e: any) => {
-      if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
+    const incomingToInternal: Array<{ source: string; target: string }> = [];
+    const outgoingFromInternal: Array<{ source: string; target: string }> = [];
+
+    for (const e of graph.allEdges || []) {
+      const sIn = internalNodeIds.has(e.source);
+      const tIn = internalNodeIds.has(e.target);
+      if (sIn && tIn) {
         internalCalls.push({ source: e.source, target: e.target });
+      } else if (!sIn && tIn) {
+        incomingToInternal.push({ source: e.source, target: e.target });
+      } else if (sIn && !tIn) {
+        outgoingFromInternal.push({ source: e.source, target: e.target });
       }
-    });
+    }
+
+    // 内部符号名称 O(1) 索引构建
+    const nodeNameMap = new Map<string, string[]>();
+    for (const n of internalNodes) {
+      if (!nodeNameMap.has(n.name)) nodeNameMap.set(n.name, []);
+      nodeNameMap.get(n.name)!.push(n.id);
+      if (n.id !== n.name) {
+        if (!nodeNameMap.has(n.id)) nodeNameMap.set(n.id, []);
+        nodeNameMap.get(n.id)!.push(n.id);
+      }
+    }
 
     const portEdges: Array<{ source: string; target: string; isPortEdge: boolean }> = [];
     (targetModule.inPorts || []).forEach((port: string) => {
       const inPortId = `inport_${port}`;
-      const matched = internalNodes.filter((n: any) => n.name === port || n.id === port);
-      if (matched.length > 0) {
-        matched.forEach((m: any) => {
-          portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
+      const matchedIds = nodeNameMap.get(port);
+      if (matchedIds && matchedIds.length > 0) {
+        matchedIds.forEach((id) => {
+          portEdges.push({ source: inPortId, target: id, isPortEdge: true });
         });
-      } else {
-        const incoming = (graph.allEdges || []).filter(
-          (e: any) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source)
-        );
-        if (incoming.length > 0) {
-          portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
-        }
+      } else if (incomingToInternal.length > 0) {
+        portEdges.push({ source: inPortId, target: incomingToInternal[0].target, isPortEdge: true });
       }
     });
 
     (targetModule.outPorts || []).forEach((port: string) => {
       const outPortId = `outport_${port}`;
-      const outgoing = (graph.allEdges || []).filter(
-        (e: any) =>
-          internalNodeIds.has(e.source) &&
-          (!internalNodeIds.has(e.target) || e.target.includes(port)) &&
-          (graph.allNodes[e.target]?.name === port || e.target.endsWith(port))
+      const matchingOut = outgoingFromInternal.filter(
+        (og) =>
+          graph.allNodes[og.target]?.name === port ||
+          og.target.endsWith(port) ||
+          og.target.includes(port)
       );
-      if (outgoing.length > 0) {
-        outgoing.forEach((og: any) => {
+      if (matchingOut.length > 0) {
+        matchingOut.forEach((og) => {
           portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
         });
       }
@@ -106,14 +122,15 @@ export class CodeGraphServer {
       }
     );
 
-    this.drilldownCache.set(moduleId, { layout, portEdges, version: 'v6' });
+    const drilldownResult = { layout, portEdges, version: 'v6' };
+    this.drilldownCache.set(moduleId, drilldownResult);
+
+    // 仅保存独立轻量分片 .codegraph/drilldowns/<id>.json (< 5ms)，彻底移除全量 saveToCache() 巨石 I/O
     try {
-      const currentLayout = this.core.getLastLayout() || {};
-      const drilldowns = currentLayout.drilldowns || {};
-      drilldowns[moduleId] = { layout, portEdges, version: 'v6' };
-      this.core.setLastLayout({ ...currentLayout, drilldowns });
-      this.core.saveToCache({ ...currentLayout, drilldowns });
-    } catch {}
+      saveDrilldownLayout(this.workspaceRoot, moduleId, drilldownResult);
+    } catch (e) {
+      console.warn(`[CodeGraph] 模块下钻独立分片落盘异常: ${moduleId}`, e);
+    }
 
     return { layout, portEdges, nodes: internalNodes, edges: internalCalls };
   }
@@ -510,8 +527,11 @@ export class CodeGraphServer {
           }
         }
 
-        // 检测核心引擎与磁盘持久化缓存
-        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        // 检测核心引擎与磁盘独立分片缓存 (.codegraph/drilldowns/<id>.json)
+        let diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        if (!diskCache) {
+          diskCache = loadDrilldownLayout(this.workspaceRoot, moduleId) as any;
+        }
         if (diskCache && diskCache?.version === 'v6' && diskCache?.layout?.width && diskCache.layout.width < 12000) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { 'Content-Type': 'application/json' });

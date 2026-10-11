@@ -71,16 +71,17 @@ async function runUpdaterTests() {
 
   // 4. PluginUpdater 增量比对逻辑验证
   console.log('\n[测试 4] PluginUpdater 本地增量比对与清单校验...');
+  const currentPkgVersion = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf-8')).version;
   const updater = new PluginUpdater(rootDir, 'luoyunxiaotian/dsh-codegraph');
   assert.strictEqual(typeof updater.getLocalVersion(), 'string');
-  assert.strictEqual(updater.getLocalVersion(), '2.1.0', '本地版本应为 2.1.0');
+  assert.strictEqual(updater.getLocalVersion(), currentPkgVersion, `本地版本应为 ${currentPkgVersion}`);
 
-  // 验证老版本用户 (2.0.0) 检测新版本 (2.1.0) 能正确判断 hasUpdate: true
-  assert.strictEqual(compareVersions('2.1.0', '2.0.0') > 0, true, '老版本 2.0.0 用户必须能识别到 2.1.0 更新');
+  // 验证老版本用户 (2.0.0) 检测新版本能正确判断 hasUpdate: true
+  assert.strictEqual(compareVersions(currentPkgVersion, '2.0.0') > 0, true, '老版本 2.0.0 用户必须能识别到新版本更新');
 
   // 模拟一个包含 1 个相同文件和 1 个新增变更文件的测试清单
   const mockManifest = {
-    version: '2.1.0',
+    version: currentPkgVersion,
     publishedAt: new Date().toISOString(),
     notes: '测试发布',
     files: [

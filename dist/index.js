@@ -113297,12 +113297,17 @@ var DualModelCompiler = class {
 // packages/core/dist/persistence/cache-store.js
 import fs5 from "fs";
 import path6 from "path";
+import crypto2 from "crypto";
 var CACHE_DIR_NAME = ".codegraph";
 var CACHE_FILE_NAME = "graph-cache.json";
 var MANIFEST_FILE_NAME = "manifest.json";
 var SYMBOLS_FILE_NAME = "symbols.json";
 var COMPILER_CACHE_FILE_NAME = "compiler-cache.json";
 var ARCHITECTURE_DOC_NAME = "architecture.md";
+var DRILLDOWNS_DIR_NAME = "drilldowns";
+var CACHE_SUBDIR_NAME = "cache";
+var FILES_SUBDIR_NAME = "files";
+var HASHES_FILE_NAME = "hashes.json";
 function getCacheDir(workspaceRoot) {
   return path6.join(path6.resolve(workspaceRoot), CACHE_DIR_NAME);
 }
@@ -113321,6 +113326,22 @@ function getCompilerCacheFilePath(workspaceRoot) {
 function getArchitectureDocPath(workspaceRoot) {
   return path6.join(getCacheDir(workspaceRoot), ARCHITECTURE_DOC_NAME);
 }
+function getDrilldownsDir(workspaceRoot) {
+  return path6.join(getCacheDir(workspaceRoot), DRILLDOWNS_DIR_NAME);
+}
+function getDrilldownFilePath(workspaceRoot, moduleId) {
+  const safeId = moduleId.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+  return path6.join(getDrilldownsDir(workspaceRoot), `${safeId}.json`);
+}
+function getCacheSubdir(workspaceRoot) {
+  return path6.join(getCacheDir(workspaceRoot), CACHE_SUBDIR_NAME);
+}
+function getHashesFilePath(workspaceRoot) {
+  return path6.join(getCacheSubdir(workspaceRoot), HASHES_FILE_NAME);
+}
+function getCacheFilesDir(workspaceRoot) {
+  return path6.join(getCacheSubdir(workspaceRoot), FILES_SUBDIR_NAME);
+}
 function hasCache(workspaceRoot) {
   try {
     const manifestPath = getManifestFilePath(workspaceRoot);
@@ -113330,6 +113351,36 @@ function hasCache(workspaceRoot) {
     return fs5.existsSync(legacyPath);
   } catch {
     return false;
+  }
+}
+function loadManifestOnly(workspaceRoot) {
+  try {
+    const manifestPath = getManifestFilePath(workspaceRoot);
+    if (fs5.existsSync(manifestPath)) {
+      const content = fs5.readFileSync(manifestPath, "utf-8");
+      return JSON.parse(content);
+    }
+    const legacyPath = getCacheFilePath(workspaceRoot);
+    if (fs5.existsSync(legacyPath)) {
+      const content = fs5.readFileSync(legacyPath, "utf-8");
+      const data = JSON.parse(content);
+      if (data && data.graph && data.graph.architectureView) {
+        return {
+          version: data.version || 1,
+          savedAt: data.savedAt,
+          workspaceRoot: data.workspaceRoot,
+          scopePath: data.scopePath,
+          meta: data.graph.meta,
+          architectureView: data.graph.architectureView,
+          processFlows: data.graph.processFlows,
+          layout: data.layout
+        };
+      }
+    }
+    return null;
+  } catch (err2) {
+    console.warn(`[CodeGraph] \u8BFB\u53D6\u5B8F\u89C2 manifest \u5931\u8D25: ${workspaceRoot}`, err2);
+    return null;
   }
 }
 function loadSymbolsOnly(workspaceRoot) {
@@ -113356,6 +113407,35 @@ function loadSymbolsOnly(workspaceRoot) {
     return null;
   }
 }
+function saveDrilldownLayout(workspaceRoot, moduleId, data) {
+  try {
+    const dir = getDrilldownsDir(workspaceRoot);
+    if (!fs5.existsSync(dir)) {
+      fs5.mkdirSync(dir, { recursive: true });
+    }
+    const filePath = getDrilldownFilePath(workspaceRoot, moduleId);
+    fs5.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err2) {
+    console.warn(`[CodeGraph] \u4FDD\u5B58\u6A21\u5757\u4E0B\u94BB\u5206\u7247\u5931\u8D25: ${moduleId}`, err2);
+  }
+}
+function loadDrilldownLayout(workspaceRoot, moduleId) {
+  try {
+    const filePath = getDrilldownFilePath(workspaceRoot, moduleId);
+    if (fs5.existsSync(filePath)) {
+      const content = fs5.readFileSync(filePath, "utf-8");
+      return JSON.parse(content);
+    }
+    const manifest = loadManifestOnly(workspaceRoot);
+    if (manifest?.layout?.drilldowns?.[moduleId]) {
+      return manifest.layout.drilldowns[moduleId];
+    }
+    return null;
+  } catch (err2) {
+    console.warn(`[CodeGraph] \u8BFB\u53D6\u6A21\u5757\u4E0B\u94BB\u5206\u7247\u5931\u8D25: ${moduleId}`, err2);
+    return null;
+  }
+}
 function loadCache(workspaceRoot) {
   try {
     const manifestPath = getManifestFilePath(workspaceRoot);
@@ -113363,11 +113443,33 @@ function loadCache(workspaceRoot) {
       const manifest = JSON.parse(fs5.readFileSync(manifestPath, "utf-8"));
       const symbols = loadSymbolsOnly(workspaceRoot) || { allNodes: {}, allEdges: [] };
       let compilerCache = { baselineHashes: {}, extractions: {} };
-      const compilerPath = getCompilerCacheFilePath(workspaceRoot);
-      if (fs5.existsSync(compilerPath)) {
+      const hashesPath = getHashesFilePath(workspaceRoot);
+      const cacheFilesDir = getCacheFilesDir(workspaceRoot);
+      if (fs5.existsSync(hashesPath)) {
         try {
-          compilerCache = JSON.parse(fs5.readFileSync(compilerPath, "utf-8"));
+          const hashesData = JSON.parse(fs5.readFileSync(hashesPath, "utf-8"));
+          const baselineHashes = hashesData.baselineHashes || {};
+          const fileToHashMap = hashesData.fileToHashMap || {};
+          const extractions = {};
+          for (const [filePath, hash] of Object.entries(fileToHashMap)) {
+            const shardPath = path6.join(cacheFilesDir, `${hash}.json`);
+            if (fs5.existsSync(shardPath)) {
+              try {
+                extractions[filePath] = JSON.parse(fs5.readFileSync(shardPath, "utf-8"));
+              } catch {
+              }
+            }
+          }
+          compilerCache = { baselineHashes, extractions };
         } catch {
+        }
+      } else {
+        const compilerPath = getCompilerCacheFilePath(workspaceRoot);
+        if (fs5.existsSync(compilerPath)) {
+          try {
+            compilerCache = JSON.parse(fs5.readFileSync(compilerPath, "utf-8"));
+          } catch {
+          }
         }
       }
       const fullGraph = {
@@ -113503,6 +113605,12 @@ function saveCache(workspaceRoot, data) {
       fs5.mkdirSync(cacheDir, { recursive: true });
     }
     ensureGitignore(resolvedRoot);
+    const manifestLayout = data.layout?.architecture ? { architecture: data.layout.architecture } : void 0;
+    if (data.layout?.drilldowns) {
+      for (const [modId, drillData] of Object.entries(data.layout.drilldowns)) {
+        saveDrilldownLayout(resolvedRoot, modId, drillData);
+      }
+    }
     const manifest = {
       version: 2,
       savedAt: data.savedAt || (/* @__PURE__ */ new Date()).toISOString(),
@@ -113511,7 +113619,7 @@ function saveCache(workspaceRoot, data) {
       meta: data.graph.meta,
       architectureView: data.graph.architectureView,
       processFlows: data.graph.processFlows,
-      layout: data.layout
+      layout: manifestLayout
     };
     const manifestPath = getManifestFilePath(resolvedRoot);
     fs5.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
@@ -113541,12 +113649,38 @@ ${edgeEntries.join(",\n")}
 }`;
     const symbolsPath = getSymbolsFilePath(resolvedRoot);
     fs5.writeFileSync(symbolsPath, symbolsContent, "utf-8");
-    const compilerCache = {
-      baselineHashes: data.baselineHashes || {},
-      extractions: data.extractions || {}
+    const cacheFilesDir = getCacheFilesDir(resolvedRoot);
+    if (!fs5.existsSync(cacheFilesDir)) {
+      fs5.mkdirSync(cacheFilesDir, { recursive: true });
+    }
+    const baselineHashes = data.baselineHashes || {};
+    const fileToHashMap = {};
+    if (data.extractions) {
+      for (const [filePath, ext] of Object.entries(data.extractions)) {
+        let hash = baselineHashes[filePath];
+        if (!hash) {
+          hash = crypto2.createHash("sha256").update(filePath).digest("hex").slice(0, 32);
+        }
+        fileToHashMap[filePath] = hash;
+        const shardPath = path6.join(cacheFilesDir, `${hash}.json`);
+        fs5.writeFileSync(shardPath, JSON.stringify(ext, null, 2), "utf-8");
+      }
+    }
+    const hashesData = {
+      version: 2,
+      savedAt: data.savedAt || (/* @__PURE__ */ new Date()).toISOString(),
+      baselineHashes,
+      fileToHashMap
     };
-    const compilerPath = getCompilerCacheFilePath(resolvedRoot);
-    fs5.writeFileSync(compilerPath, JSON.stringify(compilerCache), "utf-8");
+    const hashesPath = getHashesFilePath(resolvedRoot);
+    fs5.writeFileSync(hashesPath, JSON.stringify(hashesData, null, 2), "utf-8");
+    const oldCompilerPath = getCompilerCacheFilePath(resolvedRoot);
+    if (fs5.existsSync(oldCompilerPath)) {
+      try {
+        fs5.unlinkSync(oldCompilerPath);
+      } catch {
+      }
+    }
     const docPath = getArchitectureDocPath(resolvedRoot);
     const mdContent = generateArchitectureMarkdown(data.graph.meta?.projectName || path6.basename(resolvedRoot), resolvedRoot, manifest);
     fs5.writeFileSync(docPath, mdContent, "utf-8");
@@ -113557,7 +113691,7 @@ ${edgeEntries.join(",\n")}
       } catch {
       }
     }
-    console.log(`[CodeGraph] \u56FE\u8C31\u7F13\u5B58\u5DF2\u89E3\u8026\u4FDD\u5B58\u81F3: ${cacheDir} (manifest, symbols, compiler-cache, architecture.md)`);
+    console.log(`[CodeGraph] \u56FE\u8C31\u7F13\u5B58\u5DF2\u89E3\u8026\u5206\u7247\u4FDD\u5B58\u81F3: ${cacheDir} (manifest, symbols, cache/files, drilldowns, architecture.md)`);
   } catch (err2) {
     console.warn(`[CodeGraph] \u4FDD\u5B58\u89E3\u8026\u56FE\u8C31\u7F13\u5B58\u5931\u8D25: ${workspaceRoot}`, err2);
   }
@@ -114956,20 +115090,22 @@ var ElkLayoutEngine = class {
     }
     for (let pass = 0; pass < 2; pass++) {
       for (let s = 1; s < MAX_STAGES; s++) {
-        layers[s].sort((a, b) => {
-          const getBary = (nId) => {
-            const preds = revAdj[nId] || [];
-            if (preds.length === 0)
-              return nodeYIndex.get(nId) ?? 0;
+        const currentLayerNodes = layers[s];
+        const baryMap = /* @__PURE__ */ new Map();
+        for (const n of currentLayerNodes) {
+          const preds = revAdj[n.id] || [];
+          if (preds.length === 0) {
+            baryMap.set(n.id, nodeYIndex.get(n.id) ?? 0);
+          } else {
             let sum = 0;
-            preds.forEach((p) => {
+            for (const p of preds) {
               sum += nodeYIndex.get(p) ?? 0;
-            });
-            return sum / preds.length;
-          };
-          return getBary(a.id) - getBary(b.id);
-        });
-        layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+            }
+            baryMap.set(n.id, sum / preds.length);
+          }
+        }
+        currentLayerNodes.sort((a, b) => (baryMap.get(a.id) ?? 0) - (baryMap.get(b.id) ?? 0));
+        currentLayerNodes.forEach((n, idx) => nodeYIndex.set(n.id, idx));
       }
     }
     const CARD_WIDTH = 220;
@@ -115045,7 +115181,7 @@ import { URL as URL2, fileURLToPath as fileURLToPath2 } from "url";
 // packages/core/dist/updater/plugin-updater.js
 import fs7 from "fs";
 import path8 from "path";
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 
 // packages/core/dist/updater/mirror-speed-tester.js
 var DEFAULT_REPO = "luoyunxiaotian/dsh-codegraph";
@@ -115223,7 +115359,7 @@ function compareVersions(a, b) {
 }
 function sha256File(filePath) {
   const content = fs7.readFileSync(filePath);
-  return crypto2.createHash("sha256").update(content).digest("hex");
+  return crypto3.createHash("sha256").update(content).digest("hex");
 }
 async function renameWithRetry(sourcePath, targetPath, maxAttempts = 6, initialBackoffMs = 100) {
   let attempt = 0;
@@ -115447,7 +115583,7 @@ var PluginUpdater = class {
               if (buffer.length !== file.size) {
                 throw new Error(`\u6587\u4EF6\u5927\u5C0F\u4E0D\u7B26 (\u5B9E\u9645: ${buffer.length}, \u671F\u671B: ${file.size})`);
               }
-              const calcHash = crypto2.createHash("sha256").update(buffer).digest("hex");
+              const calcHash = crypto3.createHash("sha256").update(buffer).digest("hex");
               if (calcHash !== file.sha256) {
                 throw new Error("\u6587\u4EF6 SHA-256 \u5B8C\u6574\u6027\u6821\u9A8C\u672A\u901A\u8FC7");
               }
@@ -115589,31 +115725,47 @@ var CodeGraphServer = class {
     const internalNodes = Object.values(graph.allNodes || {}).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
     const internalNodeIds = new Set(internalNodes.map((n) => n.id));
     const internalCalls = [];
-    (graph.allEdges || []).forEach((e) => {
-      if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
+    const incomingToInternal = [];
+    const outgoingFromInternal = [];
+    for (const e of graph.allEdges || []) {
+      const sIn = internalNodeIds.has(e.source);
+      const tIn = internalNodeIds.has(e.target);
+      if (sIn && tIn) {
         internalCalls.push({ source: e.source, target: e.target });
+      } else if (!sIn && tIn) {
+        incomingToInternal.push({ source: e.source, target: e.target });
+      } else if (sIn && !tIn) {
+        outgoingFromInternal.push({ source: e.source, target: e.target });
       }
-    });
+    }
+    const nodeNameMap = /* @__PURE__ */ new Map();
+    for (const n of internalNodes) {
+      if (!nodeNameMap.has(n.name))
+        nodeNameMap.set(n.name, []);
+      nodeNameMap.get(n.name).push(n.id);
+      if (n.id !== n.name) {
+        if (!nodeNameMap.has(n.id))
+          nodeNameMap.set(n.id, []);
+        nodeNameMap.get(n.id).push(n.id);
+      }
+    }
     const portEdges = [];
     (targetModule.inPorts || []).forEach((port) => {
       const inPortId = `inport_${port}`;
-      const matched = internalNodes.filter((n) => n.name === port || n.id === port);
-      if (matched.length > 0) {
-        matched.forEach((m) => {
-          portEdges.push({ source: inPortId, target: m.id, isPortEdge: true });
+      const matchedIds = nodeNameMap.get(port);
+      if (matchedIds && matchedIds.length > 0) {
+        matchedIds.forEach((id) => {
+          portEdges.push({ source: inPortId, target: id, isPortEdge: true });
         });
-      } else {
-        const incoming = (graph.allEdges || []).filter((e) => internalNodeIds.has(e.target) && !internalNodeIds.has(e.source));
-        if (incoming.length > 0) {
-          portEdges.push({ source: inPortId, target: incoming[0].target, isPortEdge: true });
-        }
+      } else if (incomingToInternal.length > 0) {
+        portEdges.push({ source: inPortId, target: incomingToInternal[0].target, isPortEdge: true });
       }
     });
     (targetModule.outPorts || []).forEach((port) => {
       const outPortId = `outport_${port}`;
-      const outgoing = (graph.allEdges || []).filter((e) => internalNodeIds.has(e.source) && (!internalNodeIds.has(e.target) || e.target.includes(port)) && (graph.allNodes[e.target]?.name === port || e.target.endsWith(port)));
-      if (outgoing.length > 0) {
-        outgoing.forEach((og) => {
+      const matchingOut = outgoingFromInternal.filter((og) => graph.allNodes[og.target]?.name === port || og.target.endsWith(port) || og.target.includes(port));
+      if (matchingOut.length > 0) {
+        matchingOut.forEach((og) => {
           portEdges.push({ source: og.source, target: outPortId, isPortEdge: true });
         });
       }
@@ -115623,14 +115775,12 @@ var CodeGraphServer = class {
       outPorts: targetModule.outPorts,
       portEdges
     });
-    this.drilldownCache.set(moduleId, { layout, portEdges, version: "v6" });
+    const drilldownResult = { layout, portEdges, version: "v6" };
+    this.drilldownCache.set(moduleId, drilldownResult);
     try {
-      const currentLayout = this.core.getLastLayout() || {};
-      const drilldowns = currentLayout.drilldowns || {};
-      drilldowns[moduleId] = { layout, portEdges, version: "v6" };
-      this.core.setLastLayout({ ...currentLayout, drilldowns });
-      this.core.saveToCache({ ...currentLayout, drilldowns });
-    } catch {
+      saveDrilldownLayout(this.workspaceRoot, moduleId, drilldownResult);
+    } catch (e) {
+      console.warn(`[CodeGraph] \u6A21\u5757\u4E0B\u94BB\u72EC\u7ACB\u5206\u7247\u843D\u76D8\u5F02\u5E38: ${moduleId}`, e);
     }
     return { layout, portEdges, nodes: internalNodes, edges: internalCalls };
   }
@@ -115971,7 +116121,10 @@ var CodeGraphServer = class {
             return;
           }
         }
-        const diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        let diskCache = this.core.getLastLayout()?.drilldowns?.[moduleId];
+        if (!diskCache) {
+          diskCache = loadDrilldownLayout(this.workspaceRoot, moduleId);
+        }
         if (diskCache && diskCache?.version === "v6" && diskCache?.layout?.width && diskCache.layout.width < 12e3) {
           this.drilldownCache.set(moduleId, diskCache);
           res.writeHead(200, { "Content-Type": "application/json" });

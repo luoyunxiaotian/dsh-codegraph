@@ -269,17 +269,22 @@ export class ElkLayoutEngine {
 
     for (let pass = 0; pass < 2; pass++) {
       for (let s = 1; s < MAX_STAGES; s++) {
-        layers[s].sort((a, b) => {
-          const getBary = (nId: string) => {
-            const preds = revAdj[nId] || [];
-            if (preds.length === 0) return nodeYIndex.get(nId) ?? 0;
+        const currentLayerNodes = layers[s];
+        const baryMap = new Map<string, number>();
+        for (const n of currentLayerNodes) {
+          const preds = revAdj[n.id] || [];
+          if (preds.length === 0) {
+            baryMap.set(n.id, nodeYIndex.get(n.id) ?? 0);
+          } else {
             let sum = 0;
-            preds.forEach((p) => { sum += (nodeYIndex.get(p) ?? 0); });
-            return sum / preds.length;
-          };
-          return getBary(a.id) - getBary(b.id);
-        });
-        layers[s].forEach((n, idx) => nodeYIndex.set(n.id, idx));
+            for (const p of preds) {
+              sum += (nodeYIndex.get(p) ?? 0);
+            }
+            baryMap.set(n.id, sum / preds.length);
+          }
+        }
+        currentLayerNodes.sort((a, b) => (baryMap.get(a.id) ?? 0) - (baryMap.get(b.id) ?? 0));
+        currentLayerNodes.forEach((n, idx) => nodeYIndex.set(n.id, idx));
       }
     }
 
