@@ -116162,10 +116162,19 @@ var CodeGraphServer = class {
         return;
       }
       const moduleFiles = new Set(targetModule.files);
-      const internalNodes = Object.values(last.allNodes).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
+      let allNodesMap = last.allNodes || {};
+      let allEdgesList = last.allEdges || [];
+      if (Object.keys(allNodesMap).length === 0) {
+        const symbolsData = loadSymbolsOnly(this.workspaceRoot);
+        if (symbolsData) {
+          allNodesMap = symbolsData.allNodes || {};
+          allEdgesList = symbolsData.allEdges || [];
+        }
+      }
+      const internalNodes = Object.values(allNodesMap).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
       const internalNodeIds = new Set(internalNodes.map((n) => n.id));
       const internalCalls = [];
-      last.allEdges.forEach((e) => {
+      allEdgesList.forEach((e) => {
         if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
           internalCalls.push({ source: e.source, target: e.target });
         }
@@ -116208,7 +116217,12 @@ var CodeGraphServer = class {
       if (qIdx !== -1) {
         this.drilldownQueue.splice(qIdx, 1);
       }
-      const result = await this.computeModuleDrilldown(moduleId, last);
+      const enrichedGraph = {
+        ...last,
+        allNodes: allNodesMap,
+        allEdges: allEdgesList
+      };
+      const result = await this.computeModuleDrilldown(moduleId, enrichedGraph);
       if (!result) {
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "\u8BA1\u7B97\u4E0B\u94BB\u6392\u7248\u5931\u8D25" }));

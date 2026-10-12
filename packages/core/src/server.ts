@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
-import { CodeGraphCore, WorkspaceProfiler, saveDrilldownLayout, loadDrilldownLayout, loadManifestOnly, hasCache } from './index.js';
+import { CodeGraphCore, WorkspaceProfiler, saveDrilldownLayout, loadDrilldownLayout, loadManifestOnly, loadSymbolsOnly, hasCache } from './index.js';
 import { ElkLayoutEngine } from './layout/elk-layout.js';
 import { CodeNode } from './types/index.js';
 import { PluginUpdater } from './updater/plugin-updater.js';
@@ -545,12 +545,24 @@ export class CodeGraphServer {
       }
 
       const moduleFiles = new Set(targetModule.files);
-      const internalNodes = Object.values(last.allNodes).filter(
-        (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+      let allNodesMap = last.allNodes || {};
+      let allEdgesList = last.allEdges || [];
+
+      // 若当前 last.allNodes 为空 (例如处于首屏轻量 manifest 状态)，自动从磁盘 symbols.json 补齐微观符号索引
+      if (Object.keys(allNodesMap).length === 0) {
+        const symbolsData = loadSymbolsOnly(this.workspaceRoot);
+        if (symbolsData) {
+          allNodesMap = symbolsData.allNodes || {};
+          allEdgesList = symbolsData.allEdges || [];
+        }
+      }
+
+      const internalNodes = Object.values(allNodesMap).filter(
+        (n: any) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
       );
-      const internalNodeIds = new Set(internalNodes.map((n) => n.id));
+      const internalNodeIds = new Set(internalNodes.map((n: any) => n.id));
       const internalCalls: Array<{ source: string; target: string }> = [];
-      last.allEdges.forEach((e) => {
+      allEdgesList.forEach((e: any) => {
         if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
           internalCalls.push({ source: e.source, target: e.target });
         }
@@ -604,7 +616,12 @@ export class CodeGraphServer {
         this.drilldownQueue.splice(qIdx, 1);
       }
 
-      const result = await this.computeModuleDrilldown(moduleId, last);
+      const enrichedGraph = {
+        ...last,
+        allNodes: allNodesMap,
+        allEdges: allEdgesList,
+      };
+      const result = await this.computeModuleDrilldown(moduleId, enrichedGraph);
       if (!result) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: '计算下钻排版失败' }));

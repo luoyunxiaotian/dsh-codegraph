@@ -535,9 +535,10 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   } | null>(null);
 
   const [onDemandNodes, setOnDemandNodes] = useState<any[]>([]);
+  const [onDemandEdges, setOnDemandEdges] = useState<any[]>([]);
   const moduleFiles = useMemo(() => new Set(module.files), [module.files]);
   const internalNodes = useMemo(() => {
-    const fromAll = Object.values(allNodes).filter(
+    const fromAll = Object.values(allNodes || {}).filter(
       (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
     );
     if (fromAll.length > 0) return fromAll;
@@ -604,26 +605,30 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   // 执行自动理线与最优分层布局 (支持双层持久化与自动适屏)
   const performUntangleLayout = useCallback(
     async (showFeedback = true, forceRefresh = false) => {
-      // 0. 优先检测客户端内存缓存
+      // 0. 优先检测客户端内存缓存：仅当内部卡片实体已存在时才可提前 return
       if (!forceRefresh && moduleLayoutMemoryCache.has(module.id)) {
         const cached = moduleLayoutMemoryCache.get(module.id)!;
         if (isLayoutValid(cached, 0)) {
           setNodePositions(cached.positions);
           if (cached.portEdges) setServerPortEdges(cached.portEdges);
-          setTimeout(() => applyAdaptiveViewport(), 150);
-          return;
+          if (internalNodes.length > 0) {
+            setTimeout(() => applyAdaptiveViewport(), 150);
+            return;
+          }
         }
       }
 
-      // 0.1 优先检测本地持久化缓存 (LocalStorage)
+      // 0.1 优先检测本地持久化缓存 (LocalStorage)：仅当内部卡片实体已存在时才可提前 return
       if (!forceRefresh) {
         const persisted = getPersistedLayout(workspaceRoot, module.id);
         if (isLayoutValid(persisted, 0)) {
           setNodePositions(persisted!.positions);
           if (persisted!.portEdges) setServerPortEdges(persisted!.portEdges);
           moduleLayoutMemoryCache.set(module.id, persisted!);
-          setTimeout(() => applyAdaptiveViewport(), 150);
-          return;
+          if (internalNodes.length > 0) {
+            setTimeout(() => applyAdaptiveViewport(), 150);
+            return;
+          }
         }
       }
 
@@ -657,29 +662,32 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           untangleTimerRef.current = null;
         }
 
-        if (
-          data.success &&
-          data.layout?.nodes &&
-          (!data.layout.width || data.layout.width < 12000) &&
-          data.layout.nodes.length >= Math.min(internalNodes.length, 10)
-        ) {
-          const posMap: Record<string, { x: number; y: number }> = {};
-          data.layout.nodes.forEach((n: any) => {
-            posMap[n.id] = { x: n.x, y: n.y };
-          });
-          setNodePositions(posMap);
-          if (data.nodes && data.nodes.length > 0 && internalNodes.length === 0) {
+        if (data.success) {
+          if (data.nodes && data.nodes.length > 0) {
             setOnDemandNodes(data.nodes);
           }
-          const portEdges = data.portEdges || [];
-          setServerPortEdges(portEdges);
-          const layoutData: PersistedDrillLayout = { positions: posMap, portEdges };
-          moduleLayoutMemoryCache.set(module.id, layoutData);
-          savePersistedLayout(workspaceRoot, module.id, layoutData);
+          if (data.edges && data.edges.length > 0) {
+            setOnDemandEdges(data.edges);
+          }
+          if (
+            data.layout?.nodes &&
+            (!data.layout.width || data.layout.width < 12000)
+          ) {
+            const posMap: Record<string, { x: number; y: number }> = {};
+            data.layout.nodes.forEach((n: any) => {
+              posMap[n.id] = { x: n.x, y: n.y };
+            });
+            setNodePositions(posMap);
+            const portEdges = data.portEdges || [];
+            setServerPortEdges(portEdges);
+            const layoutData: PersistedDrillLayout = { positions: posMap, portEdges };
+            moduleLayoutMemoryCache.set(module.id, layoutData);
+            savePersistedLayout(workspaceRoot, module.id, layoutData);
 
-          if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
-          setTimeout(() => applyAdaptiveViewport(), 150);
-          return;
+            if (showFeedback) showToast('✓ 已完成智能分层理线与连线交叉优化并自动保存');
+            setTimeout(() => applyAdaptiveViewport(), 150);
+            return;
+          }
         }
       } catch (err) {
         console.warn('服务端理线请求失败，采用客户端拓扑排版降级:', err);
@@ -704,25 +712,34 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     [module, workspaceRoot, internalNodes, allEdges, applyAdaptiveViewport]
   );
 
-  // 模块切换或首次载入时，仅在 module.id 或工作区发生切换时单次触发，解耦变动闭包对象杜绝死循环二次排版
+  // 模块切换或首次载入时：优先上屏缓存坐标，若内部符号缺失则无条件拉取补齐
   useEffect(() => {
+    setOnDemandNodes([]);
+    setOnDemandEdges([]);
+
     const mem = moduleLayoutMemoryCache.get(module.id);
     if (mem && isLayoutValid(mem, 0)) {
       setNodePositions(mem.positions);
       if (mem.portEdges) setServerPortEdges(mem.portEdges);
+    } else {
+      const stored = getPersistedLayout(workspaceRoot, module.id);
+      if (stored && isLayoutValid(stored, 0)) {
+        setNodePositions(stored.positions);
+        if (stored.portEdges) setServerPortEdges(stored.portEdges);
+        moduleLayoutMemoryCache.set(module.id, stored);
+      }
+    }
+
+    // 检查当前模块是否已拥有完整的卡片节点
+    const existing = Object.values(allNodes || {}).filter(
+      (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+    );
+    if (existing.length > 0) {
       setTimeout(() => applyAdaptiveViewport(), 150);
       return;
     }
 
-    const stored = getPersistedLayout(workspaceRoot, module.id);
-    if (stored && isLayoutValid(stored, 0)) {
-      setNodePositions(stored.positions);
-      if (stored.portEdges) setServerPortEdges(stored.portEdges);
-      moduleLayoutMemoryCache.set(module.id, stored);
-      setTimeout(() => applyAdaptiveViewport(), 150);
-      return;
-    }
-
+    // 内部卡片节点缺失，必定调用服务端补齐
     performUntangleLayout(false, false);
     currentModuleIdRef.current = module.id;
   }, [module.id, workspaceRoot]);
@@ -730,16 +747,17 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   // 基础原始边集合 (不受 hover 抖动影响)
   const rawEdges = useMemo(() => {
     const list: any[] = [];
-    allEdges.forEach((e, idx) => {
+    const effectiveEdges = allEdges && allEdges.length > 0 ? allEdges : onDemandEdges;
+    effectiveEdges.forEach((e, idx) => {
       if (internalNodeIds.has(e.source) && internalNodeIds.has(e.target)) {
-        if (filterCallsOnly && e.relation !== 'CALLS' && e.relation !== 'CALLS_CONTRACT' && e.relation !== 'HANDLED_BY') {
+        if (filterCallsOnly && e.relation && e.relation !== 'CALLS' && e.relation !== 'CALLS_CONTRACT' && e.relation !== 'HANDLED_BY') {
           return;
         }
         list.push({
           id: `drill_e_${idx}`,
           source: e.source,
           target: e.target,
-          relation: e.relation,
+          relation: e.relation || 'CALLS',
           isPortEdge: false,
         });
       }
@@ -756,7 +774,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     });
 
     return list;
-  }, [allEdges, internalNodeIds, filterCallsOnly, resolvedPortEdges]);
+  }, [allEdges, onDemandEdges, internalNodeIds, filterCallsOnly, resolvedPortEdges]);
 
   // 1. 同步节点：仅在模块、位置或点击聚焦发生变化时更新，悬浮(hover)绝不重建节点！
   useEffect(() => {
