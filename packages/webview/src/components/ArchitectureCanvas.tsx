@@ -38,6 +38,7 @@ import {
 import { ContextMenu, ContextMenuItem } from './ContextMenu.js';
 import { insertIntoChat, copyToClipboard, showToast } from '../utils/chatBridge.js';
 import { useTheme } from '../context/ThemeContext.js';
+import { moduleLayoutMemoryCache } from './DrillDownCanvas.js';
 
 interface ArchitectureCanvasProps {
   modules: ModuleContainer[];
@@ -54,6 +55,31 @@ const ModuleCardNode = React.memo(({ data }: NodeProps) => {
   const isConnected = Boolean(data.isConnected);
   const isDimmed = Boolean(data.isDimmed);
   const isContract = mod.id === 'mod_contracts' || mod.archetypeRole === 'Contract Hub';
+
+  // 智能静默预热：当鼠标悬停在卡片上时，提前预拉取下钻排版并注入 moduleLayoutMemoryCache
+  const handleMouseEnter = () => {
+    if (!moduleLayoutMemoryCache.has(mod.id)) {
+      fetch('/api/layout-drilldown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moduleId: mod.id, forceRefresh: false }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.layout?.nodes) {
+            const posMap: Record<string, { x: number; y: number }> = {};
+            data.layout.nodes.forEach((n: any) => {
+              posMap[n.id] = { x: n.x, y: n.y };
+            });
+            moduleLayoutMemoryCache.set(mod.id, {
+              positions: posMap,
+              portEdges: data.portEdges || [],
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  };
 
   const getPlatformBadge = (p?: any) => {
     if (!p) return null;
@@ -75,6 +101,7 @@ const ModuleCardNode = React.memo(({ data }: NodeProps) => {
   return (
     <div
       onDoubleClick={() => onDrillDown(mod.id)}
+      onMouseEnter={handleMouseEnter}
       style={{
         opacity: isDimmed ? 0.35 : 1,
         transition: 'opacity 0.2s ease, box-shadow 0.2s ease',

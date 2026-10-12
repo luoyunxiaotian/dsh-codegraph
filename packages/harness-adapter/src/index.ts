@@ -235,7 +235,11 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
     if (cachedSkeletonSnapshot) {
       return cachedSkeletonSnapshot;
     }
-    cachedSkeletonSnapshot = ArchitectureSkeletonExtractor.extract(graph, currentRoot);
+    let raw = ArchitectureSkeletonExtractor.extract(graph, currentRoot);
+    if (raw && raw.length > 2500) {
+      raw = raw.slice(0, 2450) + '\n...\n</code_graph_architecture>';
+    }
+    cachedSkeletonSnapshot = raw;
     return cachedSkeletonSnapshot;
   };
 

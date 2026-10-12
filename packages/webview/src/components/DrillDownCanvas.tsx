@@ -413,12 +413,12 @@ interface PersistedDrillLayout {
   height?: number;
 }
 
-const moduleLayoutMemoryCache = new Map<string, PersistedDrillLayout>();
+export const moduleLayoutMemoryCache = new Map<string, PersistedDrillLayout>();
 
-function isLayoutValid(layout: PersistedDrillLayout | null | undefined, minExpectedCount: number): boolean {
+function isLayoutValid(layout: PersistedDrillLayout | null | undefined, minExpectedCount: number = 0): boolean {
   if (!layout?.positions) return false;
   const count = Object.keys(layout.positions).length;
-  if (count < Math.max(1, minExpectedCount)) return false;
+  if (count === 0 && minExpectedCount > 0) return false;
   let maxX = 0;
   for (const id in layout.positions) {
     if (layout.positions[id].x > maxX) maxX = layout.positions[id].x;
@@ -477,6 +477,20 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
   const [filterCallsOnly, setFilterCallsOnly] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isUntangling, setIsUntangling] = useState<boolean>(false);
+  const untangleTimerRef = useRef<any>(null);
+  const currentModuleIdRef = useRef<string>(module.id);
+  const isMountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (untangleTimerRef.current) {
+        clearTimeout(untangleTimerRef.current);
+        untangleTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // 视口自适应 LOD 细节分级状态：缩小视野下未选中卡片降级为同色色块，零重排零卡顿
   const [isLodCompact, setIsLodCompact] = useState<boolean>(false);
@@ -497,9 +511,9 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       (n) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
     );
     const mem = moduleLayoutMemoryCache.get(module.id);
-    if (mem && isLayoutValid(mem, iNodes.length)) return mem.positions;
+    if (mem && isLayoutValid(mem, 0)) return mem.positions;
     const stored = getPersistedLayout(workspaceRoot, module.id);
-    if (stored && isLayoutValid(stored, iNodes.length)) {
+    if (stored && isLayoutValid(stored, 0)) {
       moduleLayoutMemoryCache.set(module.id, stored);
       return stored.positions;
     }
@@ -593,7 +607,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       // 0. 优先检测客户端内存缓存
       if (!forceRefresh && moduleLayoutMemoryCache.has(module.id)) {
         const cached = moduleLayoutMemoryCache.get(module.id)!;
-        if (isLayoutValid(cached, internalNodes.length)) {
+        if (isLayoutValid(cached, 0)) {
           setNodePositions(cached.positions);
           if (cached.portEdges) setServerPortEdges(cached.portEdges);
           setTimeout(() => applyAdaptiveViewport(), 150);
@@ -604,7 +618,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       // 0.1 优先检测本地持久化缓存 (LocalStorage)
       if (!forceRefresh) {
         const persisted = getPersistedLayout(workspaceRoot, module.id);
-        if (isLayoutValid(persisted, internalNodes.length)) {
+        if (isLayoutValid(persisted, 0)) {
           setNodePositions(persisted!.positions);
           if (persisted!.portEdges) setServerPortEdges(persisted!.portEdges);
           moduleLayoutMemoryCache.set(module.id, persisted!);
@@ -613,7 +627,22 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
         }
       }
 
-      setIsUntangling(true);
+      // 防抖延迟遮罩：若为手动点击（showFeedback=true），立即展示理线状态；
+      // 若为自动加载（showFeedback=false），启动 180ms 定时器；已就绪模块在 15ms 内返回，0 遮罩瞬间直出！
+      if (untangleTimerRef.current) {
+        clearTimeout(untangleTimerRef.current);
+        untangleTimerRef.current = null;
+      }
+
+      if (showFeedback || forceRefresh) {
+        setIsUntangling(true);
+      } else {
+        untangleTimerRef.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setIsUntangling(true);
+          }
+        }, 180);
+      }
 
       try {
         const res = await fetch('/api/layout-drilldown', {
@@ -622,6 +651,12 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
           body: JSON.stringify({ moduleId: module.id, forceRefresh }),
         });
         const data = await res.json();
+
+        if (untangleTimerRef.current) {
+          clearTimeout(untangleTimerRef.current);
+          untangleTimerRef.current = null;
+        }
+
         if (
           data.success &&
           data.layout?.nodes &&
@@ -649,7 +684,13 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
       } catch (err) {
         console.warn('服务端理线请求失败，采用客户端拓扑排版降级:', err);
       } finally {
-        setIsUntangling(false);
+        if (untangleTimerRef.current) {
+          clearTimeout(untangleTimerRef.current);
+          untangleTimerRef.current = null;
+        }
+        if (isMountedRef.current) {
+          setIsUntangling(false);
+        }
       }
 
       const clientPos = calculateClientTopologicalLayout(module, internalNodes, allEdges);
@@ -663,10 +704,10 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     [module, workspaceRoot, internalNodes, allEdges, applyAdaptiveViewport]
   );
 
-  // 模块切换或首次载入时，优先应用缓存或触发自动理线
+  // 模块切换或首次载入时，仅在 module.id 或工作区发生切换时单次触发，解耦变动闭包对象杜绝死循环二次排版
   useEffect(() => {
     const mem = moduleLayoutMemoryCache.get(module.id);
-    if (mem && isLayoutValid(mem, internalNodes.length)) {
+    if (mem && isLayoutValid(mem, 0)) {
       setNodePositions(mem.positions);
       if (mem.portEdges) setServerPortEdges(mem.portEdges);
       setTimeout(() => applyAdaptiveViewport(), 150);
@@ -674,7 +715,7 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     }
 
     const stored = getPersistedLayout(workspaceRoot, module.id);
-    if (stored && isLayoutValid(stored, internalNodes.length)) {
+    if (stored && isLayoutValid(stored, 0)) {
       setNodePositions(stored.positions);
       if (stored.portEdges) setServerPortEdges(stored.portEdges);
       moduleLayoutMemoryCache.set(module.id, stored);
@@ -683,7 +724,8 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     }
 
     performUntangleLayout(false, false);
-  }, [module.id, workspaceRoot, internalNodes.length, performUntangleLayout, applyAdaptiveViewport]);
+    currentModuleIdRef.current = module.id;
+  }, [module.id, workspaceRoot]);
 
   // 基础原始边集合 (不受 hover 抖动影响)
   const rawEdges = useMemo(() => {

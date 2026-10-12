@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 顶部控制栏响应式排版重构与自更新并发竞速引擎。彻底解决顶部按钮横向溢出问题，新增「•••」更多功能收纳菜单与精细圆角悬停交互；语言标签聚合为多语言胶囊浮层；自更新检测升级为全镜像 Promise.any 毫秒级并发竞速；优化模块下钻浮动工具栏窄屏响应式自适应。`,
+    notes: `v${version}: 模块下钻秒开直出与大工程会话稳定性重构。消除双击下钻假等待遮罩与重复排版，引入卡片 Hover 智能预热秒开；彻底瘦身 /api/workspace 响应并清除高频巨石轮询，根除大项目切离后切回白屏崩溃；.codegraph 注入 .gitignore 与 .ignore 屏蔽自保护，彻底解决生成图谱后宿主会话历史变慢与撑爆失败问题。`,
     minSupported: '1.0.0',
     files,
   };

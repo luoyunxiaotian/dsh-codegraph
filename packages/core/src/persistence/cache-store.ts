@@ -197,6 +197,11 @@ export function saveDrilldownLayout(
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    const cacheDir = getCacheDir(workspaceRoot);
+    const internalGitignore = path.join(cacheDir, '.gitignore');
+    if (!fs.existsSync(internalGitignore)) {
+      try { fs.writeFileSync(internalGitignore, "*\n", 'utf-8'); } catch {}
+    }
     const filePath = getDrilldownFilePath(workspaceRoot, moduleId);
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
@@ -396,6 +401,18 @@ export function saveCache(workspaceRoot: string, data: PersistentCacheData): voi
     if (!fs.existsSync(cacheDir)) {
       fs.mkdirSync(cacheDir, { recursive: true });
     }
+
+    // 在 .codegraph 自身目录下写入自保护忽略规则，杜绝 DSH 宿主上下文引擎、ripgrep、全局文件索引器扫描分片文件
+    try {
+      const internalGitignore = path.join(cacheDir, '.gitignore');
+      if (!fs.existsSync(internalGitignore)) {
+        fs.writeFileSync(internalGitignore, "*\n", 'utf-8');
+      }
+      const internalIgnore = path.join(cacheDir, '.ignore');
+      if (!fs.existsSync(internalIgnore)) {
+        fs.writeFileSync(internalIgnore, "*\n", 'utf-8');
+      }
+    } catch {}
 
     // 登记私有排除规则
     ensureGitignore(resolvedRoot);

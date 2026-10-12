@@ -113413,6 +113413,14 @@ function saveDrilldownLayout(workspaceRoot, moduleId, data) {
     if (!fs5.existsSync(dir)) {
       fs5.mkdirSync(dir, { recursive: true });
     }
+    const cacheDir = getCacheDir(workspaceRoot);
+    const internalGitignore = path6.join(cacheDir, ".gitignore");
+    if (!fs5.existsSync(internalGitignore)) {
+      try {
+        fs5.writeFileSync(internalGitignore, "*\n", "utf-8");
+      } catch {
+      }
+    }
     const filePath = getDrilldownFilePath(workspaceRoot, moduleId);
     fs5.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
   } catch (err2) {
@@ -113603,6 +113611,17 @@ function saveCache(workspaceRoot, data) {
     const cacheDir = getCacheDir(resolvedRoot);
     if (!fs5.existsSync(cacheDir)) {
       fs5.mkdirSync(cacheDir, { recursive: true });
+    }
+    try {
+      const internalGitignore = path6.join(cacheDir, ".gitignore");
+      if (!fs5.existsSync(internalGitignore)) {
+        fs5.writeFileSync(internalGitignore, "*\n", "utf-8");
+      }
+      const internalIgnore = path6.join(cacheDir, ".ignore");
+      if (!fs5.existsSync(internalIgnore)) {
+        fs5.writeFileSync(internalIgnore, "*\n", "utf-8");
+      }
+    } catch {
     }
     ensureGitignore(resolvedRoot);
     const manifestLayout = data.layout?.architecture ? { architecture: data.layout.architecture } : void 0;
@@ -115883,15 +115902,33 @@ var CodeGraphServer = class {
   }
   setWorkspace(workspaceRoot, scopePath) {
     const resolved = path9.resolve(workspaceRoot);
-    if (this.workspaceRoot !== resolved) {
+    const normCurrent = this.workspaceRoot.toLowerCase().replace(/[\\\/]+/g, "/");
+    const normTarget = resolved.toLowerCase().replace(/[\\\/]+/g, "/");
+    if (normCurrent !== normTarget) {
       this.workspaceRoot = resolved;
       this.drilldownCache.clear();
       this.core.setWorkspaceRoot(this.workspaceRoot, scopePath || ".");
       console.log(`[CodeGraph] \u5DE5\u4F5C\u533A\u5DF2\u52A8\u6001\u5207\u6362\u81F3: ${this.workspaceRoot}`);
-    } else if (scopePath) {
+    } else if (scopePath && scopePath !== this.core.getScopePath()) {
       this.drilldownCache.clear();
       this.core.setScopePath(scopePath);
     }
+  }
+  getReadyDrilldowns() {
+    const readySet = new Set(this.drilldownCache.keys());
+    try {
+      const drillDir = path9.join(this.workspaceRoot, ".codegraph", "drilldowns");
+      if (fs8.existsSync(drillDir)) {
+        const files = fs8.readdirSync(drillDir);
+        for (const f of files) {
+          if (f.endsWith(".json")) {
+            readySet.add(f.slice(0, -5));
+          }
+        }
+      }
+    } catch {
+    }
+    return Array.from(readySet);
   }
   stop() {
     return new Promise((resolve) => {
@@ -116243,6 +116280,7 @@ var CodeGraphServer = class {
           allEdges: []
         },
         layout,
+        readyDrilldowns: this.getReadyDrilldowns(),
         projects: this.core.getProjects(),
         selectedProjectIds: this.core.getSelectedProjectIds(),
         activeProjectId: this.core.getActiveProjectId()
@@ -116267,13 +116305,27 @@ var CodeGraphServer = class {
               console.warn("[CodeGraph] \u81EA\u52A8\u8BA1\u7B97\u7F13\u5B58\u5E03\u5C40\u5931\u8D25:", err2);
             }
           }
+          const slimGraph = cached?.graph ? {
+            meta: cached.graph.meta,
+            architectureView: cached.graph.architectureView,
+            processFlows: cached.graph.processFlows,
+            allNodes: {},
+            allEdges: []
+          } : null;
+          if (cached?.graph) {
+            this.startBackgroundDrilldown(cached.graph);
+          }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
             success: true,
             workspaceRoot: this.workspaceRoot,
             hasCache: !!cached,
-            graph: cached?.graph,
-            layout
+            graph: slimGraph,
+            layout,
+            readyDrilldowns: this.getReadyDrilldowns(),
+            projects: this.core.getProjects(),
+            selectedProjectIds: this.core.getSelectedProjectIds(),
+            activeProjectId: this.core.getActiveProjectId()
           }));
           return;
         } else {
@@ -116948,7 +117000,11 @@ function apply(ctx, config = {}) {
     if (cachedSkeletonSnapshot) {
       return cachedSkeletonSnapshot;
     }
-    cachedSkeletonSnapshot = ArchitectureSkeletonExtractor.extract(graph, currentRoot);
+    let raw = ArchitectureSkeletonExtractor.extract(graph, currentRoot);
+    if (raw && raw.length > 2500) {
+      raw = raw.slice(0, 2450) + "\n...\n</code_graph_architecture>";
+    }
+    cachedSkeletonSnapshot = raw;
     return cachedSkeletonSnapshot;
   };
   const registerSystemPromptHook = () => {

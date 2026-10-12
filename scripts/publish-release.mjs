@@ -17,35 +17,29 @@ async function publishRelease() {
   const token = tokenMatch[1].trim();
   const username = userMatch ? userMatch[1].trim() : 'luoyunxiaotian';
   const repoName = 'dsh-codegraph';
-  const tag = 'v2.1.1';
-  const releaseTitle = 'v2.1.1 - 工业级超大工程架构下钻排版优化、Clangd式分片缓存与极简按需连线';
+  const tag = 'v2.1.3';
+  const releaseTitle = 'v2.1.3 - 模块下钻秒开直出、宏观拓扑瘦身与工程上下文自保护重构';
 
-  const releaseBody = `## 🚀 CodeGraph v2.1.1 工业级超大工程优化发布
+  const releaseBody = `## 🚀 CodeGraph v2.1.3 核心性能与稳定性发布
 
-本次更新专为**超大型/特大型工业级代码仓库**（实测单模块 8,868 张卡片、32,478 条依赖连线）深度设计，彻底攻克下钻排版卡死、52MB 巨石无换行缓存以及前端 DOM 渲染崩溃瓶颈：
+本次更新重点攻克**模块下钻假等待遮罩**、**大型工程离开代码图谱后再切回加载异常**、以及**生成图谱后宿主会话历史载入变慢与上下文撑爆**等痛点，全面提升流畅度与稳定性：
 
-### ⚡ 核心性能突破 (以真实 8,868 节点实测基准)
-* **Clangd 式按文件独立切片缓存 (\`.codegraph/cache/files/<hash>.json\`)**：
-  * 彻底告别 52.6MB 单行无换行巨石缓存，所有文件提取信息按 Hash 独立切片落盘（每切片仅 2~8 KB），带 2 空格美化缩进换行；
-  * 完美向下兼容旧版缓存，旧工程自动无损升级。
-* **架构下钻独立分片存储 (\`.codegraph/drilldowns/<moduleId>.json\`)**：
-  * 模块下钻排版坐标彻底从 \`manifest.json\` 剥离，\`manifest.json\` 缩减 98.9% 保持纯宏观轻量秒开；
-  * 下钻不再触发全量 80MB 缓存的反复序列化，I/O 耗时由 1500ms 降至 **28ms**！
-* **Sugiyama 正交分层排版算法重心预计算加速**：
-  * 重心启发式层级排序引入 \`baryMap\` 预计算，比较器实现 $O(1)$ 查找，消除高阶复杂度瓶颈；
-  * 8,868 节点、32,478 条连线超大模块下钻排版耗时由数秒卡死缩减至 **114ms**！
-* **视口锚定 (Viewport Anchor) 激活虚拟化**：
-  * 大图模式（节点 > 150）首屏严禁全景缩放撑爆视口，默认以舒适视角 (\`zoom = 0.85\`) 锚定于 In-Port 区域；
-  * 视口内仅渲染 ~30 张卡片，彻底激活 ReactFlow 元素视口裁剪，挂载 DOM 节点数骤降 99.7%！
-* **极简按需点亮连线 (On-Demand Edges)**：
-  * 大图模式默认挂载 0 条 SVG 边，彻底消除数万条 SVG 路径对 GPU/DOM 的拖拽拖累，平移保持 60 FPS；
-  * 点击任意卡片时瞬间点亮该卡片的 1-Hop 进出边与微流动动画，并支持顶部工具栏强制全览切换。
-* **MiniMap 缩略图防爆门禁**：
-  * 大图模式下默认规避海量 SVG 绘制，避免缩略图黑块崩溃，提供右下角一键展开/隐藏缩略图开关。
+### ⚡ 核心改进与特性
+* **模块下钻 0 遮罩秒开直出 (Instant DrillDown & Prefetch)**：
+  * **180ms 防抖遮罩**：已就绪或已缓存模块在 15ms 内极速返回，直接取消遮罩定时器，彻底告别假等待“正在优先构建内部流线”转圈；
+  * **宏观卡片 Hover 智能预取 (Prefetch)**：鼠标滑过模块卡片瞬间静默拉取排版并注入内存，双击时 **100% 内存秒开直出**；
+  * 精简 \`useEffect\` 依赖为 \`[module.id, workspaceRoot]\`，单次初始化彻底解耦，杜绝二次排版死循环。
+* **大项目离开切回稳定性与 API 响应瘦身**：
+  * **彻底瘦身 \`/api/workspace\`**：仅下发核心宏观拓扑架构（<50KB），剔除数万个微观 AST 节点，根除大项目 100MB 巨石 JSON 造成的 V8 \`Invalid string length\` 500 报错与主线程卡死；
+  * **清理 10 秒高频 POST 轮询**：宿主心跳切换为极轻量 \`GET /api/status\` (<1ms)，大幅降低宿主与插件通信开销；
+  * **Windows 路径严格归一化比对**：消除大小写与斜杠差异引起的误清空重置与 iframe 误重载。
+* **工程上下文自保护隔离机制**：
+  * 在 \`.codegraph\` 内部自动生成 \`.gitignore\` 与 \`.ignore\` 规则（\`*\\n\`），向 DSH 宿主全文索引器与上下文引擎显式声明全局忽略该目录，彻底杜绝数十兆缓存切片扫入会话历史；
+  * 加固 \`getStableSkeleton\`，设置 2500 字符防御性截断，确保 LLM System Prompt 稳定不膨胀。
 
 ---
-**兼容性与稳定性**：
-全套 16 项核心多语言 AST 解析、SCIP 符号提取、ELK Sugiyama 正交排版、增量缓存与在线自更新测试 100% 全部通过。`;
+**质量与测试**：
+全套 16 项自动化单元与集成测试（多语言 AST 解析、Sugiyama 正交分层理线排版、增量自愈、本地排除、微服务契约、跨端生态等）100% 绿灯全部通过。`;
 
   console.log(`🚀 正在向 GitHub 发布 Release: ${tag} (${releaseTitle})...`);
 

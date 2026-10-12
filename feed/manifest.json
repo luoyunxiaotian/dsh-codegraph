@@ -1,7 +1,7 @@
 {
-  "version": "2.1.2",
-  "publishedAt": "2026-10-11T09:58:09.729Z",
-  "notes": "v2.1.2: 顶部控制栏响应式排版重构与自更新并发竞速引擎。彻底解决顶部按钮横向溢出问题，新增「•••」更多功能收纳菜单与精细圆角悬停交互；语言标签聚合为多语言胶囊浮层；自更新检测升级为全镜像 Promise.any 毫秒级并发竞速；优化模块下钻浮动工具栏窄屏响应式自适应。",
+  "version": "2.1.3",
+  "publishedAt": "2026-10-12T02:44:37.453Z",
+  "notes": "v2.1.3: 模块下钻秒开直出与大工程会话稳定性重构。消除双击下钻假等待遮罩与重复排版，引入卡片 Hover 智能预热秒开；彻底瘦身 /api/workspace 响应并清除高频巨石轮询，根除大项目切离后切回白屏崩溃；.codegraph 注入 .gitignore 与 .ignore 屏蔽自保护，彻底解决生成图谱后宿主会话历史变慢与撑爆失败问题。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -11,13 +11,13 @@
     },
     {
       "path": "dist/client.js",
-      "size": 34235,
-      "sha256": "a622ec8f3909fe4f9d72b7c142c283608d70b6b365a92a8fafd5ef23214f2d67"
+      "size": 34546,
+      "sha256": "2a30255f753b9aa3e01fd7c6607dddd79974d61f469d7fa519af920a0e7c9ed0"
     },
     {
       "path": "dist/index.js",
-      "size": 4337995,
-      "sha256": "16fdbd37942bee332a12aae53d1d21e4a478e4b9434fad08eb3fd974ddc8277a"
+      "size": 4340082,
+      "sha256": "aab26b5e3f560a36eb99a76c7a01c0b6eb88fcaf375285e6489d41b013039ca6"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -120,14 +120,14 @@
       "sha256": "72ca30aa3c208cae96f0b0565589aa6362294a22992367e30c6090c035650efa"
     },
     {
-      "path": "dist/webview/assets/index-BF3pu-qF.js",
-      "size": 490788,
-      "sha256": "68b26967df3c929b2cf2428b671026afb39b411d11c17fc43281bf1bfe35f72f"
+      "path": "dist/webview/assets/index-CBkmhbne.js",
+      "size": 491529,
+      "sha256": "a923a0667a1e87948c187caebab12d9bda5d28b1a5b8d862a2113b2c52aeb58c"
     },
     {
       "path": "dist/webview/index.html",
       "size": 749,
-      "sha256": "b1f6f67434323ec087c890966ee5de140fcaa57be0be3b81a4fb2ae4152f68a3"
+      "sha256": "d00e54e9f881e7b48182f6caa3c453f5acc386332a1214ad4f8bf8e3bbc37248"
     },
     {
       "path": "LICENSE",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "9533d346a976ee032b894978e88bac519f14c01811e8286c1a5860b95c76010d"
+      "sha256": "ae7c45ef730013949b2cd11f5dee8d2345f778d051041e41fc893a3c00926532"
     },
     {
       "path": "README.md",

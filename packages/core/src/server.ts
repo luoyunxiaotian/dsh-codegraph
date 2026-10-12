@@ -238,15 +238,33 @@ export class CodeGraphServer {
 
   public setWorkspace(workspaceRoot: string, scopePath?: string): void {
     const resolved = path.resolve(workspaceRoot);
-    if (this.workspaceRoot !== resolved) {
+    const normCurrent = this.workspaceRoot.toLowerCase().replace(/[\\\/]+/g, '/');
+    const normTarget = resolved.toLowerCase().replace(/[\\\/]+/g, '/');
+    if (normCurrent !== normTarget) {
       this.workspaceRoot = resolved;
       this.drilldownCache.clear();
       this.core.setWorkspaceRoot(this.workspaceRoot, scopePath || '.');
       console.log(`[CodeGraph] 工作区已动态切换至: ${this.workspaceRoot}`);
-    } else if (scopePath) {
+    } else if (scopePath && scopePath !== this.core.getScopePath()) {
       this.drilldownCache.clear();
       this.core.setScopePath(scopePath);
     }
+  }
+
+  private getReadyDrilldowns(): string[] {
+    const readySet = new Set<string>(this.drilldownCache.keys());
+    try {
+      const drillDir = path.join(this.workspaceRoot, '.codegraph', 'drilldowns');
+      if (fs.existsSync(drillDir)) {
+        const files = fs.readdirSync(drillDir);
+        for (const f of files) {
+          if (f.endsWith('.json')) {
+            readySet.add(f.slice(0, -5));
+          }
+        }
+      }
+    } catch {}
+    return Array.from(readySet);
   }
 
   public stop(): Promise<void> {
@@ -662,6 +680,7 @@ export class CodeGraphServer {
             allEdges: [],
           },
           layout,
+          readyDrilldowns: this.getReadyDrilldowns(),
           projects: this.core.getProjects(),
           selectedProjectIds: this.core.getSelectedProjectIds(),
           activeProjectId: this.core.getActiveProjectId(),
@@ -691,14 +710,34 @@ export class CodeGraphServer {
               console.warn('[CodeGraph] 自动计算缓存布局失败:', err);
             }
           }
+
+          // 彻底瘦身：只返回轻量宏观架构数据，杜绝数万微观 AST 符号造成数十兆巨石 JSON 导致 V8 内存溢出与宿主主线程卡死
+          const slimGraph = cached?.graph
+            ? {
+                meta: cached.graph.meta,
+                architectureView: cached.graph.architectureView,
+                processFlows: cached.graph.processFlows,
+                allNodes: {},
+                allEdges: [],
+              }
+            : null;
+
+          if (cached?.graph) {
+            this.startBackgroundDrilldown(cached.graph);
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
               success: true,
               workspaceRoot: this.workspaceRoot,
               hasCache: !!cached,
-              graph: cached?.graph,
+              graph: slimGraph,
               layout,
+              readyDrilldowns: this.getReadyDrilldowns(),
+              projects: this.core.getProjects(),
+              selectedProjectIds: this.core.getSelectedProjectIds(),
+              activeProjectId: this.core.getActiveProjectId(),
             })
           );
           return;

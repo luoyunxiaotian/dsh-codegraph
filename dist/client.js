@@ -267,17 +267,27 @@ function CodeGraphViewPanel(props) {
     params.set("theme", isDark ? "dark" : "light");
     return `${base}/?${params.toString()}`;
   }, [activeWorkspace, props?.sessionId, key, isDark]);
+  const lastSyncedWsRef = import_react.default.useRef("");
+  const lastActiveWsRef = import_react.default.useRef("");
+  import_react.default.useEffect(() => {
+    if (!activeWorkspace) return;
+    const norm = activeWorkspace.toLowerCase().replace(/[\\\/]+/g, "/");
+    if (lastSyncedWsRef.current !== norm) {
+      lastSyncedWsRef.current = norm;
+      fetch("http://127.0.0.1:3333/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace })
+      }).catch(() => {
+      });
+    }
+    if (lastActiveWsRef.current && lastActiveWsRef.current !== norm) {
+      setKey((prev) => prev + 1);
+    }
+    lastActiveWsRef.current = norm;
+  }, [activeWorkspace]);
   const checkStatus = import_react.default.useCallback(async () => {
-    setStatus("checking");
     try {
-      if (activeWorkspace) {
-        await fetch("http://127.0.0.1:3333/api/workspace", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspaceRoot: activeWorkspace })
-        }).catch(() => {
-        });
-      }
       const queryUrl = activeWorkspace ? `http://127.0.0.1:3333/api/status?workspace=${encodeURIComponent(activeWorkspace)}` : "http://127.0.0.1:3333/api/status";
       const res = await fetch(queryUrl, { mode: "cors" });
       if (res.ok) {
@@ -298,11 +308,6 @@ function CodeGraphViewPanel(props) {
     const timer = setInterval(checkStatus, 1e4);
     return () => clearInterval(timer);
   }, [checkStatus]);
-  import_react.default.useEffect(() => {
-    if (activeWorkspace) {
-      setKey((prev) => prev + 1);
-    }
-  }, [activeWorkspace]);
   import_react.default.useEffect(() => {
     const handleMessage = (e) => {
       if (e.data?.type === "codegraph:insert-chat") {

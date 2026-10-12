@@ -324,18 +324,29 @@ function CodeGraphViewPanel(props: any) {
     return `${base}/?${params.toString()}`;
   }, [activeWorkspace, props?.sessionId, key, isDark]);
 
-  // 4. 状态检测与向 CodeGraph 后台同步当前工作区
-  const checkStatus = React.useCallback(async () => {
-    setStatus('checking');
-    try {
-      if (activeWorkspace) {
-        await fetch('http://127.0.0.1:3333/api/workspace', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ workspaceRoot: activeWorkspace }),
-        }).catch(() => {});
-      }
+  // 4. 工作区变更时单次通知后台，心跳仅使用极轻量 GET /api/status (<1ms)
+  const lastSyncedWsRef = React.useRef<string>('');
+  const lastActiveWsRef = React.useRef<string>('');
 
+  React.useEffect(() => {
+    if (!activeWorkspace) return;
+    const norm = activeWorkspace.toLowerCase().replace(/[\\\/]+/g, '/');
+    if (lastSyncedWsRef.current !== norm) {
+      lastSyncedWsRef.current = norm;
+      fetch('http://127.0.0.1:3333/api/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceRoot: activeWorkspace }),
+      }).catch(() => {});
+    }
+    if (lastActiveWsRef.current && lastActiveWsRef.current !== norm) {
+      setKey((prev) => prev + 1);
+    }
+    lastActiveWsRef.current = norm;
+  }, [activeWorkspace]);
+
+  const checkStatus = React.useCallback(async () => {
+    try {
       const queryUrl = activeWorkspace
         ? `http://127.0.0.1:3333/api/status?workspace=${encodeURIComponent(activeWorkspace)}`
         : 'http://127.0.0.1:3333/api/status';
@@ -360,12 +371,6 @@ function CodeGraphViewPanel(props: any) {
     const timer = setInterval(checkStatus, 10000);
     return () => clearInterval(timer);
   }, [checkStatus]);
-
-  React.useEffect(() => {
-    if (activeWorkspace) {
-      setKey((prev) => prev + 1);
-    }
-  }, [activeWorkspace]);
 
   // 5. 监听来自嵌入 iframe 的图谱上下文注入请求，自动填入下方聊天框
   React.useEffect(() => {
