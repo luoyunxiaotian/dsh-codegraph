@@ -74,6 +74,12 @@ export const App: React.FC = () => {
           targetWs = boundWs.trim();
         }
       }
+      if (!targetWs && typeof localStorage !== 'undefined') {
+        const lastWs = localStorage.getItem('dsh_cg_last_ws');
+        if (lastWs && lastWs.trim()) {
+          targetWs = lastWs.trim();
+        }
+      }
 
       if (targetWs) {
         setWorkspaceRoot(targetWs);
@@ -91,6 +97,9 @@ export const App: React.FC = () => {
             setActiveProjectId(wsData.graph.meta?.activeProjectId);
             setIsInitialized(true);
             setCacheTime('已恢复');
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('dsh_cg_last_ws', targetWs);
+            }
             return;
           }
         } catch {}
@@ -102,6 +111,9 @@ export const App: React.FC = () => {
         const data = await res.json();
         if (data.workspaceRoot) {
           setWorkspaceRoot(data.workspaceRoot);
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('dsh_cg_last_ws', data.workspaceRoot);
+          }
         }
         if (data.scopePath && !queryScope) {
           setScopePath(data.scopePath);
@@ -137,6 +149,14 @@ export const App: React.FC = () => {
     };
 
     init();
+
+    const handleActive = (e: MessageEvent) => {
+      if (e.data?.type === 'codegraph:view-active') {
+        init();
+      }
+    };
+    window.addEventListener('message', handleActive);
+    return () => window.removeEventListener('message', handleActive);
   }, []);
 
   // 智能空闲静默预热：首屏宏观架构就绪后，利用空闲时间异步拉取微观 symbols.json

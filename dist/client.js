@@ -179,6 +179,8 @@ function CodeGraphViewPanel(props) {
       }
     }
     if (props?.activeWorkspace) return props.activeWorkspace;
+    if (props?.workspace) return props.workspace;
+    if (props?.cwd) return props.cwd;
     if (sessionCwd) return sessionCwd;
     if (Array.isArray(workspaces) && workspaces.length > 0) {
       if (props?.sessionId) {
@@ -186,6 +188,28 @@ function CodeGraphViewPanel(props) {
         if (matched?.path) return matched.path;
       }
       if (workspaces[0]?.path) return workspaces[0].path;
+    }
+    const ctx = globalClientCtx;
+    const uiWs = ctx?.uiWorkspace || ctx?.get?.("uiWorkspace");
+    const wsService = uiWs?.workspaces || ctx?.workspaces || ctx?.get?.("workspaces");
+    const sessService = uiWs?.sessions || ctx?.sessions || ctx?.get?.("sessions");
+    if (props?.sessionId && sessService) {
+      try {
+        const cwd = sessService.byId?.[props.sessionId]?.cwd || sessService.get?.(props.sessionId)?.cwd;
+        if (cwd) return cwd;
+      } catch {
+      }
+    }
+    if (wsService) {
+      try {
+        const items = wsService.list?.getSnapshot?.()?.items || wsService.items || [];
+        if (props?.sessionId) {
+          const matched = items.find((w) => w.sessionIds?.includes(props.sessionId));
+          if (matched?.path) return matched.path;
+        }
+        if (items[0]?.path) return items[0].path;
+      } catch {
+      }
     }
     if (typeof document !== "undefined") {
       try {
@@ -201,8 +225,15 @@ function CodeGraphViewPanel(props) {
       } catch {
       }
     }
+    if (typeof localStorage !== "undefined") {
+      try {
+        const lastRec = localStorage.getItem("dsh_last_active_workspace") || localStorage.getItem("dsh.recentWorkspace");
+        if (lastRec && lastRec.trim()) return lastRec.trim();
+      } catch {
+      }
+    }
     return "";
-  }, [sessionWorkspace, props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+  }, [sessionWorkspace, props?.activeWorkspace, props?.workspace, props?.cwd, sessionCwd, workspaces, props?.sessionId]);
   import_react.default.useEffect(() => {
     if (props?.sessionId && typeof localStorage !== "undefined") {
       try {
@@ -253,8 +284,48 @@ function CodeGraphViewPanel(props) {
         },
         "*"
       );
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: "codegraph:view-active",
+          workspaceRoot: activeWorkspace
+        },
+        "*"
+      );
     }
   };
+  import_react.default.useEffect(() => {
+    const notifyActive = () => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          {
+            type: "codegraph:view-active",
+            workspaceRoot: activeWorkspace
+          },
+          "*"
+        );
+      }
+    };
+    notifyActive();
+    const t1 = setTimeout(notifyActive, 120);
+    const t2 = setTimeout(notifyActive, 450);
+    window.addEventListener("focus", notifyActive);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("focus", notifyActive);
+    };
+  }, [activeWorkspace]);
+  import_react.default.useEffect(() => {
+    if (activeWorkspace && typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem("dsh_last_active_workspace", activeWorkspace);
+        if (props?.sessionId) {
+          localStorage.setItem(`dsh_cg_ws_${props.sessionId}`, activeWorkspace);
+        }
+      } catch {
+      }
+    }
+  }, [activeWorkspace, props?.sessionId]);
   const iframeUrl = import_react.default.useMemo(() => {
     const base = "http://127.0.0.1:3333";
     const params = new URLSearchParams();

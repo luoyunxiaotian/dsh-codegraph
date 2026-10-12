@@ -407,6 +407,48 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
     setNodes(computedNodes);
   }, [modules, nodePositions, currentLayout, selectedModuleId, buses, onDrillDown, setNodes]);
 
+  // 当节点初始化完成或视窗尺寸变更时，自动执行居中适屏
+  const hasInitialFittedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (rfInstance && nodes.length > 0 && !hasInitialFittedRef.current) {
+      hasInitialFittedRef.current = true;
+      const timer = setTimeout(() => {
+        rfInstance.fitView({ padding: 0.15, duration: 200 });
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [rfInstance, nodes.length]);
+
+  // 切回页面、窗口缩放、或收到宿主视图激活通知时，平滑重适屏恢复画面，杜绝黑屏/空白
+  useEffect(() => {
+    if (!rfInstance) return;
+
+    const handleRestoreView = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      setTimeout(() => {
+        rfInstance.fitView({ padding: 0.15, duration: 180 });
+      }, 50);
+    };
+
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'codegraph:view-active' || e.data?.type === 'codegraph:theme-change') {
+        handleRestoreView();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('resize', handleRestoreView);
+    window.addEventListener('focus', handleRestoreView);
+    document.addEventListener('visibilitychange', handleRestoreView);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('resize', handleRestoreView);
+      window.removeEventListener('focus', handleRestoreView);
+      document.removeEventListener('visibilitychange', handleRestoreView);
+    };
+  }, [rfInstance]);
+
   // 2. 同步边：轻量更新边的状态与样式，仅在点击选中卡片时高亮并按需播放流动动画
   useEffect(() => {
     const connectedBusIds = new Set<string>();
@@ -653,7 +695,6 @@ export const ArchitectureCanvas: React.FC<ArchitectureCanvasProps> = ({
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onlyRenderVisibleElements={true}
         onInit={(instance) => {
           setRfInstance(instance);
           const initialCompact = instance.getZoom() < 0.55;

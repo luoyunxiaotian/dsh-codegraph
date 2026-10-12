@@ -1038,6 +1038,37 @@ export const DrillDownCanvas: React.FC<DrillDownCanvasProps> = ({
     setEdges,
   ]);
 
+  // 切回页面或收到视图激活通知时恢复居中与视口自适应
+  useEffect(() => {
+    const handleRestoreView = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      const inst = rfInstanceRef.current || rfInstance;
+      if (inst) {
+        setTimeout(() => {
+          applyAdaptiveViewport(inst);
+        }, 80);
+      }
+    };
+
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'codegraph:view-active') {
+        handleRestoreView();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('resize', handleRestoreView);
+    window.addEventListener('focus', handleRestoreView);
+    document.addEventListener('visibilitychange', handleRestoreView);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('resize', handleRestoreView);
+      window.removeEventListener('focus', handleRestoreView);
+      document.removeEventListener('visibilitychange', handleRestoreView);
+    };
+  }, [rfInstance, applyAdaptiveViewport]);
+
   // 节点右键处理
   const handleNodeContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent, node: Node) => {

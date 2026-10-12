@@ -275,6 +275,46 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, wor
     setEdges(flowEdges);
   }, [currentFlow, stepPositions, onSelectNode, setNodes, setEdges]);
 
+  // 当流程节点载入或切换时自动适屏居中
+  useEffect(() => {
+    if (rfInstance && nodes.length > 0) {
+      const timer = setTimeout(() => {
+        rfInstance.fitView({ padding: 0.15, duration: 200 });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [rfInstance, currentFlow?.flowId]);
+
+  // 切回页面或收到视图激活通知时恢复居中
+  useEffect(() => {
+    if (!rfInstance) return;
+
+    const handleRestoreView = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      setTimeout(() => {
+        rfInstance.fitView({ padding: 0.15, duration: 180 });
+      }, 50);
+    };
+
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'codegraph:view-active') {
+        handleRestoreView();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('resize', handleRestoreView);
+    window.addEventListener('focus', handleRestoreView);
+    document.addEventListener('visibilitychange', handleRestoreView);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('resize', handleRestoreView);
+      window.removeEventListener('focus', handleRestoreView);
+      document.removeEventListener('visibilitychange', handleRestoreView);
+    };
+  }, [rfInstance]);
+
   // 步骤卡片右键菜单
   const handleNodeContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent, node: Node) => {
@@ -433,7 +473,6 @@ export const ProcessFlowCanvas: React.FC<ProcessFlowCanvasProps> = ({ flows, wor
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onlyRenderVisibleElements={true}
         onInit={setRfInstance}
         onNodeDragStop={(_, node) => {
           if (!currentFlow) return;

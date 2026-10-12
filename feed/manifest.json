@@ -1,7 +1,7 @@
 {
-  "version": "2.1.3",
-  "publishedAt": "2026-10-12T02:44:37.453Z",
-  "notes": "v2.1.3: 模块下钻秒开直出与大工程会话稳定性重构。消除双击下钻假等待遮罩与重复排版，引入卡片 Hover 智能预热秒开；彻底瘦身 /api/workspace 响应并清除高频巨石轮询，根除大项目切离后切回白屏崩溃；.codegraph 注入 .gitignore 与 .ignore 屏蔽自保护，彻底解决生成图谱后宿主会话历史变慢与撑爆失败问题。",
+  "version": "2.1.4",
+  "publishedAt": "2026-10-12T03:27:10.485Z",
+  "notes": "v2.1.4: 修复页面切换后图谱画面丢失、视口自适应重绘与工作区多级嗅探。移除宏观与时序流画布视口过度裁剪，杜绝切回页面时卡片被误卸载；新增 visibilitychange/focus/view-active 自愈适屏重绘；宿主加固 8 级工作区容灾嗅探链并持久化记忆；后端服务实现内存图谱 0ms 秒回与响应瘦身。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -11,13 +11,13 @@
     },
     {
       "path": "dist/client.js",
-      "size": 34546,
-      "sha256": "2a30255f753b9aa3e01fd7c6607dddd79974d61f469d7fa519af920a0e7c9ed0"
+      "size": 37011,
+      "sha256": "23e7c2348b3bb343a39a228a00142e72f68a95fffb80da5d88951639a92661a5"
     },
     {
       "path": "dist/index.js",
-      "size": 4340082,
-      "sha256": "aab26b5e3f560a36eb99a76c7a01c0b6eb88fcaf375285e6489d41b013039ca6"
+      "size": 4340785,
+      "sha256": "f1888a8e5181768c180b37e8e0b6ca8df90cb83e057dbf5eb7e3558be840400e"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -115,19 +115,19 @@
       "sha256": "70aa2b222e10a91306a85f5b9c8e028e3dc09943854aa63640c643fc7e051c2f"
     },
     {
-      "path": "dist/webview/assets/index-B2hWHT2P.css",
-      "size": 55106,
-      "sha256": "72ca30aa3c208cae96f0b0565589aa6362294a22992367e30c6090c035650efa"
+      "path": "dist/webview/assets/index-BmMn2_W_.css",
+      "size": 55126,
+      "sha256": "9157b3df86cb3d57b6ed8b5a0d1a4616f4fcbac49103527c37bf0fe7ecc1892d"
     },
     {
-      "path": "dist/webview/assets/index-CBkmhbne.js",
-      "size": 491529,
-      "sha256": "a923a0667a1e87948c187caebab12d9bda5d28b1a5b8d862a2113b2c52aeb58c"
+      "path": "dist/webview/assets/index-DXfz-shJ.js",
+      "size": 494058,
+      "sha256": "74da565e65b7818293a521dce4c24ff69c024428eb497271ecd91420855726cd"
     },
     {
       "path": "dist/webview/index.html",
       "size": 749,
-      "sha256": "d00e54e9f881e7b48182f6caa3c453f5acc386332a1214ad4f8bf8e3bbc37248"
+      "sha256": "73e181af10f8f2619a6f8f1882b19cdb0b81b604429be53ec0ad87e2d51d77d0"
     },
     {
       "path": "LICENSE",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "ae7c45ef730013949b2cd11f5dee8d2345f778d051041e41fc893a3c00926532"
+      "sha256": "0788421b7583e75dec7789a48e9920ffe651e97ffe236ac5339dd8ee03788e15"
     },
     {
       "path": "README.md",

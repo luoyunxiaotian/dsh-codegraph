@@ -226,7 +226,10 @@ function CodeGraphViewPanel(props: any) {
       } catch {}
     }
     if (props?.activeWorkspace) return props.activeWorkspace;
+    if (props?.workspace) return props.workspace;
+    if (props?.cwd) return props.cwd;
     if (sessionCwd) return sessionCwd;
+
     if (Array.isArray(workspaces) && workspaces.length > 0) {
       if (props?.sessionId) {
         const matched = workspaces.find((w: any) => w.sessionIds?.includes(props?.sessionId));
@@ -234,6 +237,31 @@ function CodeGraphViewPanel(props: any) {
       }
       if (workspaces[0]?.path) return workspaces[0].path;
     }
+
+    // 深度从 Cordis globalClientCtx 嗅探
+    const ctx = globalClientCtx;
+    const uiWs = ctx?.uiWorkspace || ctx?.get?.('uiWorkspace');
+    const wsService = uiWs?.workspaces || ctx?.workspaces || ctx?.get?.('workspaces');
+    const sessService = uiWs?.sessions || ctx?.sessions || ctx?.get?.('sessions');
+
+    if (props?.sessionId && sessService) {
+      try {
+        const cwd = sessService.byId?.[props.sessionId]?.cwd || sessService.get?.(props.sessionId)?.cwd;
+        if (cwd) return cwd;
+      } catch {}
+    }
+
+    if (wsService) {
+      try {
+        const items: any[] = wsService.list?.getSnapshot?.()?.items || wsService.items || [];
+        if (props?.sessionId) {
+          const matched = items.find((w: any) => w.sessionIds?.includes(props.sessionId));
+          if (matched?.path) return matched.path;
+        }
+        if (items[0]?.path) return items[0].path;
+      } catch {}
+    }
+
     if (typeof document !== 'undefined') {
       try {
         const chip =
@@ -250,8 +278,16 @@ function CodeGraphViewPanel(props: any) {
         }
       } catch {}
     }
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const lastRec = localStorage.getItem('dsh_last_active_workspace') || localStorage.getItem('dsh.recentWorkspace');
+        if (lastRec && lastRec.trim()) return lastRec.trim();
+      } catch {}
+    }
+
     return '';
-  }, [sessionWorkspace, props?.activeWorkspace, sessionCwd, workspaces, props?.sessionId]);
+  }, [sessionWorkspace, props?.activeWorkspace, props?.workspace, props?.cwd, sessionCwd, workspaces, props?.sessionId]);
 
   // 同步当前会话绑定的工作区状态
   React.useEffect(() => {
@@ -308,8 +344,53 @@ function CodeGraphViewPanel(props: any) {
         },
         '*'
       );
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: 'codegraph:view-active',
+          workspaceRoot: activeWorkspace,
+        },
+        '*'
+      );
     }
   };
+
+  // 挂载、切回此标签页或获得焦点时，通知 iframe 适屏恢复
+  React.useEffect(() => {
+    const notifyActive = () => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          {
+            type: 'codegraph:view-active',
+            workspaceRoot: activeWorkspace,
+          },
+          '*'
+        );
+      }
+    };
+
+    notifyActive();
+    const t1 = setTimeout(notifyActive, 120);
+    const t2 = setTimeout(notifyActive, 450);
+    window.addEventListener('focus', notifyActive);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener('focus', notifyActive);
+    };
+  }, [activeWorkspace]);
+
+  // 持久化活跃工作区到宿主 localStorage
+  React.useEffect(() => {
+    if (activeWorkspace && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('dsh_last_active_workspace', activeWorkspace);
+        if (props?.sessionId) {
+          localStorage.setItem(`dsh_cg_ws_${props.sessionId}`, activeWorkspace);
+        }
+      } catch {}
+    }
+  }, [activeWorkspace, props?.sessionId]);
 
   const iframeUrl = React.useMemo(() => {
     const base = 'http://127.0.0.1:3333';

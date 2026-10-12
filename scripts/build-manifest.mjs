@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 模块下钻秒开直出与大工程会话稳定性重构。消除双击下钻假等待遮罩与重复排版，引入卡片 Hover 智能预热秒开；彻底瘦身 /api/workspace 响应并清除高频巨石轮询，根除大项目切离后切回白屏崩溃；.codegraph 注入 .gitignore 与 .ignore 屏蔽自保护，彻底解决生成图谱后宿主会话历史变慢与撑爆失败问题。`,
+    notes: `v${version}: 修复页面切换后图谱画面丢失、视口自适应重绘与工作区多级嗅探。移除宏观与时序流画布视口过度裁剪，杜绝切回页面时卡片被误卸载；新增 visibilitychange/focus/view-active 自愈适屏重绘；宿主加固 8 级工作区容灾嗅探链并持久化记忆；后端服务实现内存图谱 0ms 秒回与响应瘦身。`,
     minSupported: '1.0.0',
     files,
   };

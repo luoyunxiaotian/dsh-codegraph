@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
-import { CodeGraphCore, WorkspaceProfiler, saveDrilldownLayout, loadDrilldownLayout } from './index.js';
+import { CodeGraphCore, WorkspaceProfiler, saveDrilldownLayout, loadDrilldownLayout, loadManifestOnly, hasCache } from './index.js';
 import { ElkLayoutEngine } from './layout/elk-layout.js';
 import { CodeNode } from './types/index.js';
 import { PluginUpdater } from './updater/plugin-updater.js';
@@ -632,14 +632,20 @@ export class CodeGraphServer {
       let fromCache = false;
       let savedAt: string | undefined;
 
-      // 如果内存中尚无图谱结果，自动探测本地持久化缓存
+      // 如果内存中尚无图谱结果，自动探测本地持久化 manifest 缓存 (<2ms)，绝不扫描成千上万个文件
       if (!last) {
-        const cached = this.core.loadFromCache();
-        if (cached) {
-          last = cached.graph;
-          layout = cached.layout;
+        const manifest = loadManifestOnly(this.workspaceRoot);
+        if (manifest) {
+          last = {
+            meta: manifest.meta,
+            architectureView: manifest.architectureView,
+            processFlows: manifest.processFlows,
+            allNodes: {},
+            allEdges: [],
+          };
+          layout = manifest.layout;
           fromCache = true;
-          savedAt = cached.savedAt;
+          savedAt = manifest.savedAt;
         }
       }
 
@@ -652,7 +658,6 @@ export class CodeGraphServer {
           );
           layout = { architecture: archLayout };
           this.core.setLastLayout(layout);
-          this.core.saveToCache(layout);
         } catch (err) {
           console.warn('[CodeGraph] 自动计算缓存布局失败:', err);
         }
@@ -672,14 +677,14 @@ export class CodeGraphServer {
           scopePath: this.core.getScopePath(),
           meta: last?.meta,
           // 宏观首屏仅返回架构 modules, buses 与 processFlows，排除成千上万个微观节点，极速秒开
-          graph: {
-            meta: last?.meta,
-            architectureView: last?.architectureView,
-            processFlows: last?.processFlows,
+          graph: last ? {
+            meta: last.meta,
+            architectureView: last.architectureView,
+            processFlows: last.processFlows,
             allNodes: {},
             allEdges: [],
-          },
-          layout,
+          } : null,
+          layout: { architecture: layout?.architecture },
           readyDrilldowns: this.getReadyDrilldowns(),
           projects: this.core.getProjects(),
           selectedProjectIds: this.core.getSelectedProjectIds(),
@@ -695,45 +700,64 @@ export class CodeGraphServer {
         const targetRoot = body.workspaceRoot.trim();
         if (fs.existsSync(targetRoot)) {
           this.setWorkspace(targetRoot, body.scopePath);
-          const cached = this.core.loadFromCache();
-          let layout = cached?.layout;
-          if (cached && (!layout || !layout.architecture)) {
+          let last = this.core.getLastResult();
+          let layout = this.core.getLastLayout();
+          let hasCache = false;
+
+          // 优先复用当前内存中已有的图谱结果 (0ms 秒开)；若无则快速读取轻量 manifest.json (<2ms)
+          if (!last) {
+            const manifest = loadManifestOnly(this.workspaceRoot);
+            if (manifest) {
+              last = {
+                meta: manifest.meta,
+                architectureView: manifest.architectureView,
+                processFlows: manifest.processFlows,
+                allNodes: {},
+                allEdges: [],
+              };
+              layout = manifest.layout;
+              hasCache = true;
+            }
+          } else {
+            hasCache = true;
+          }
+
+          if (last && (!layout || !layout.architecture)) {
             try {
               const archLayout = await ElkLayoutEngine.layoutArchitecture(
-                cached.graph.architectureView.modules,
-                cached.graph.architectureView.buses
+                last.architectureView.modules,
+                last.architectureView.buses
               );
               layout = { architecture: archLayout };
               this.core.setLastLayout(layout);
-              this.core.saveToCache(layout);
             } catch (err) {
               console.warn('[CodeGraph] 自动计算缓存布局失败:', err);
             }
           }
 
-          // 彻底瘦身：只返回轻量宏观架构数据，杜绝数万微观 AST 符号造成数十兆巨石 JSON 导致 V8 内存溢出与宿主主线程卡死
-          const slimGraph = cached?.graph
+          if (last) {
+            this.startBackgroundDrilldown(last);
+          }
+
+          // 彻底瘦身：只返回轻量宏观架构数据 (<20KB)，剔除数万微观 AST 符号与下钻大数组
+          const slimGraph = last
             ? {
-                meta: cached.graph.meta,
-                architectureView: cached.graph.architectureView,
-                processFlows: cached.graph.processFlows,
+                meta: last.meta,
+                architectureView: last.architectureView,
+                processFlows: last.processFlows,
                 allNodes: {},
                 allEdges: [],
               }
             : null;
-
-          if (cached?.graph) {
-            this.startBackgroundDrilldown(cached.graph);
-          }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
               success: true,
               workspaceRoot: this.workspaceRoot,
-              hasCache: !!cached,
+              hasCache,
               graph: slimGraph,
-              layout,
+              layout: { architecture: layout?.architecture },
               readyDrilldowns: this.getReadyDrilldowns(),
               projects: this.core.getProjects(),
               selectedProjectIds: this.core.getSelectedProjectIds(),

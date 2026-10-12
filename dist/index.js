@@ -116242,12 +116242,18 @@ var CodeGraphServer = class {
       let fromCache = false;
       let savedAt;
       if (!last) {
-        const cached = this.core.loadFromCache();
-        if (cached) {
-          last = cached.graph;
-          layout = cached.layout;
+        const manifest = loadManifestOnly(this.workspaceRoot);
+        if (manifest) {
+          last = {
+            meta: manifest.meta,
+            architectureView: manifest.architectureView,
+            processFlows: manifest.processFlows,
+            allNodes: {},
+            allEdges: []
+          };
+          layout = manifest.layout;
           fromCache = true;
-          savedAt = cached.savedAt;
+          savedAt = manifest.savedAt;
         }
       }
       if (last && (!layout || !layout.architecture)) {
@@ -116255,7 +116261,6 @@ var CodeGraphServer = class {
           const archLayout = await ElkLayoutEngine.layoutArchitecture(last.architectureView.modules, last.architectureView.buses);
           layout = { architecture: archLayout };
           this.core.setLastLayout(layout);
-          this.core.saveToCache(layout);
         } catch (err2) {
           console.warn("[CodeGraph] \u81EA\u52A8\u8BA1\u7B97\u7F13\u5B58\u5E03\u5C40\u5931\u8D25:", err2);
         }
@@ -116272,14 +116277,14 @@ var CodeGraphServer = class {
         scopePath: this.core.getScopePath(),
         meta: last?.meta,
         // 宏观首屏仅返回架构 modules, buses 与 processFlows，排除成千上万个微观节点，极速秒开
-        graph: {
-          meta: last?.meta,
-          architectureView: last?.architectureView,
-          processFlows: last?.processFlows,
+        graph: last ? {
+          meta: last.meta,
+          architectureView: last.architectureView,
+          processFlows: last.processFlows,
           allNodes: {},
           allEdges: []
-        },
-        layout,
+        } : null,
+        layout: { architecture: layout?.architecture },
         readyDrilldowns: this.getReadyDrilldowns(),
         projects: this.core.getProjects(),
         selectedProjectIds: this.core.getSelectedProjectIds(),
@@ -116293,35 +116298,51 @@ var CodeGraphServer = class {
         const targetRoot = body2.workspaceRoot.trim();
         if (fs8.existsSync(targetRoot)) {
           this.setWorkspace(targetRoot, body2.scopePath);
-          const cached = this.core.loadFromCache();
-          let layout = cached?.layout;
-          if (cached && (!layout || !layout.architecture)) {
+          let last = this.core.getLastResult();
+          let layout = this.core.getLastLayout();
+          let hasCache2 = false;
+          if (!last) {
+            const manifest = loadManifestOnly(this.workspaceRoot);
+            if (manifest) {
+              last = {
+                meta: manifest.meta,
+                architectureView: manifest.architectureView,
+                processFlows: manifest.processFlows,
+                allNodes: {},
+                allEdges: []
+              };
+              layout = manifest.layout;
+              hasCache2 = true;
+            }
+          } else {
+            hasCache2 = true;
+          }
+          if (last && (!layout || !layout.architecture)) {
             try {
-              const archLayout = await ElkLayoutEngine.layoutArchitecture(cached.graph.architectureView.modules, cached.graph.architectureView.buses);
+              const archLayout = await ElkLayoutEngine.layoutArchitecture(last.architectureView.modules, last.architectureView.buses);
               layout = { architecture: archLayout };
               this.core.setLastLayout(layout);
-              this.core.saveToCache(layout);
             } catch (err2) {
               console.warn("[CodeGraph] \u81EA\u52A8\u8BA1\u7B97\u7F13\u5B58\u5E03\u5C40\u5931\u8D25:", err2);
             }
           }
-          const slimGraph = cached?.graph ? {
-            meta: cached.graph.meta,
-            architectureView: cached.graph.architectureView,
-            processFlows: cached.graph.processFlows,
+          if (last) {
+            this.startBackgroundDrilldown(last);
+          }
+          const slimGraph = last ? {
+            meta: last.meta,
+            architectureView: last.architectureView,
+            processFlows: last.processFlows,
             allNodes: {},
             allEdges: []
           } : null;
-          if (cached?.graph) {
-            this.startBackgroundDrilldown(cached.graph);
-          }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
             success: true,
             workspaceRoot: this.workspaceRoot,
-            hasCache: !!cached,
+            hasCache: hasCache2,
             graph: slimGraph,
-            layout,
+            layout: { architecture: layout?.architecture },
             readyDrilldowns: this.getReadyDrilldowns(),
             projects: this.core.getProjects(),
             selectedProjectIds: this.core.getSelectedProjectIds(),
