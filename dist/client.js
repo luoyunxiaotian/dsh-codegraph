@@ -114,7 +114,7 @@ var SafeCodeGraphErrorBoundary = class extends import_react.default.Component {
   }
 };
 function SafeCodeGraphPanel(props) {
-  return h(SafeCodeGraphErrorBoundary, null, h(CodeGraphViewPanel, props));
+  return h(SafeCodeGraphErrorBoundary, null, h(CodeGraphTabViewportAnchor, props));
 }
 function useHostTheme() {
   const [isDark, setIsDark] = import_react.default.useState(() => {
@@ -148,11 +148,7 @@ function useHostTheme() {
   }, []);
   return isDark;
 }
-function CodeGraphViewPanel(props) {
-  const [key, setKey] = import_react.default.useState(0);
-  const [status, setStatus] = import_react.default.useState("checking");
-  const [statusText, setStatusText] = import_react.default.useState("\u6B63\u5728\u68C0\u6D4B\u5F15\u64CE\u72B6\u6001...");
-  const [isScanning, setIsScanning] = import_react.default.useState(false);
+function useDetectedWorkspace(props) {
   const [sessionWorkspace, setSessionWorkspace] = import_react.default.useState(() => {
     if (props?.sessionId && typeof localStorage !== "undefined") {
       try {
@@ -243,8 +239,110 @@ function CodeGraphViewPanel(props) {
       }
     }
   }, [props?.sessionId]);
+  return activeWorkspace;
+}
+var currentViewportTarget = {
+  isActive: false,
+  anchorEl: null,
+  rect: null,
+  workspace: ""
+};
+var viewportTargetListeners = /* @__PURE__ */ new Set();
+function setGlobalViewportTarget(updater) {
+  if (typeof updater === "function") {
+    currentViewportTarget = updater(currentViewportTarget);
+  } else {
+    currentViewportTarget = { ...currentViewportTarget, ...updater };
+  }
+  viewportTargetListeners.forEach((fn) => fn(currentViewportTarget));
+}
+function useGlobalViewportTarget() {
+  const [target, setTarget] = import_react.default.useState(currentViewportTarget);
+  import_react.default.useEffect(() => {
+    viewportTargetListeners.add(setTarget);
+    return () => {
+      viewportTargetListeners.delete(setTarget);
+    };
+  }, []);
+  return target;
+}
+function CodeGraphTabViewportAnchor(props) {
+  const anchorRef = import_react.default.useRef(null);
   const isDark = useHostTheme();
+  const activeWorkspace = useDetectedWorkspace(props);
+  import_react.default.useEffect(() => {
+    if (!anchorRef.current) return;
+    const measureAndSync = () => {
+      if (anchorRef.current) {
+        const r = anchorRef.current.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          setGlobalViewportTarget({
+            isActive: true,
+            anchorEl: anchorRef.current,
+            rect: { top: r.top, left: r.left, width: r.width, height: r.height },
+            workspace: activeWorkspace,
+            sessionId: props?.sessionId,
+            isOverlay: false
+          });
+        }
+      }
+    };
+    measureAndSync();
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(measureAndSync);
+      ro.observe(anchorRef.current);
+    }
+    window.addEventListener("resize", measureAndSync);
+    window.addEventListener("scroll", measureAndSync, true);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", measureAndSync);
+      window.removeEventListener("scroll", measureAndSync, true);
+      setGlobalViewportTarget((prev) => {
+        if (prev.anchorEl === anchorRef.current) {
+          return { ...prev, isActive: false, anchorEl: null, rect: null };
+        }
+        return prev;
+      });
+    };
+  }, [activeWorkspace, props?.sessionId]);
+  return h("div", {
+    ref: anchorRef,
+    "data-codegraph-viewport-anchor": "true",
+    style: {
+      width: "100%",
+      height: "100%",
+      overflow: "hidden",
+      position: "relative",
+      background: isDark ? "#151517" : "#f7f8fa"
+    }
+  });
+}
+function PersistentCodeGraphIframeHost(props) {
+  const isDark = useHostTheme();
+  const target = useGlobalViewportTarget();
+  const [hasEverOpened, setHasEverOpened] = import_react.default.useState(false);
   const iframeRef = import_react.default.useRef(null);
+  const lastWorkspaceRef = import_react.default.useRef("");
+  const [iframeKey, setIframeKey] = import_react.default.useState(0);
+  const [status, setStatus] = import_react.default.useState("checking");
+  import_react.default.useEffect(() => {
+    if (target.isActive && !hasEverOpened) {
+      setHasEverOpened(true);
+    }
+  }, [target.isActive, hasEverOpened]);
+  import_react.default.useEffect(() => {
+    if (target.isActive && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: "codegraph:view-active",
+          workspaceRoot: target.workspace
+        },
+        "*"
+      );
+    }
+  }, [target.isActive, target.workspace]);
   import_react.default.useEffect(() => {
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
@@ -259,243 +357,114 @@ function CodeGraphViewPanel(props) {
   import_react.default.useEffect(() => {
     const handleMsg = (e) => {
       if (e.data?.type === "codegraph:set-session-workspace" && e.data?.workspaceRoot) {
-        const targetSid = e.data.sessionId || props?.sessionId;
+        const targetSid = e.data.sessionId || target.sessionId;
         const targetWs = e.data.workspaceRoot;
         if (targetSid && targetWs && typeof localStorage !== "undefined") {
           try {
             localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
           } catch {
           }
-          if (targetSid === props?.sessionId) {
-            setSessionWorkspace(targetWs);
-          }
         }
       }
     };
     window.addEventListener("message", handleMsg);
     return () => window.removeEventListener("message", handleMsg);
-  }, [props?.sessionId]);
-  const handleIframeLoad = () => {
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        {
-          type: "codegraph:theme-change",
-          theme: isDark ? "dark" : "light"
-        },
-        "*"
-      );
-      iframeRef.current.contentWindow.postMessage(
-        {
-          type: "codegraph:view-active",
-          workspaceRoot: activeWorkspace
-        },
-        "*"
-      );
-    }
-  };
+  }, [target.sessionId]);
   import_react.default.useEffect(() => {
-    const notifyActive = () => {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(
-          {
-            type: "codegraph:view-active",
-            workspaceRoot: activeWorkspace
-          },
-          "*"
-        );
-      }
-    };
-    notifyActive();
-    const t1 = setTimeout(notifyActive, 120);
-    const t2 = setTimeout(notifyActive, 450);
-    window.addEventListener("focus", notifyActive);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      window.removeEventListener("focus", notifyActive);
-    };
-  }, [activeWorkspace]);
-  import_react.default.useEffect(() => {
-    if (activeWorkspace && typeof localStorage !== "undefined") {
-      try {
-        localStorage.setItem("dsh_last_active_workspace", activeWorkspace);
-        if (props?.sessionId) {
-          localStorage.setItem(`dsh_cg_ws_${props.sessionId}`, activeWorkspace);
-        }
-      } catch {
-      }
+    if (!target.workspace) return;
+    const norm = target.workspace.toLowerCase().replace(/[\\\/]+/g, "/");
+    if (lastWorkspaceRef.current && lastWorkspaceRef.current !== norm) {
+      setIframeKey((prev) => prev + 1);
     }
-  }, [activeWorkspace, props?.sessionId]);
-  const iframeUrl = import_react.default.useMemo(() => {
-    const base = "http://127.0.0.1:3333";
-    const params = new URLSearchParams();
-    if (activeWorkspace) {
-      params.set("workspace", activeWorkspace);
-    }
-    if (props?.sessionId) {
-      params.set("sessionId", props.sessionId);
-    }
-    params.set("theme", isDark ? "dark" : "light");
-    return `${base}/?${params.toString()}`;
-  }, [activeWorkspace, props?.sessionId, key, isDark]);
-  const lastSyncedWsRef = import_react.default.useRef("");
-  const lastActiveWsRef = import_react.default.useRef("");
-  import_react.default.useEffect(() => {
-    if (!activeWorkspace) return;
-    const norm = activeWorkspace.toLowerCase().replace(/[\\\/]+/g, "/");
-    if (lastSyncedWsRef.current !== norm) {
-      lastSyncedWsRef.current = norm;
-      fetch("http://127.0.0.1:3333/api/workspace", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceRoot: activeWorkspace })
-      }).catch(() => {
-      });
-    }
-    if (lastActiveWsRef.current && lastActiveWsRef.current !== norm) {
-      setKey((prev) => prev + 1);
-    }
-    lastActiveWsRef.current = norm;
-  }, [activeWorkspace]);
+    lastWorkspaceRef.current = norm;
+    fetch("http://127.0.0.1:3333/api/workspace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceRoot: target.workspace })
+    }).catch(() => {
+    });
+  }, [target.workspace]);
   const checkStatus = import_react.default.useCallback(async () => {
     try {
-      const queryUrl = activeWorkspace ? `http://127.0.0.1:3333/api/status?workspace=${encodeURIComponent(activeWorkspace)}` : "http://127.0.0.1:3333/api/status";
+      const queryUrl = target.workspace ? `http://127.0.0.1:3333/api/status?workspace=${encodeURIComponent(target.workspace)}` : "http://127.0.0.1:3333/api/status";
       const res = await fetch(queryUrl, { mode: "cors" });
       if (res.ok) {
-        const data = await res.json();
         setStatus("online");
-        setStatusText(data.initialized && data.meta ? `\u5DF2\u88C5\u914D (${data.meta.fileCount || 0} \u6587\u4EF6)` : "\u5C31\u7EEA");
       } else {
         setStatus("offline");
-        setStatusText("\u672A\u5C31\u7EEA");
       }
     } catch {
       setStatus("offline");
-      setStatusText("\u670D\u52A1\u672A\u542F\u52A8");
     }
-  }, [activeWorkspace]);
+  }, [target.workspace]);
   import_react.default.useEffect(() => {
+    if (!hasEverOpened) return;
     checkStatus();
     const timer = setInterval(checkStatus, 1e4);
     return () => clearInterval(timer);
-  }, [checkStatus]);
-  import_react.default.useEffect(() => {
-    const handleMessage = (e) => {
-      if (e.data?.type === "codegraph:insert-chat") {
-        const textToInsert = e.data.payload;
-        if (!textToInsert) return;
-        const composerInput = document.querySelector("[data-composer-input]");
-        if (composerInput) {
-          composerInput.focus();
-          const success = document.execCommand("insertText", false, textToInsert + "\n");
-          if (!success) {
-            composerInput.innerText = (composerInput.innerText ? composerInput.innerText + "\n" : "") + textToInsert;
-            composerInput.dispatchEvent(new Event("input", { bubbles: true }));
-          }
-        }
-      }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, []);
-  import_react.default.useEffect(() => {
-    if (!props?.isOverlay || !props?.onClose) return;
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape") {
-        props.onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [props?.isOverlay, props?.onClose]);
-  const handleRefresh = () => {
-    setKey((prev) => prev + 1);
-    checkStatus();
-  };
-  const handleTriggerScan = async () => {
-    if (!activeWorkspace) {
-      alert("\u8BF7\u5148\u9009\u62E9\u76EE\u6807\u5DE5\u4F5C\u533A");
-      return;
+  }, [hasEverOpened, checkStatus]);
+  if (!hasEverOpened) {
+    return null;
+  }
+  const iframeUrl = import_react.default.useMemo(() => {
+    const base = "http://127.0.0.1:3333";
+    const params = new URLSearchParams();
+    if (target.workspace) {
+      params.set("workspace", target.workspace);
     }
-    setIsScanning(true);
-    setStatusText("\u5168\u91CF\u626B\u63CF\u4E2D...");
-    try {
-      const res = await fetch("http://127.0.0.1:3333/api/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceRoot: activeWorkspace })
-      });
-      if (res.ok) {
-        setKey((prev) => prev + 1);
-        await checkStatus();
-      }
-    } catch (err) {
-      console.warn("[dsh-codegraph] \u626B\u63CF\u89E6\u53D1\u5F02\u5E38:", err);
-    } finally {
-      setIsScanning(false);
+    if (target.sessionId) {
+      params.set("sessionId", target.sessionId);
     }
-  };
-  const handleOpenBrowser = () => {
-    window.open(iframeUrl, "_blank");
+    params.set("theme", isDark ? "dark" : "light");
+    return `${base}/?${params.toString()}`;
+  }, [target.workspace, target.sessionId, isDark, iframeKey]);
+  const isVisible = target.isActive && target.rect !== null;
+  const rect = target.rect || { top: -9999, left: -9999, width: 100, height: 100 };
+  const themeStyles = isDark ? {
+    bgBase: "#151517",
+    bgPanel: "#151517",
+    bgLayer1: "#232324",
+    textPrimary: "#f9fafb",
+    textSecondary: "#cfd3d6",
+    borderSubtle: "rgba(255, 255, 255, 0.08)",
+    codeBg: "#151517"
+  } : {
+    bgBase: "#f7f8fa",
+    bgPanel: "#ffffff",
+    bgLayer1: "#f2f4f7",
+    textPrimary: "#111827",
+    textSecondary: "#4b5563",
+    borderSubtle: "rgba(0, 0, 0, 0.08)",
+    codeBg: "#ffffff"
   };
   const workspaceShortName = import_react.default.useMemo(() => {
-    if (!activeWorkspace) return "\u672A\u9009\u5B9A\u5DE5\u4F5C\u533A";
-    const normalized = activeWorkspace.replace(/\\/g, "/");
+    if (!target.workspace) return "\u672A\u9009\u5B9A\u5DE5\u4F5C\u533A";
+    const normalized = target.workspace.replace(/\\/g, "/");
     const parts = normalized.split("/").filter(Boolean);
-    return parts[parts.length - 1] || activeWorkspace;
-  }, [activeWorkspace]);
-  const themeStyles = import_react.default.useMemo(() => {
-    if (isDark) {
-      return {
-        bgBase: "#151517",
-        bgPanel: "#151517",
-        bgLayer1: "#232324",
-        textPrimary: "#f9fafb",
-        textSecondary: "#cfd3d6",
-        textTertiary: "#979da6",
-        borderSubtle: "rgba(255, 255, 255, 0.08)",
-        borderMedium: "rgba(255, 255, 255, 0.14)",
-        codeBg: "#151517"
-      };
-    } else {
-      return {
-        bgBase: "#f7f8fa",
-        bgPanel: "#ffffff",
-        bgLayer1: "#f2f4f7",
-        textPrimary: "#111827",
-        textSecondary: "#4b5563",
-        textTertiary: "#6b7280",
-        borderSubtle: "rgba(0, 0, 0, 0.08)",
-        borderMedium: "rgba(0, 0, 0, 0.14)",
-        codeBg: "#ffffff"
-      };
-    }
-  }, [isDark]);
-  return h(
+    return parts[parts.length - 1] || target.workspace;
+  }, [target.workspace]);
+  const container = h(
     "div",
     {
+      "data-codegraph-persistent-container": "true",
       style: {
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        height: "100%",
+        position: "fixed",
+        top: isVisible ? `${rect.top}px` : "-9999px",
+        left: isVisible ? `${rect.left}px` : "-9999px",
+        width: isVisible ? `${rect.width}px` : "100px",
+        height: isVisible ? `${rect.height}px` : "100px",
+        zIndex: target.isOverlay ? 90 : 40,
+        visibility: isVisible ? "visible" : "hidden",
+        pointerEvents: isVisible ? "auto" : "none",
         background: themeStyles.bgBase,
-        color: themeStyles.textPrimary,
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+        boxShadow: target.isOverlay ? isDark ? "0 0 24px rgba(0, 0, 0, 0.5)" : "0 0 24px rgba(0, 0, 0, 0.1)" : "none",
         overflow: "hidden",
-        ...props?.isOverlay ? {
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 90,
-          boxShadow: isDark ? "0 0 24px rgba(0, 0, 0, 0.5)" : "0 0 24px rgba(0, 0, 0, 0.1)"
-        } : {}
+        display: "flex",
+        flexDirection: "column"
       }
     },
-    // 仅在浮层模式下展示极简顶部返回栏 (在正常会话 Tab 模式下由 Webview 顶部控制台完整接管，零冗余)
-    props?.isOverlay ? h(
+    // 浮层模式下展示极简顶部返回栏
+    target.isOverlay ? h(
       "div",
       {
         style: {
@@ -519,7 +488,7 @@ function CodeGraphViewPanel(props) {
           "button",
           {
             type: "button",
-            onClick: props?.onClose,
+            onClick: target.onCloseOverlay,
             title: "\u8FD4\u56DE\u65B0\u5BF9\u8BDD\u754C\u9762 (Esc)",
             style: {
               display: "flex",
@@ -543,7 +512,7 @@ function CodeGraphViewPanel(props) {
           "div",
           {
             title: `\u5F53\u524D\u5DE5\u4F5C\u533A:
-${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
+${target.workspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
             style: {
               display: "flex",
               alignItems: "center",
@@ -564,7 +533,7 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
       h(
         "button",
         {
-          onClick: handleOpenBrowser,
+          onClick: () => window.open(iframeUrl, "_blank"),
           title: "\u5728\u72EC\u7ACB\u6D4F\u89C8\u5668\u7A97\u53E3\u4E2D\u5168\u5C4F\u6253\u5F00",
           style: {
             background: "#4176e6",
@@ -634,12 +603,11 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
         "\u91CD\u8BD5"
       )
     ) : null,
-    // 嵌入式 Webview 画布
+    // 嵌入式 Webview 画布 (单例持久驻留，永不物理卸载重建)
     h("iframe", {
       ref: iframeRef,
-      key,
+      key: iframeKey,
       src: iframeUrl,
-      onLoad: handleIframeLoad,
       style: {
         flex: 1,
         width: "100%",
@@ -650,6 +618,7 @@ ${activeWorkspace || "\u672A\u68C0\u6D4B\u5230\u5DE5\u4F5C\u533A"}`,
       title: "CodeGraph Studio"
     })
   );
+  return safeCreatePortal(container, document.body) || container;
 }
 var globalClientCtx = null;
 function detectHeroActiveWorkspace() {
@@ -876,12 +845,62 @@ function CodeGraphShellManager(props) {
     window.addEventListener("codegraph:open-overlay", handleOpen);
     return () => window.removeEventListener("codegraph:open-overlay", handleOpen);
   }, []);
-  const overlayPanel = overlayState.isOpen ? h(SafeCodeGraphPanel, {
-    ...props,
-    isOverlay: true,
-    activeWorkspace: overlayState.workspace,
-    onClose: () => setOverlayState({ isOpen: false, workspace: "" })
-  }) : null;
+  import_react.default.useEffect(() => {
+    if (overlayState.isOpen) {
+      const updateOverlayRect = () => {
+        const targetContainer = centerContainer || (typeof document !== "undefined" ? document.body : null);
+        const r = targetContainer ? targetContainer.getBoundingClientRect() : null;
+        setGlobalViewportTarget({
+          isActive: true,
+          anchorEl: targetContainer,
+          rect: {
+            top: centerContainer && r ? r.top : 32,
+            left: centerContainer && r ? r.left : 280,
+            width: centerContainer && r ? r.width : typeof window !== "undefined" ? window.innerWidth - 280 : 800,
+            height: centerContainer && r ? r.height : typeof window !== "undefined" ? window.innerHeight - 32 : 600
+          },
+          workspace: overlayState.workspace,
+          isOverlay: true,
+          onCloseOverlay: () => setOverlayState({ isOpen: false, workspace: "" })
+        });
+      };
+      updateOverlayRect();
+      window.addEventListener("resize", updateOverlayRect);
+      return () => {
+        window.removeEventListener("resize", updateOverlayRect);
+        setGlobalViewportTarget((prev) => prev.isOverlay ? { ...prev, isActive: false, rect: null } : prev);
+      };
+    }
+  }, [overlayState.isOpen, overlayState.workspace, centerContainer]);
+  import_react.default.useEffect(() => {
+    if (!overlayState.isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setOverlayState({ isOpen: false, workspace: "" });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [overlayState.isOpen]);
+  import_react.default.useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.data?.type === "codegraph:insert-chat") {
+        const textToInsert = e.data.payload;
+        if (!textToInsert) return;
+        const composerInput = document.querySelector("[data-composer-input]");
+        if (composerInput) {
+          composerInput.focus();
+          const success = document.execCommand("insertText", false, textToInsert + "\n");
+          if (!success) {
+            composerInput.innerText = (composerInput.innerText ? composerInput.innerText + "\n" : "") + textToInsert;
+            composerInput.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+        }
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
   return h(
     import_react.default.Fragment,
     null,
@@ -893,39 +912,8 @@ function CodeGraphShellManager(props) {
       }),
       heroContainer
     ) : null,
-    // B. 图谱浮层 (降级保障: 严格限制在主工作区内部，绝不覆盖左侧边栏与标题栏)
-    overlayState.isOpen && overlayPanel ? centerContainer ? safeCreatePortal(
-      h(
-        "div",
-        {
-          style: {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 60,
-            background: isDark ? "#151517" : "#ffffff"
-          }
-        },
-        overlayPanel
-      ),
-      centerContainer
-    ) : h(
-      "div",
-      {
-        style: {
-          position: "fixed",
-          top: "var(--dsh-titlebar-height, 0px)",
-          left: "var(--dsh-windows-sidebar-width, 280px)",
-          right: 0,
-          bottom: 0,
-          zIndex: 60,
-          background: isDark ? "#151517" : "#ffffff"
-        }
-      },
-      overlayPanel
-    ) : null
+    // B. 全局单例持久化 Iframe 视窗宿主 (永不销毁，0ms 瞬间秒切)
+    h(PersistentCodeGraphIframeHost, props)
   );
 }
 function InputCodeGraphUnifiedSlot(props) {

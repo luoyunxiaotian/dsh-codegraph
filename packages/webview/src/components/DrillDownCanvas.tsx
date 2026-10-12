@@ -64,7 +64,7 @@ const InternalSymbolNode = React.memo(({ data }: NodeProps) => {
 
   return (
     <div
-      onClick={() => onSelectNode(node.id, node.filePath, node.loc.startLine)}
+      onClick={() => onSelectNode(node.id, node as any, node.loc.startLine)}
       title={node.metadata?.story?.summaryText || `${node.name}: 点击打开交互透视与源码`}
       style={{
         opacity: isDimmed ? 0.35 : 1,

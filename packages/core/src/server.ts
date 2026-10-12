@@ -35,6 +35,12 @@ export class CodeGraphServer {
     const modules = graph.architectureView.modules;
     for (const m of modules) {
       if (!this.drilldownCache.has(m.id) && !this.drilldownQueue.includes(m.id)) {
+        // 优先探测磁盘持久化分片是否已落盘，若已存在则直接加载到内存并跳过后台重排
+        const diskCache = loadDrilldownLayout(this.workspaceRoot, m.id);
+        if (diskCache && diskCache.layout) {
+          this.drilldownCache.set(m.id, diskCache);
+          continue;
+        }
         this.drilldownQueue.push(m.id);
       }
     }
@@ -51,9 +57,20 @@ export class CodeGraphServer {
     if (!targetModule) return null;
 
     const moduleFiles = new Set(targetModule.files || []);
-    const internalNodes = (Object.values(graph.allNodes || {}).filter(
+    let internalNodes = (Object.values(graph.allNodes || {}).filter(
       (n: any) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
     ) as unknown) as CodeNode[];
+
+    // 若当前 graph 仅有轻量宏观数据，按需补齐本模块内部微观符号
+    if (internalNodes.length === 0) {
+      const full = this.core.getLastResult() || this.core.loadFromCache()?.graph;
+      if (full && full.allNodes) {
+        internalNodes = (Object.values(full.allNodes).filter(
+          (n: any) => moduleFiles.has(n.filePath) && n.entityType !== 'FILE'
+        ) as unknown) as CodeNode[];
+      }
+    }
+
     const internalNodeIds = new Set(internalNodes.map((n) => n.id));
 
     // 单次扫描快速分类全部连线：内部调用、打入入口、打出外部，时间复杂度 O(E)
@@ -61,7 +78,8 @@ export class CodeGraphServer {
     const incomingToInternal: Array<{ source: string; target: string }> = [];
     const outgoingFromInternal: Array<{ source: string; target: string }> = [];
 
-    for (const e of graph.allEdges || []) {
+    const allEdges = graph.allEdges?.length ? graph.allEdges : (this.core.getLastResult()?.allEdges || []);
+    for (const e of allEdges) {
       const sIn = internalNodeIds.has(e.source);
       const tIn = internalNodeIds.has(e.target);
       if (sIn && tIn) {
@@ -71,6 +89,19 @@ export class CodeGraphServer {
       } else if (sIn && !tIn) {
         outgoingFromInternal.push({ source: e.source, target: e.target });
       }
+    }
+
+    // 0. 优先命中内存缓存
+    if (this.drilldownCache.has(moduleId)) {
+      const cached = this.drilldownCache.get(moduleId);
+      return { layout: cached.layout, portEdges: cached.portEdges, nodes: internalNodes, edges: internalCalls };
+    }
+
+    // 1. 优先命中磁盘持久化分片缓存，绝不重复进行 CPU 密集的 ELK 计算！
+    const diskCache = loadDrilldownLayout(this.workspaceRoot, moduleId);
+    if (diskCache && diskCache.layout) {
+      this.drilldownCache.set(moduleId, diskCache);
+      return { layout: diskCache.layout, portEdges: diskCache.portEdges, nodes: internalNodes, edges: internalCalls };
     }
 
     // 内部符号名称 O(1) 索引构建
@@ -143,7 +174,7 @@ export class CodeGraphServer {
     this.isQueueProcessing = true;
     const nextModId = this.drilldownQueue.shift();
     if (nextModId && !this.drilldownCache.has(nextModId)) {
-      const graph = this.core.getLastResult();
+      const graph = this.core.getLastResult() || this.core.loadFromCache()?.graph;
       if (graph) {
         try {
           await this.computeModuleDrilldown(nextModId, graph);
@@ -152,7 +183,7 @@ export class CodeGraphServer {
         }
       }
     }
-    setTimeout(() => this.processNextDrilldown(), 60);
+    setTimeout(() => this.processNextDrilldown(), 150);
   }
 
   constructor(options: ServerOptions) {

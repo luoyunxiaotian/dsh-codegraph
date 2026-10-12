@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 修复页面切换后图谱画面丢失、视口自适应重绘与工作区多级嗅探。移除宏观与时序流画布视口过度裁剪，杜绝切回页面时卡片被误卸载；新增 visibilitychange/focus/view-active 自愈适屏重绘；宿主加固 8 级工作区容灾嗅探链并持久化记忆；后端服务实现内存图谱 0ms 秒回与响应瘦身。`,
+    notes: `v${version}: 大工程切换标签页与切回窗口毫秒级秒切瞬时呈现。宿主上线全局单例持久化 iframe 视窗池，消除物理销毁重建；彻底切断 50MB 微观符号首屏静默拉取，释放浏览器主线程；增加 view-active 智能幂等拦截守卫；后台下钻队列增量短路并降低 Node.js CPU 占用。`,
     minSupported: '1.0.0',
     files,
   };

@@ -115736,6 +115736,11 @@ var CodeGraphServer = class {
     const modules = graph.architectureView.modules;
     for (const m of modules) {
       if (!this.drilldownCache.has(m.id) && !this.drilldownQueue.includes(m.id)) {
+        const diskCache = loadDrilldownLayout(this.workspaceRoot, m.id);
+        if (diskCache && diskCache.layout) {
+          this.drilldownCache.set(m.id, diskCache);
+          continue;
+        }
         this.drilldownQueue.push(m.id);
       }
     }
@@ -115748,12 +115753,19 @@ var CodeGraphServer = class {
     if (!targetModule)
       return null;
     const moduleFiles = new Set(targetModule.files || []);
-    const internalNodes = Object.values(graph.allNodes || {}).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
+    let internalNodes = Object.values(graph.allNodes || {}).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
+    if (internalNodes.length === 0) {
+      const full = this.core.getLastResult() || this.core.loadFromCache()?.graph;
+      if (full && full.allNodes) {
+        internalNodes = Object.values(full.allNodes).filter((n) => moduleFiles.has(n.filePath) && n.entityType !== "FILE");
+      }
+    }
     const internalNodeIds = new Set(internalNodes.map((n) => n.id));
     const internalCalls = [];
     const incomingToInternal = [];
     const outgoingFromInternal = [];
-    for (const e of graph.allEdges || []) {
+    const allEdges = graph.allEdges?.length ? graph.allEdges : this.core.getLastResult()?.allEdges || [];
+    for (const e of allEdges) {
       const sIn = internalNodeIds.has(e.source);
       const tIn = internalNodeIds.has(e.target);
       if (sIn && tIn) {
@@ -115763,6 +115775,15 @@ var CodeGraphServer = class {
       } else if (sIn && !tIn) {
         outgoingFromInternal.push({ source: e.source, target: e.target });
       }
+    }
+    if (this.drilldownCache.has(moduleId)) {
+      const cached = this.drilldownCache.get(moduleId);
+      return { layout: cached.layout, portEdges: cached.portEdges, nodes: internalNodes, edges: internalCalls };
+    }
+    const diskCache = loadDrilldownLayout(this.workspaceRoot, moduleId);
+    if (diskCache && diskCache.layout) {
+      this.drilldownCache.set(moduleId, diskCache);
+      return { layout: diskCache.layout, portEdges: diskCache.portEdges, nodes: internalNodes, edges: internalCalls };
     }
     const nodeNameMap = /* @__PURE__ */ new Map();
     for (const n of internalNodes) {
@@ -115818,7 +115839,7 @@ var CodeGraphServer = class {
     this.isQueueProcessing = true;
     const nextModId = this.drilldownQueue.shift();
     if (nextModId && !this.drilldownCache.has(nextModId)) {
-      const graph = this.core.getLastResult();
+      const graph = this.core.getLastResult() || this.core.loadFromCache()?.graph;
       if (graph) {
         try {
           await this.computeModuleDrilldown(nextModId, graph);
@@ -115827,7 +115848,7 @@ var CodeGraphServer = class {
         }
       }
     }
-    setTimeout(() => this.processNextDrilldown(), 60);
+    setTimeout(() => this.processNextDrilldown(), 150);
   }
   constructor(options) {
     this.port = options.port || 3333;

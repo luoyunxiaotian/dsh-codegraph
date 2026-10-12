@@ -1,7 +1,7 @@
 {
-  "version": "2.1.4",
-  "publishedAt": "2026-10-12T03:27:10.485Z",
-  "notes": "v2.1.4: 修复页面切换后图谱画面丢失、视口自适应重绘与工作区多级嗅探。移除宏观与时序流画布视口过度裁剪，杜绝切回页面时卡片被误卸载；新增 visibilitychange/focus/view-active 自愈适屏重绘；宿主加固 8 级工作区容灾嗅探链并持久化记忆；后端服务实现内存图谱 0ms 秒回与响应瘦身。",
+  "version": "2.1.5",
+  "publishedAt": "2026-10-12T03:58:41.823Z",
+  "notes": "v2.1.5: 大工程切换标签页与切回窗口毫秒级秒切瞬时呈现。宿主上线全局单例持久化 iframe 视窗池，消除物理销毁重建；彻底切断 50MB 微观符号首屏静默拉取，释放浏览器主线程；增加 view-active 智能幂等拦截守卫；后台下钻队列增量短路并降低 Node.js CPU 占用。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -11,13 +11,13 @@
     },
     {
       "path": "dist/client.js",
-      "size": 37011,
-      "sha256": "23e7c2348b3bb343a39a228a00142e72f68a95fffb80da5d88951639a92661a5"
+      "size": 37552,
+      "sha256": "225b666b7f3399cc95d0b0e660d268981876e2d054335fd20054e6c5a7fd5c61"
     },
     {
       "path": "dist/index.js",
-      "size": 4340785,
-      "sha256": "f1888a8e5181768c180b37e8e0b6ca8df90cb83e057dbf5eb7e3558be840400e"
+      "size": 4341918,
+      "sha256": "52236061b9bfc6138be95d4578bf9921a18e7d968605468484238f77a971189e"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -120,14 +120,14 @@
       "sha256": "9157b3df86cb3d57b6ed8b5a0d1a4616f4fcbac49103527c37bf0fe7ecc1892d"
     },
     {
-      "path": "dist/webview/assets/index-DXfz-shJ.js",
-      "size": 494058,
-      "sha256": "74da565e65b7818293a521dce4c24ff69c024428eb497271ecd91420855726cd"
+      "path": "dist/webview/assets/index-iAu6hZlZ.js",
+      "size": 493891,
+      "sha256": "ee0a999338fbc2d4b43087129814ff36fb94ce654f0af4e4a52f1f3c77d61303"
     },
     {
       "path": "dist/webview/index.html",
       "size": 749,
-      "sha256": "73e181af10f8f2619a6f8f1882b19cdb0b81b604429be53ec0ad87e2d51d77d0"
+      "sha256": "ee3c00998080eb0a2e853f44dc73ed34048bc9c35806609d8770bec230631542"
     },
     {
       "path": "LICENSE",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "0788421b7583e75dec7789a48e9920ffe651e97ffe236ac5339dd8ee03788e15"
+      "sha256": "7a5a029fa9cadfac5003f2e6c0f4bb5443fbe0a0317d82761a07cd4b3049480e"
     },
     {
       "path": "README.md",

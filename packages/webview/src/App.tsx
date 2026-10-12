@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { SetupView } from './components/SetupView.js';
 import { TopBar } from './components/TopBar.js';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas.js';
@@ -58,6 +58,11 @@ export const App: React.FC = () => {
     checkUpdate(false);
   }, [checkUpdate]);
 
+  const workspaceRootRef = useRef<string>(workspaceRoot);
+  workspaceRootRef.current = workspaceRoot;
+  const isInitializedRef = useRef<boolean>(isInitialized);
+  isInitializedRef.current = isInitialized;
+
   // 初始化检查后端状态与 URL 参数 (优先关联当前会话专属路径)
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -65,10 +70,10 @@ export const App: React.FC = () => {
     const queryScope = searchParams.get('scope');
     const sessionId = searchParams.get('sessionId') || '';
 
-    const init = async () => {
+    const init = async (overrideWs?: string) => {
       // 1. 优先读取当前会话绑定的自定义工作区
-      let targetWs = queryWs;
-      if (sessionId && typeof localStorage !== 'undefined') {
+      let targetWs = overrideWs || queryWs;
+      if (!overrideWs && sessionId && typeof localStorage !== 'undefined') {
         const boundWs = localStorage.getItem(`dsh_cg_ws_${sessionId}`);
         if (boundWs && boundWs.trim()) {
           targetWs = boundWs.trim();
@@ -152,51 +157,20 @@ export const App: React.FC = () => {
 
     const handleActive = (e: MessageEvent) => {
       if (e.data?.type === 'codegraph:view-active') {
-        init();
+        const targetWs = typeof e.data.workspaceRoot === 'string' ? e.data.workspaceRoot.trim() : '';
+        // 关键幂等拦截：若已就绪，且工作区相同（或未指定新工作区），绝不重新调用 init() 冲刷已有画布！
+        if (
+          isInitializedRef.current &&
+          (!targetWs || targetWs.toLowerCase() === (workspaceRootRef.current || '').toLowerCase())
+        ) {
+          return;
+        }
+        init(targetWs || undefined);
       }
     };
     window.addEventListener('message', handleActive);
     return () => window.removeEventListener('message', handleActive);
   }, []);
-
-  // 智能空闲静默预热：首屏宏观架构就绪后，利用空闲时间异步拉取微观 symbols.json
-  useEffect(() => {
-    if (!isInitialized) return;
-
-    let isCancelled = false;
-    const preheatSymbols = async () => {
-      try {
-        const res = await fetch('/api/symbols');
-        const data = await res.json();
-        if (!isCancelled && data.success && data.allNodes) {
-          setGraphData((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              allNodes: { ...prev.allNodes, ...data.allNodes },
-              allEdges: data.allEdges?.length ? data.allEdges : prev.allEdges,
-            };
-          });
-        }
-      } catch (err) {
-        console.warn('后台静默预热微观符号异常:', err);
-      }
-    };
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      const handle = (window as any).requestIdleCallback(() => preheatSymbols(), { timeout: 3000 });
-      return () => {
-        isCancelled = true;
-        (window as any).cancelIdleCallback(handle);
-      };
-    } else {
-      const timer = setTimeout(preheatSymbols, 300);
-      return () => {
-        isCancelled = true;
-        clearTimeout(timer);
-      };
-    }
-  }, [isInitialized]);
 
   // 执行全量扫描
   const handleFullScan = async (
@@ -316,11 +290,24 @@ export const App: React.FC = () => {
     setCurrentView('drilldown');
   }, []);
 
-  // 点击符号查看源码
+  // 点击符号查看源码 (支持直接传入节点对象或文件路径，无需全量预拉取数万微观符号)
   const handleSelectNode = useCallback(
-    (nodeId: string) => {
-      if (graphData && graphData.allNodes[nodeId]) {
+    (nodeId: string, customNodeOrPath?: any, line?: number) => {
+      if (customNodeOrPath && typeof customNodeOrPath === 'object' && customNodeOrPath.id) {
+        setActiveCodeNode(customNodeOrPath as CodeNode);
+        return;
+      }
+      if (graphData && graphData.allNodes && graphData.allNodes[nodeId]) {
         setActiveCodeNode(graphData.allNodes[nodeId]);
+      } else if (typeof customNodeOrPath === 'string' && customNodeOrPath) {
+        setActiveCodeNode({
+          id: nodeId,
+          name: nodeId,
+          filePath: customNodeOrPath,
+          loc: { startLine: line || 1, endLine: line || 1 },
+          entityType: 'FUNCTION',
+          metadata: {},
+        } as any);
       }
     },
     [graphData]
