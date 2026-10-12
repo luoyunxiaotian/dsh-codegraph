@@ -84,7 +84,7 @@ class SafeCodeGraphErrorBoundary extends React.Component<any, { hasError: boolea
 }
 
 function SafeCodeGraphPanel(props: any) {
-  return h(SafeCodeGraphErrorBoundary, null, h(CodeGraphTabViewportAnchor, props));
+  return h(SafeCodeGraphErrorBoundary, null, h(CodeGraphViewPanel, props));
 }
 
 /**
@@ -295,143 +295,32 @@ function useDetectedWorkspace(props: any): string {
 }
 
 /**
- * 全局视窗目标状态与协调池 (实现单例保活，跨标签页秒切 0ms 直出)
+ * 完整自闭环代码图谱面板 (直接在 conversation.view 和浮层内渲染全屏 <iframe>，100% 杜绝白屏)
  */
-interface GlobalViewportTarget {
-  isActive: boolean;
-  anchorEl: HTMLElement | null;
-  rect: { top: number; left: number; width: number; height: number } | null;
-  workspace: string;
-  sessionId?: string;
-  isOverlay?: boolean;
-  onCloseOverlay?: () => void;
-}
-
-let currentViewportTarget: GlobalViewportTarget = {
-  isActive: false,
-  anchorEl: null,
-  rect: null,
-  workspace: '',
-};
-
-const viewportTargetListeners = new Set<(target: GlobalViewportTarget) => void>();
-
-function setGlobalViewportTarget(
-  updater: Partial<GlobalViewportTarget> | ((prev: GlobalViewportTarget) => GlobalViewportTarget)
-) {
-  if (typeof updater === 'function') {
-    currentViewportTarget = updater(currentViewportTarget);
-  } else {
-    currentViewportTarget = { ...currentViewportTarget, ...updater };
-  }
-  viewportTargetListeners.forEach((fn) => fn(currentViewportTarget));
-}
-
-function useGlobalViewportTarget(): GlobalViewportTarget {
-  const [target, setTarget] = React.useState<GlobalViewportTarget>(currentViewportTarget);
-  React.useEffect(() => {
-    viewportTargetListeners.add(setTarget);
-    return () => {
-      viewportTargetListeners.delete(setTarget);
-    };
-  }, []);
-  return target;
-}
-
-/**
- * 代码图谱 Tab 标签页视窗锚点 (挂载在 conversation.view，切离时不销毁全局 iframe)
- */
-function CodeGraphTabViewportAnchor(props: any) {
-  const anchorRef = React.useRef<HTMLDivElement | null>(null);
+function CodeGraphViewPanel(props: any) {
   const isDark = useHostTheme();
   const activeWorkspace = useDetectedWorkspace(props);
-
-  React.useEffect(() => {
-    if (!anchorRef.current) return;
-
-    const measureAndSync = () => {
-      if (anchorRef.current) {
-        const r = anchorRef.current.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) {
-          setGlobalViewportTarget({
-            isActive: true,
-            anchorEl: anchorRef.current,
-            rect: { top: r.top, left: r.left, width: r.width, height: r.height },
-            workspace: activeWorkspace,
-            sessionId: props?.sessionId,
-            isOverlay: false,
-          });
-        }
-      }
-    };
-
-    measureAndSync();
-
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(measureAndSync);
-      ro.observe(anchorRef.current);
-    }
-    window.addEventListener('resize', measureAndSync);
-    window.addEventListener('scroll', measureAndSync, true);
-
-    return () => {
-      if (ro) ro.disconnect();
-      window.removeEventListener('resize', measureAndSync);
-      window.removeEventListener('scroll', measureAndSync, true);
-      setGlobalViewportTarget((prev) => {
-        if (prev.anchorEl === anchorRef.current) {
-          return { ...prev, isActive: false, anchorEl: null, rect: null };
-        }
-        return prev;
-      });
-    };
-  }, [activeWorkspace, props?.sessionId]);
-
-  return h('div', {
-    ref: anchorRef,
-    'data-codegraph-viewport-anchor': 'true',
-    style: {
-      width: '100%',
-      height: '100%',
-      overflow: 'hidden',
-      position: 'relative',
-      background: isDark ? '#151517' : '#f7f8fa',
-    },
-  });
-}
-
-/**
- * 全局单例持久化 Iframe 视窗宿主 (挂载在 shell.overlay, scope="root", 永不卸载)
- */
-function PersistentCodeGraphIframeHost(props: any) {
-  const isDark = useHostTheme();
-  const target = useGlobalViewportTarget();
-  const [hasEverOpened, setHasEverOpened] = React.useState<boolean>(false);
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
-  const lastWorkspaceRef = React.useRef<string>('');
   const [iframeKey, setIframeKey] = React.useState<number>(0);
   const [status, setStatus] = React.useState<'checking' | 'online' | 'offline'>('checking');
 
-  // 一旦激活过一次，就永久保活驻留，绝不卸载
-  React.useEffect(() => {
-    if (target.isActive && !hasEverOpened) {
-      setHasEverOpened(true);
-    }
-  }, [target.isActive, hasEverOpened]);
+  // 后台服务连通性探针
+  const checkStatus = React.useCallback(async () => {
+    try {
+      const res = await fetch('http://127.0.0.1:3333/api/status', { method: 'GET' });
+      if (res.ok) {
+        setStatus('online');
+        return;
+      }
+    } catch {}
+    setStatus('offline');
+  }, []);
 
-  // 切回激活时通知 Webview 视口恢复
   React.useEffect(() => {
-    if (target.isActive && iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        {
-          type: 'codegraph:view-active',
-          workspaceRoot: target.workspace,
-        },
-        '*'
-      );
-    }
-  }, [target.isActive, target.workspace]);
+    checkStatus();
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
+  }, [checkStatus]);
 
   // 主题变更通知
   React.useEffect(() => {
@@ -446,84 +335,39 @@ function PersistentCodeGraphIframeHost(props: any) {
     }
   }, [isDark]);
 
-  // 监听来自 Webview 的会话工作区变更通知
+  // 监听来自 Webview 的工作区绑定通知
   React.useEffect(() => {
     const handleMsg = (e: MessageEvent) => {
-      if (e.data?.type === 'codegraph:set-session-workspace' && e.data?.workspaceRoot) {
-        const targetSid = e.data.sessionId || target.sessionId;
-        const targetWs = e.data.workspaceRoot;
-        if (targetSid && targetWs && typeof localStorage !== 'undefined') {
+      if (e.data?.type === 'codegraph:set-session-workspace') {
+        const sid = e.data.sessionId || props?.sessionId;
+        const ws = e.data.workspaceRoot;
+        if (sid && ws && typeof localStorage !== 'undefined') {
           try {
-            localStorage.setItem(`dsh_cg_ws_${targetSid}`, targetWs);
+            localStorage.setItem(`dsh_cg_ws_${sid}`, ws);
+            localStorage.setItem('dsh_last_active_workspace', ws);
           } catch {}
         }
       }
     };
     window.addEventListener('message', handleMsg);
     return () => window.removeEventListener('message', handleMsg);
-  }, [target.sessionId]);
-
-  // 工作区变更检测与通知
-  React.useEffect(() => {
-    if (!target.workspace) return;
-    const norm = target.workspace.toLowerCase().replace(/[\\\/]+/g, '/');
-    if (lastWorkspaceRef.current && lastWorkspaceRef.current !== norm) {
-      // 工作区确实变更，更新 iframe key 切换工程
-      setIframeKey((prev) => prev + 1);
-    }
-    lastWorkspaceRef.current = norm;
-
-    // 同步到后端
-    fetch('http://127.0.0.1:3333/api/workspace', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspaceRoot: target.workspace }),
-    }).catch(() => {});
-  }, [target.workspace]);
-
-  // 周期性健康检查
-  const checkStatus = React.useCallback(async () => {
-    try {
-      const queryUrl = target.workspace
-        ? `http://127.0.0.1:3333/api/status?workspace=${encodeURIComponent(target.workspace)}`
-        : 'http://127.0.0.1:3333/api/status';
-      const res = await fetch(queryUrl, { mode: 'cors' });
-      if (res.ok) {
-        setStatus('online');
-      } else {
-        setStatus('offline');
-      }
-    } catch {
-      setStatus('offline');
-    }
-  }, [target.workspace]);
-
-  React.useEffect(() => {
-    if (!hasEverOpened) return;
-    checkStatus();
-    const timer = setInterval(checkStatus, 10000);
-    return () => clearInterval(timer);
-  }, [hasEverOpened, checkStatus]);
-
-  if (!hasEverOpened) {
-    return null;
-  }
+  }, [props?.sessionId]);
 
   const iframeUrl = React.useMemo(() => {
     const base = 'http://127.0.0.1:3333';
     const params = new URLSearchParams();
-    if (target.workspace) {
-      params.set('workspace', target.workspace);
+    if (activeWorkspace) {
+      params.set('workspace', activeWorkspace);
     }
-    if (target.sessionId) {
-      params.set('sessionId', target.sessionId);
+    if (props?.sessionId) {
+      params.set('sessionId', props.sessionId);
     }
     params.set('theme', isDark ? 'dark' : 'light');
+    if (iframeKey > 0) {
+      params.set('_t', String(iframeKey));
+    }
     return `${base}/?${params.toString()}`;
-  }, [target.workspace, target.sessionId, isDark, iframeKey]);
-
-  const isVisible = target.isActive && target.rect !== null;
-  const rect = target.rect || { top: -9999, left: -9999, width: 100, height: 100 };
+  }, [activeWorkspace, props?.sessionId, isDark, iframeKey]);
 
   const themeStyles = isDark
     ? {
@@ -546,36 +390,42 @@ function PersistentCodeGraphIframeHost(props: any) {
       };
 
   const workspaceShortName = React.useMemo(() => {
-    if (!target.workspace) return '未选定工作区';
-    const normalized = target.workspace.replace(/\\/g, '/');
+    if (!activeWorkspace) return '未选定工作区';
+    const normalized = activeWorkspace.replace(/\\/g, '/');
     const parts = normalized.split('/').filter(Boolean);
-    return parts[parts.length - 1] || target.workspace;
-  }, [target.workspace]);
+    return parts[parts.length - 1] || activeWorkspace;
+  }, [activeWorkspace]);
 
-  const container = h(
+  return h(
     'div',
     {
-      'data-codegraph-persistent-container': 'true',
+      'data-codegraph-view-panel': 'true',
       style: {
-        position: 'fixed',
-        top: isVisible ? `${rect.top}px` : '-9999px',
-        left: isVisible ? `${rect.left}px` : '-9999px',
-        width: isVisible ? `${rect.width}px` : '100px',
-        height: isVisible ? `${rect.height}px` : '100px',
-        zIndex: target.isOverlay ? 90 : 40,
-        visibility: isVisible ? 'visible' : 'hidden',
-        pointerEvents: isVisible ? 'auto' : 'none',
-        background: themeStyles.bgBase,
-        boxShadow: target.isOverlay
-          ? (isDark ? '0 0 24px rgba(0, 0, 0, 0.5)' : '0 0 24px rgba(0, 0, 0, 0.1)')
-          : 'none',
-        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
+        width: '100%',
+        height: '100%',
+        background: themeStyles.bgBase,
+        color: themeStyles.textPrimary,
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+        overflow: 'hidden',
+        position: 'relative',
+        ...(props?.isOverlay
+          ? {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 90,
+              boxShadow: isDark ? '0 0 24px rgba(0, 0, 0, 0.5)' : '0 0 24px rgba(0, 0, 0, 0.1)',
+            }
+          : {}),
       },
     },
-    // 浮层模式下展示极简顶部返回栏
-    target.isOverlay
+    // 仅在浮层模式下展示极简顶部返回栏 (在正常会话 Tab 模式下由 Webview 顶部控制台完整接管，零冗余)
+    props?.isOverlay
       ? h(
           'div',
           {
@@ -600,7 +450,7 @@ function PersistentCodeGraphIframeHost(props: any) {
               'button',
               {
                 type: 'button',
-                onClick: target.onCloseOverlay,
+                onClick: props?.onClose,
                 title: '返回新对话界面 (Esc)',
                 style: {
                   display: 'flex',
@@ -623,7 +473,7 @@ function PersistentCodeGraphIframeHost(props: any) {
             h(
               'div',
               {
-                title: `当前工作区:\n${target.workspace || '未检测到工作区'}`,
+                title: `当前工作区:\n${activeWorkspace || '未检测到工作区'}`,
                 style: {
                   display: 'flex',
                   alignItems: 'center',
@@ -635,6 +485,10 @@ function PersistentCodeGraphIframeHost(props: any) {
                   fontSize: '11px',
                   color: themeStyles.textSecondary,
                   fontFamily: 'monospace',
+                  maxWidth: '320px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 },
               },
               h('span', null, '📁'),
@@ -700,24 +554,44 @@ function PersistentCodeGraphIframeHost(props: any) {
             h('span', null, '，或点击右侧重试。')
           ),
           h(
-            'button',
-            {
-              onClick: checkStatus,
-              style: {
-                background: '#4176e6',
-                color: '#ffffff',
-                border: 'none',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '11px',
+            'div',
+            { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+            h(
+              'button',
+              {
+                onClick: checkStatus,
+                style: {
+                  background: '#4176e6',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                },
               },
-            },
-            '重试'
+              '重试'
+            ),
+            h(
+              'button',
+              {
+                onClick: () => setIframeKey((k) => k + 1),
+                style: {
+                  background: themeStyles.bgLayer1,
+                  color: themeStyles.textSecondary,
+                  border: `0.5px solid ${themeStyles.borderSubtle}`,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                },
+              },
+              '刷新'
+            )
           )
         )
       : null,
-    // 嵌入式 Webview 画布 (单例持久驻留，永不物理卸载重建)
+    // 嵌入式 Webview 画布 (自闭环直接渲染，确保 100% 渲染于 DOM 树中)
     h('iframe', {
       ref: iframeRef,
       key: iframeKey,
@@ -732,8 +606,6 @@ function PersistentCodeGraphIframeHost(props: any) {
       title: 'CodeGraph Studio',
     })
   );
-
-  return safeCreatePortal(container, document.body) || container;
 }
 
 let globalClientCtx: any = null;
@@ -1038,36 +910,7 @@ function CodeGraphShellManager(props: any) {
     return () => window.removeEventListener('codegraph:open-overlay', handleOpen);
   }, []);
 
-  // 3. 当 overlay 打开时，向全局单例视窗同步目标矩形
-  React.useEffect(() => {
-    if (overlayState.isOpen) {
-      const updateOverlayRect = () => {
-        const targetContainer = centerContainer || (typeof document !== 'undefined' ? document.body : null);
-        const r = targetContainer ? targetContainer.getBoundingClientRect() : null;
-        setGlobalViewportTarget({
-          isActive: true,
-          anchorEl: targetContainer,
-          rect: {
-            top: centerContainer && r ? r.top : 32,
-            left: centerContainer && r ? r.left : 280,
-            width: centerContainer && r ? r.width : (typeof window !== 'undefined' ? window.innerWidth - 280 : 800),
-            height: centerContainer && r ? r.height : (typeof window !== 'undefined' ? window.innerHeight - 32 : 600),
-          },
-          workspace: overlayState.workspace,
-          isOverlay: true,
-          onCloseOverlay: () => setOverlayState({ isOpen: false, workspace: '' }),
-        });
-      };
-      updateOverlayRect();
-      window.addEventListener('resize', updateOverlayRect);
-      return () => {
-        window.removeEventListener('resize', updateOverlayRect);
-        setGlobalViewportTarget((prev) => (prev.isOverlay ? { ...prev, isActive: false, rect: null } : prev));
-      };
-    }
-  }, [overlayState.isOpen, overlayState.workspace, centerContainer]);
-
-  // 4. 键盘 Esc 关闭浮层
+  // 3. 键盘 Esc 关闭浮层
   React.useEffect(() => {
     if (!overlayState.isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1079,7 +922,7 @@ function CodeGraphShellManager(props: any) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [overlayState.isOpen]);
 
-  // 5. 监听来自嵌入 iframe 的图谱上下文注入请求，自动填入下方聊天框
+  // 4. 监听来自嵌入 iframe 的图谱上下文注入请求，自动填入下方聊天框
   React.useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       if (e.data?.type === 'codegraph:insert-chat') {
@@ -1102,6 +945,15 @@ function CodeGraphShellManager(props: any) {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  const overlayPanel = overlayState.isOpen
+    ? h(SafeCodeGraphPanel, {
+        ...props,
+        isOverlay: true,
+        activeWorkspace: overlayState.workspace,
+        onClose: () => setOverlayState({ isOpen: false, workspace: '' }),
+      })
+    : null;
+
   return h(
     React.Fragment,
     null,
@@ -1116,8 +968,43 @@ function CodeGraphShellManager(props: any) {
         )
       : null,
 
-    // B. 全局单例持久化 Iframe 视窗宿主 (永不销毁，0ms 瞬间秒切)
-    h(PersistentCodeGraphIframeHost, props)
+    // B. 图谱浮层 (降级保障: 严格限制在主工作区内部，绝不覆盖左侧边栏与标题栏)
+    overlayState.isOpen && overlayPanel
+      ? (centerContainer
+          ? safeCreatePortal(
+              h(
+                'div',
+                {
+                  style: {
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 60,
+                    background: isDark ? '#151517' : '#ffffff',
+                  },
+                },
+                overlayPanel
+              ),
+              centerContainer
+            )
+          : h(
+              'div',
+              {
+                style: {
+                  position: 'fixed',
+                  top: 'var(--dsh-titlebar-height, 0px)',
+                  left: 'var(--dsh-windows-sidebar-width, 280px)',
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 60,
+                  background: isDark ? '#151517' : '#ffffff',
+                },
+              },
+              overlayPanel
+            ))
+      : null
   );
 }
 

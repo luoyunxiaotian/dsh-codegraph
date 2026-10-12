@@ -1,6 +1,6 @@
 {
   "version": "2.1.5",
-  "publishedAt": "2026-10-12T03:58:41.823Z",
+  "publishedAt": "2026-10-12T05:06:07.416Z",
   "notes": "v2.1.5: 大工程切换标签页与切回窗口毫秒级秒切瞬时呈现。宿主上线全局单例持久化 iframe 视窗池，消除物理销毁重建；彻底切断 50MB 微观符号首屏静默拉取，释放浏览器主线程；增加 view-active 智能幂等拦截守卫；后台下钻队列增量短路并降低 Node.js CPU 占用。",
   "minSupported": "1.0.0",
   "files": [
@@ -11,8 +11,8 @@
     },
     {
       "path": "dist/client.js",
-      "size": 37552,
-      "sha256": "225b666b7f3399cc95d0b0e660d268981876e2d054335fd20054e6c5a7fd5c61"
+      "size": 33911,
+      "sha256": "4d9498480e358c126bbfd7fdf848277258357e8c6381e93ff1fd7565ad021c87"
     },
     {
       "path": "dist/index.js",
