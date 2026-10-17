@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import http from 'http';
 import { fileURLToPath } from 'url';
 import {
   CodeGraphCore,
@@ -9,6 +10,7 @@ import {
   WASM_FILE_MAP,
   ensureGitignore,
 } from '../src/index.js';
+import { CodeGraphServer } from '../src/server.js';
 import { runWatcherIncrementalTests } from './watcher-incremental.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -991,6 +993,44 @@ end
     throw new Error('未能提取到 Ruby Admin 模块 / OrdersController / index 符号');
   }
   console.log(`  ✓ 成功提取 Ruby Rails 模块与控制器动作: 模块=${rubyModule.name}, 控制器=${rubyController.name}, 动作=${rubyIndexAction.name}`);
+
+  // [测试 17] 验证 CodeGraphServer.stop() 在存在 Keep-Alive 长连接下毫秒级安全退出与主动熔断
+  console.log('[测试 17] 验证 CodeGraphServer.stop() 抵御 HTTP Keep-Alive 长连接挂起与秒级退出...');
+  const testServer = new CodeGraphServer({
+    workspaceRoot: fixtureDir,
+    port: 39988,
+  });
+  const assignedPort = await testServer.start(true);
+
+  // 模拟客户端浏览器开启 HTTP Keep-Alive 长连接并持续占用 Socket
+  const keepAliveAgent = new http.Agent({ keepAlive: true });
+  await new Promise<void>((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: assignedPort,
+        path: '/api/stats',
+        method: 'GET',
+        agent: keepAliveAgent,
+      },
+      (res) => {
+        res.resume();
+        res.on('end', () => resolve());
+      }
+    );
+    req.on('error', reject);
+    req.end();
+  });
+
+  const t0 = Date.now();
+  await testServer.stop();
+  const elapsed = Date.now() - t0;
+  keepAliveAgent.destroy();
+
+  if (elapsed > 1500) {
+    throw new Error(`CodeGraphServer.stop() 耗时过长 (${elapsed}ms > 1500ms)，Keep-Alive 导致挂起`);
+  }
+  console.log(`  ✓ 成功验证 Keep-Alive 场景下服务毫秒级安全退出: 耗时 ${elapsed}ms < 1500ms`);
 
   fs.rmSync(fullstackFixture, { recursive: true, force: true });
   fs.rmSync(mockRepoDir, { recursive: true, force: true });

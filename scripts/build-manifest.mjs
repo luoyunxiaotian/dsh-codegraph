@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 大工程切换标签页与切回窗口毫秒级秒切瞬时呈现。宿主上线全局单例持久化 iframe 视窗池，消除物理销毁重建；彻底切断 50MB 微观符号首屏静默拉取，释放浏览器主线程；增加 view-active 智能幂等拦截守卫；后台下钻队列增量短路并降低 Node.js CPU 占用。`,
+    notes: `v${version}: 彻底修复 CodeGraphServer.stop() 在 Keep-Alive 长连接下挂起问题，增加原生连接熔断与底层 TCP Socket 全程生命周期追踪，确保 DSH 桌面端更新时毫秒级安全优雅退出，杜绝 SIGTERM 强杀与更新中断。`,
     minSupported: '1.0.0',
     files,
   };

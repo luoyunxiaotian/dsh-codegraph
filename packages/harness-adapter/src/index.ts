@@ -179,7 +179,10 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
 
   // 3. 宿主生命周期注销
   ctx.on('dispose', async () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
     if (fsWatcher) {
       try {
         fsWatcher.close();

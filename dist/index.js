@@ -115730,7 +115730,12 @@ var CodeGraphServer = class {
   drilldownCache = /* @__PURE__ */ new Map();
   drilldownQueue = [];
   isQueueProcessing = false;
+  drilldownTimer = null;
+  isStopped = false;
+  openSockets = /* @__PURE__ */ new Set();
   startBackgroundDrilldown(graph) {
+    if (this.isStopped)
+      return;
     if (!graph || !graph.architectureView?.modules)
       return;
     const modules = graph.architectureView.modules;
@@ -115832,6 +115837,10 @@ var CodeGraphServer = class {
     return { layout, portEdges, nodes: internalNodes, edges: internalCalls };
   }
   async processNextDrilldown() {
+    if (this.isStopped) {
+      this.isQueueProcessing = false;
+      return;
+    }
     if (this.drilldownQueue.length === 0) {
       this.isQueueProcessing = false;
       return;
@@ -115848,7 +115857,11 @@ var CodeGraphServer = class {
         }
       }
     }
-    setTimeout(() => this.processNextDrilldown(), 150);
+    if (this.isStopped) {
+      this.isQueueProcessing = false;
+      return;
+    }
+    this.drilldownTimer = setTimeout(() => this.processNextDrilldown(), 150);
   }
   constructor(options) {
     this.port = options.port || 3333;
@@ -115890,6 +115903,12 @@ var CodeGraphServer = class {
     this.pluginRoot = path9.resolve(resolvedPluginRoot || process.cwd());
     this.updater = new PluginUpdater(this.pluginRoot, options.repo, options.huaweiUrl);
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
+    this.server.on("connection", (socket) => {
+      this.openSockets.add(socket);
+      socket.once("close", () => {
+        this.openSockets.delete(socket);
+      });
+    });
   }
   async start(autoPort = true) {
     return new Promise((resolve, reject) => {
@@ -115952,8 +115971,48 @@ var CodeGraphServer = class {
     return Array.from(readySet);
   }
   stop() {
+    this.isStopped = true;
+    if (this.drilldownTimer) {
+      clearTimeout(this.drilldownTimer);
+      this.drilldownTimer = null;
+    }
+    this.drilldownQueue = [];
+    this.isQueueProcessing = false;
     return new Promise((resolve) => {
-      this.server.close(() => resolve());
+      if (typeof this.server.closeAllConnections === "function") {
+        try {
+          this.server.closeAllConnections();
+        } catch {
+        }
+      }
+      if (typeof this.server.closeIdleConnections === "function") {
+        try {
+          this.server.closeIdleConnections();
+        } catch {
+        }
+      }
+      for (const socket of this.openSockets) {
+        try {
+          socket.destroy();
+        } catch {
+        }
+      }
+      this.openSockets.clear();
+      let isDone = false;
+      const done = () => {
+        if (!isDone) {
+          isDone = true;
+          resolve();
+        }
+      };
+      const safetyTimer = setTimeout(() => {
+        done();
+      }, 1e3);
+      safetyTimer.unref?.();
+      this.server.close(() => {
+        clearTimeout(safetyTimer);
+        done();
+      });
     });
   }
   async handleRequest(req, res) {
@@ -117010,7 +117069,10 @@ function apply(ctx, config = {}) {
     console.warn(`[CodeGraph] \u542F\u52A8\u6587\u4EF6\u81EA\u6108\u76D1\u542C\u8B66\u544A:`, err2.message);
   }
   ctx.on("dispose", async () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
     if (fsWatcher) {
       try {
         fsWatcher.close();

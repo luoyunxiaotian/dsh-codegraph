@@ -1,7 +1,7 @@
 {
-  "version": "2.1.6",
-  "publishedAt": "2026-10-12T06:34:51.141Z",
-  "notes": "v2.1.6: 大工程切换标签页与切回窗口毫秒级秒切瞬时呈现。宿主上线全局单例持久化 iframe 视窗池，消除物理销毁重建；彻底切断 50MB 微观符号首屏静默拉取，释放浏览器主线程；增加 view-active 智能幂等拦截守卫；后台下钻队列增量短路并降低 Node.js CPU 占用。",
+  "version": "2.1.7",
+  "publishedAt": "2026-10-17T10:07:39.566Z",
+  "notes": "v2.1.7: 彻底修复 CodeGraphServer.stop() 在 Keep-Alive 长连接下挂起问题，增加原生连接熔断与底层 TCP Socket 全程生命周期追踪，确保 DSH 桌面端更新时毫秒级安全优雅退出，杜绝 SIGTERM 强杀与更新中断。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "dist/index.js",
-      "size": 4342399,
-      "sha256": "c904035aacf6db5bc01493336673ccd1c675e3bbe944da70bfca2826d7007baa"
+      "size": 4343920,
+      "sha256": "aca4ca3d18a49d11f443351f1af78aebaf8ab98b8c5040c532a4e98140577d62"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "c1c7777845bfa4a30048519a9d52d234f6d963ba8e31379d48eafcbe8f488f4d"
+      "sha256": "ec821585bab7118d46c9130cdfd25b4f921383eb0e13fc3f0408ef6cc2845ef3"
     },
     {
       "path": "README.md",

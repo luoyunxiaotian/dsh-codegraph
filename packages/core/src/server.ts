@@ -1,4 +1,5 @@
 import http from 'http';
+import net from 'net';
 import fs from 'fs';
 import path from 'path';
 import { URL, fileURLToPath } from 'url';
@@ -29,8 +30,12 @@ export class CodeGraphServer {
   private drilldownCache: Map<string, any> = new Map();
   private drilldownQueue: string[] = [];
   private isQueueProcessing: boolean = false;
+  private drilldownTimer: NodeJS.Timeout | null = null;
+  private isStopped: boolean = false;
+  private openSockets: Set<net.Socket> = new Set();
 
   public startBackgroundDrilldown(graph: any): void {
+    if (this.isStopped) return;
     if (!graph || !graph.architectureView?.modules) return;
     const modules = graph.architectureView.modules;
     for (const m of modules) {
@@ -167,6 +172,10 @@ export class CodeGraphServer {
   }
 
   private async processNextDrilldown(): Promise<void> {
+    if (this.isStopped) {
+      this.isQueueProcessing = false;
+      return;
+    }
     if (this.drilldownQueue.length === 0) {
       this.isQueueProcessing = false;
       return;
@@ -183,7 +192,11 @@ export class CodeGraphServer {
         }
       }
     }
-    setTimeout(() => this.processNextDrilldown(), 150);
+    if (this.isStopped) {
+      this.isQueueProcessing = false;
+      return;
+    }
+    this.drilldownTimer = setTimeout(() => this.processNextDrilldown(), 150);
   }
 
   constructor(options: ServerOptions) {
@@ -232,6 +245,12 @@ export class CodeGraphServer {
     this.updater = new PluginUpdater(this.pluginRoot, options.repo, options.huaweiUrl);
 
     this.server = http.createServer((req, res) => this.handleRequest(req, res));
+    this.server.on('connection', (socket: net.Socket) => {
+      this.openSockets.add(socket);
+      socket.once('close', () => {
+        this.openSockets.delete(socket);
+      });
+    });
   }
 
   public async start(autoPort: boolean = true): Promise<number> {
@@ -299,8 +318,53 @@ export class CodeGraphServer {
   }
 
   public stop(): Promise<void> {
+    this.isStopped = true;
+    if (this.drilldownTimer) {
+      clearTimeout(this.drilldownTimer);
+      this.drilldownTimer = null;
+    }
+    this.drilldownQueue = [];
+    this.isQueueProcessing = false;
+
     return new Promise((resolve) => {
-      this.server.close(() => resolve());
+      // 1. 调用 Node.js 18.2.0+ 官方原生连接中断 API，主动断开 Keep-Alive 空闲与活动连接
+      if (typeof (this.server as any).closeAllConnections === 'function') {
+        try {
+          (this.server as any).closeAllConnections();
+        } catch {}
+      }
+      if (typeof (this.server as any).closeIdleConnections === 'function') {
+        try {
+          (this.server as any).closeIdleConnections();
+        } catch {}
+      }
+
+      // 2. 强力兜底：主动销毁所有保留的 TCP Sockets (防止老版本 Node 或极端长连接挂起)
+      for (const socket of this.openSockets) {
+        try {
+          socket.destroy();
+        } catch {}
+      }
+      this.openSockets.clear();
+
+      // 3. 1秒超时守卫，确保绝不阻塞 DSH 宿主 10秒 Graceful Deadline
+      let isDone = false;
+      const done = () => {
+        if (!isDone) {
+          isDone = true;
+          resolve();
+        }
+      };
+
+      const safetyTimer = setTimeout(() => {
+        done();
+      }, 1000);
+      safetyTimer.unref?.();
+
+      this.server.close(() => {
+        clearTimeout(safetyTimer);
+        done();
+      });
     });
   }
 
