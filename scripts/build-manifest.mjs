@@ -66,7 +66,7 @@ function buildManifest() {
   const manifest = {
     version,
     publishedAt: new Date().toISOString(),
-    notes: `v${version}: 彻底修复 CodeGraphServer.stop() 在 Keep-Alive 长连接下挂起问题，增加原生连接熔断与底层 TCP Socket 全程生命周期追踪，确保 DSH 桌面端更新时毫秒级安全优雅退出，杜绝 SIGTERM 强杀与更新中断。`,
+    notes: `v${version}: 彻底重构插件生命周期注销，接入 Cordis v4 规范之 ctx.effect 清理机制并向下兼容 ctx.on('dispose')；配合 Keep-Alive 连接主动熔断与底座 Socket 销毁，确保 DSH 桌面端更新时毫秒级安全优雅退出，彻底杜绝 SIGTERM 强杀与中断更新。`,
     minSupported: '1.0.0',
     files,
   };

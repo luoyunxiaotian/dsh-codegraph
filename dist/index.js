@@ -117068,7 +117068,10 @@ function apply(ctx, config = {}) {
   } catch (err2) {
     console.warn(`[CodeGraph] \u542F\u52A8\u6587\u4EF6\u81EA\u6108\u76D1\u542C\u8B66\u544A:`, err2.message);
   }
-  ctx.on("dispose", async () => {
+  let isCleanedUp = false;
+  const cleanup = async () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
@@ -117086,11 +117089,18 @@ function apply(ctx, config = {}) {
       try {
         await serverInstance.stop();
         console.log(`[CodeGraph] \u670D\u52A1\u5DF2\u505C\u6B62`);
-      } catch {
+      } catch (err2) {
+        console.warn(`[CodeGraph] \u670D\u52A1\u505C\u6B62\u5F02\u5E38:`, err2?.message);
       }
       serverInstance = null;
     }
-  });
+  };
+  if (typeof ctx.effect === "function") {
+    ctx.effect(() => () => cleanup(), "codegraph: cleanup");
+  }
+  if (typeof ctx.on === "function") {
+    ctx.on("dispose", cleanup);
+  }
   const ensureGraphReady = async (customRoot) => {
     if (!coreInstance) {
       throw new Error("CodeGraphCore \u5C1A\u672A\u521D\u59CB\u5316");

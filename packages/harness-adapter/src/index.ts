@@ -177,8 +177,11 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
     console.warn(`[CodeGraph] 启动文件自愈监听警告:`, err.message);
   }
 
-  // 3. 宿主生命周期注销
-  ctx.on('dispose', async () => {
+  // 3. 宿主生命周期销毁注销 (Cordis v4 规范使用 ctx.effect，同时兼顾 ctx.on('dispose'))
+  let isCleanedUp = false;
+  const cleanup = async () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
     if (debounceTimer) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
@@ -195,10 +198,19 @@ export function apply(ctx: any, config: AdapterConfig = {}) {
       try {
         await serverInstance.stop();
         console.log(`[CodeGraph] 服务已停止`);
-      } catch {}
+      } catch (err: any) {
+        console.warn(`[CodeGraph] 服务停止异常:`, err?.message);
+      }
       serverInstance = null;
     }
-  });
+  };
+
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => () => cleanup(), 'codegraph: cleanup');
+  }
+  if (typeof ctx.on === 'function') {
+    ctx.on('dispose', cleanup);
+  }
 
   // 优化版：确保图谱数据就绪 (消除 workspaceRoot 引发的假未命中和重复扫描)
   const ensureGraphReady = async (customRoot?: string): Promise<FullGraphResult> => {

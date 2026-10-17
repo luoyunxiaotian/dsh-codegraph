@@ -17,28 +17,28 @@ async function publishRelease() {
   const token = tokenMatch[1].trim();
   const username = userMatch ? userMatch[1].trim() : 'luoyunxiaotian';
   const repoName = 'dsh-codegraph';
-  const tag = 'v2.1.7';
-  const releaseTitle = 'v2.1.7 - 彻底解决 CodeGraphServer 优雅退出 Keep-Alive 挂起与 DSH Desktop 更新超时强杀';
+  const tag = 'v2.1.8';
+  const releaseTitle = 'v2.1.8 - 彻底重构 Cordis v4 ctx.effect 插件生命周期注销与 DSH Desktop 热更新零超时退出';
 
-  const releaseBody = `## 🚀 CodeGraph v2.1.7 进程生命周期与热更新优雅退出加固正式发布
+  const releaseBody = `## 🚀 CodeGraph v2.1.8 插件生命周期与宿主热更新注销彻底修复发布
 
-本次更新重点修复了 **DSH 桌面端（DeepSeek Harness Desktop）在执行软件版本更新与重启时，因后台插件进程无法优雅退出而触发 10 秒超时强杀（SIGTERM）并导致更新被中断** 的生产级阻断问题：
+本次更新彻底根治了 **DeepSeek Harness Desktop (DSH Desktop) 在执行版本升级重启时，Host 宿主子进程无法优雅退出并触发 10 秒超时强杀（SIGTERM）导致更新中断** 的核心架构级问题：
 
-### ⚡ 核心改进与特性
-* **彻底根治 Keep-Alive 长连接挂起导致停机阻塞 (Active Connection Teardown)**：
-  * Node.js 原生 \`http.Server.close()\` 默认仅停止接收入站请求，但绝不会主动掐断活跃的 TCP 连接。由于现代浏览器/Chromium 默认开启 \`Connection: keep-alive\`，空闲 Socket 长期保活导致 \`close\` 回调一直挂起等待；
-  * \`CodeGraphServer.stop()\` 接入 Node.js 18.2.0+ 原生 API：\`closeAllConnections()\` 与 \`closeIdleConnections()\`，在接收注销信号瞬间主动掐断全部客户端长连接；
-  * 新增底层 Socket 生命周期全程追踪兜底（\`openSockets: Set<net.Socket>\`），停机时强力 \`socket.destroy()\`，向前兼容所有 Node.js 运行时环境，实现 **0ms 极速停机退出**。
-* **1000ms 熔断安全超时守卫 (Safety Timeout Guard)**：
-  * 在 \`stop()\` 的 Promise 中内置带 \`.unref()\` 的 1 秒超时安全守卫，即使发生任何极端底层/操作系统 Socket 异常，也保证在 1 秒内安全 resolve，彻底绝缘 DSH Desktop 的 10 秒 Graceful Deadline 保护机制。
-* **排版队列与定时器受控销毁**：
-  * 引入 \`isStopped\` 受控状态标志，在服务注销时彻底清空后台异步下钻排版队列（\`drilldownQueue\`）并注销 \`drilldownTimer\`，确保 Node.js 事件循环瞬间清空，进程无任何活动句柄残留。
-* **宿主注销防抖定时器严密清空**：
-  * 在 \`harness-adapter\` 的 \`ctx.on('dispose')\` 中严格将 \`debounceTimer\` 重置清空。
+### ⚡ 核心修复与改进
+* **Cordis v4 生命周期注销规范重构 (Bug A 彻底修复)**：
+  * 排查证实 DSH Desktop 运行的 Cordis v4.x 架构中已完全不存在 \`'dispose'\` 事件，历史代码绑定的 \`ctx.on('dispose')\` 在宿主停机时**从未被触发**，导致后台 HTTP 服务与文件监听长期遗留活动句柄；
+  * 全面重写生命周期注销逻辑，采用 Cordis v4 官方标准 **\`ctx.effect(() => () => cleanup(), 'codegraph: cleanup')\`**，并同时向下兼容 \`ctx.on('dispose')\`；
+  * 新增幂等清理屏障，确保在宿主 fiber 注销时 100% 触发卸载，自动销毁 \`fsWatcher\`、防抖定时器并调用 \`serverInstance.stop()\`。
+* **HTTP Keep-Alive 原生熔断与底座 Socket 销毁 (Bug B 巩固)**：
+  * 在 \`CodeGraphServer.stop()\` 中优先调用 Node.js 原生 API \`closeAllConnections()\` 与 \`closeIdleConnections()\`；
+  * 底层对所有活跃 TCP 连接进行全生命周期追踪（\`openSockets\`），停机时毫秒级主动掐断连接池；
+  * 内置 1000ms 超时安全熔断守卫，彻底杜绝任何形式的停机阻塞。
+* **后台排版队列与循环定时器受控注销**：
+  * 引入 \`isStopped\` 标志位，注销时彻底清除 \`drilldownQueue\` 并销毁 \`drilldownTimer\`，确保事件循环无任何微任务泄漏。
 
 ---
-**质量与测试**：
-新增针对 HTTP Keep-Alive 连接保活场景下的服务关闭自动化测试（测试 17），全套 17 项核心测试 100% 绿灯全部通过，验证服务在活跃长连接下 0ms 瞬间退出。`;
+**自动化回归与验证**：
+全套 18 项自动化单元与跨端集成测试（包括新增的 **[测试 18] Cordis v4 宿主注销触发 ctx.effect 优雅退出与资源清理验证**）100% 全部绿灯通过。`;
 
   console.log(`🚀 正在向 GitHub 发布 Release: ${tag} (${releaseTitle})...`);
 

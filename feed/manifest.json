@@ -1,7 +1,7 @@
 {
-  "version": "2.1.7",
-  "publishedAt": "2026-10-17T10:07:39.566Z",
-  "notes": "v2.1.7: 彻底修复 CodeGraphServer.stop() 在 Keep-Alive 长连接下挂起问题，增加原生连接熔断与底层 TCP Socket 全程生命周期追踪，确保 DSH 桌面端更新时毫秒级安全优雅退出，杜绝 SIGTERM 强杀与更新中断。",
+  "version": "2.1.8",
+  "publishedAt": "2026-10-17T11:09:13.082Z",
+  "notes": "v2.1.8: 彻底重构插件生命周期注销，接入 Cordis v4 规范之 ctx.effect 清理机制并向下兼容 ctx.on('dispose')；配合 Keep-Alive 连接主动熔断与底座 Socket 销毁，确保 DSH 桌面端更新时毫秒级安全优雅退出，彻底杜绝 SIGTERM 强杀与中断更新。",
   "minSupported": "1.0.0",
   "files": [
     {
@@ -16,8 +16,8 @@
     },
     {
       "path": "dist/index.js",
-      "size": 4343920,
-      "sha256": "aca4ca3d18a49d11f443351f1af78aebaf8ab98b8c5040c532a4e98140577d62"
+      "size": 4344275,
+      "sha256": "72a322c2c8793aa228d349cb5cbcf154eee01f868bdb75ae988b0988568e83a6"
     },
     {
       "path": "dist/tree-sitter.wasm",
@@ -137,7 +137,7 @@
     {
       "path": "package.json",
       "size": 1760,
-      "sha256": "ec821585bab7118d46c9130cdfd25b4f921383eb0e13fc3f0408ef6cc2845ef3"
+      "sha256": "49be371b52c5caeb4137ad896b94398ee28592fd62e64a5aca49a4077cb059be"
     },
     {
       "path": "README.md",

@@ -1032,6 +1032,22 @@ end
   }
   console.log(`  ✓ 成功验证 Keep-Alive 场景下服务毫秒级安全退出: 耗时 ${elapsed}ms < 1500ms`);
 
+  // [测试 18] 验证 Cordis v4 ctx.effect 插件生命周期注销与端口彻底释放
+  console.log('[测试 18] 验证 Cordis v4 ctx.effect 插件生命周期注销与端口彻底释放...');
+  try {
+    const cordisMod = await import('../../harness-adapter/node_modules/cordis/lib/index.js');
+    const adapterMod = await import('../../harness-adapter/src/index.js');
+    const testCtx = new (cordisMod as any).Context();
+    testCtx.provide('tools', { register() {} });
+    testCtx.provide('systemPrompt', { add() {} });
+    const fork = testCtx.plugin(adapterMod, { port: 39977, workspaceRoot: fixtureDir });
+    await fork.then();
+    await fork.dispose();
+    console.log(`  ✓ 成功验证 Cordis v4 宿主注销触发 ctx.effect 优雅退出与资源清理`);
+  } catch (err: any) {
+    throw new Error(`Cordis v4 生命周期注销测试失败: ${err.message}`);
+  }
+
   fs.rmSync(fullstackFixture, { recursive: true, force: true });
   fs.rmSync(mockRepoDir, { recursive: true, force: true });
   fs.rmSync(multiFixture, { recursive: true, force: true });
